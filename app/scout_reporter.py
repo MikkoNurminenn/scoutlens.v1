@@ -10,19 +10,19 @@
 from __future__ import annotations
 
 # --- central paths: always use app_paths ---
-from app_paths import DATA_DIR, file_path
+from app_paths import DATA_DIR
 from data_utils_players import load_master, list_teams, list_players_by_team
 
 import json
 import uuid
-import os
-import tempfile
 from datetime import date, datetime
 from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+
+from supabase_client import get_client
 
 
 # ---------------- Mini CSS helper ----------------
@@ -33,105 +33,92 @@ def _inject_css_once(key: str, css_html: str):
         st.session_state[sskey] = True
 
 
-# ---------------- File targets (JSON) ----------------
-MATCHES_FP    = file_path("matches.json")
-SHORTLISTS_FP = file_path("shortlists.json")
-REPORTS_FP    = file_path("scout_reports.json")
+"""Supabase data access"""
 
-
-# ---------------- JSON helpers ----------------
-def _load_json(fp, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception as e:
-        st.warning(f"Could not read {fp.name}: {e}")
-    return default
-
-
-def _save_json(fp, data):
-    try:
-        fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as e:
-        st.error(f"Could not write {fp.name}: {e}")
-
-
-def _save_json_atomic(fp, data):
-    """Safer & usein nopeampi: kirjoita tmp → os.replace."""
-    try:
-        payload = json.dumps(data, ensure_ascii=False, indent=2)
-        fp.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile("w", delete=False, dir=str(fp.parent), encoding="utf-8") as tmp:
-            tmp.write(payload)
-            tmp_path = tmp.name
-        os.replace(tmp_path, fp)
-    except Exception as e:
-        st.error(f"Could not atomically write {fp.name}: {e}")
-
-
-# ---------------- Data access ----------------
 def list_shortlists() -> List[str]:
-    return sorted(_load_json(SHORTLISTS_FP, {}).keys())
+    client = get_client()
+    if not client:
+        return []
+    res = client.table("shortlists").select("name").execute()
+    return sorted(r.get("name") for r in (res.data or []) if r.get("name"))
 
 
 def get_shortlist_members(shortlist_name: str) -> List[str]:
-    sl = _load_json(SHORTLISTS_FP, {})
-    return [str(x) for x in sl.get(shortlist_name, [])]
+    client = get_client()
+    if not client:
+        return []
+    res = (
+        client.table("shortlists")
+        .select("player_id")
+        .eq("name", shortlist_name)
+        .execute()
+    )
+    return [str(r.get("player_id")) for r in (res.data or []) if r.get("player_id")]
 
 
 def list_matches() -> List[Dict[str, Any]]:
-    raw = _load_json(MATCHES_FP, [])
+    client = get_client()
+    if not client:
+        return []
+    res = client.table("matches").select("*").order("datetime", desc=True).execute()
     out = []
-    for m in raw:
-        out.append({
-            "id": m.get("id") or uuid.uuid4().hex,
-            "home_team": m.get("home_team",""),
-            "away_team": m.get("away_team",""),
-            "datetime": m.get("datetime") or m.get("date") or date.today().isoformat(),
-            "competition": m.get("competition","")
-        })
-    return sorted(out, key=lambda r: r["datetime"], reverse=True)
+    for m in res.data or []:
+        out.append(
+            {
+                "id": m.get("id") or uuid.uuid4().hex,
+                "home_team": m.get("home_team", ""),
+                "away_team": m.get("away_team", ""),
+                "datetime": m.get("datetime") or date.today().isoformat(),
+                "competition": m.get("competition", ""),
+            }
+        )
+    return out
 
 
 def insert_match(m: Dict[str, Any]) -> None:
-    raw = _load_json(MATCHES_FP, [])
+    client = get_client()
+    if not client:
+        return
     new_item = {
         "id": uuid.uuid4().hex,
         "home_team": m["home_team"],
         "away_team": m["away_team"],
-        "datetime": m["datetime"],  # ISO
-        "competition": m.get("competition","")
+        "datetime": m["datetime"],
+        "competition": m.get("competition", ""),
     }
-    raw.append(new_item)
-    _save_json_atomic(MATCHES_FP, raw)
+    client.table("matches").insert(new_item).execute()
 
 
 def list_scout_reports() -> List[Dict[str, Any]]:
-    reps = _load_json(REPORTS_FP, [])
+    client = get_client()
+    if not client:
+        return []
+    reps = client.table("scout_reports").select("*").order("created_at", desc=True).execute().data or []
     match_map = {m["id"]: m for m in list_matches()}
     out = []
     for r in reps:
         m = match_map.get(r.get("match_id"), {})
         out.append({
             **r,
-            "home_team": m.get("home_team","?"),
-            "away_team": m.get("away_team","?"),
-            "datetime":  m.get("datetime",""),
+            "home_team": m.get("home_team", "?"),
+            "away_team": m.get("away_team", "?"),
+            "datetime": m.get("datetime", ""),
         })
-    return sorted(out, key=lambda r: r.get("created_at",""), reverse=True)
+    return out
 
 
 def insert_scout_report(r: Dict[str, Any]) -> None:
-    reps = _load_json(REPORTS_FP, [])
-    reps.append({"id": uuid.uuid4().hex, **r})
-    _save_json_atomic(REPORTS_FP, reps)
+    client = get_client()
+    if not client:
+        return
+    client.table("scout_reports").insert({"id": uuid.uuid4().hex, **r}).execute()
 
 
 def delete_scout_reports(ids: List[str]) -> None:
-    ids = {str(i) for i in ids}
-    reps = _load_json(REPORTS_FP, [])
-    kept = [r for r in reps if str(r.get("id")) not in ids]
-    _save_json_atomic(REPORTS_FP, kept)
+    client = get_client()
+    if not client:
+        return
+    client.table("scout_reports").delete().in_("id", [str(i) for i in ids]).execute()
 
 
 # ---------------- UI helpers ----------------
@@ -245,14 +232,14 @@ def show_scout_match_reporter():
     if source == "Team":
         teams = list_teams()
         if not teams:
-            st.warning("No teams found. Fill team_name in players.json.")
+            st.warning("No teams found in database.")
             return
         sel_team = st.selectbox("Team", teams, key="scout_reporter__team")
         player_opts = list_players_by_team(sel_team)
     else:
         sls = list_shortlists()
         if not sls:
-            st.warning("No shortlists found (shortlists.json).")
+            st.warning("No shortlists found in database.")
             return
         sel_sl = st.selectbox("Shortlist", sls, key="scout_reporter__shortlist")
         ids = get_shortlist_members(sel_sl)

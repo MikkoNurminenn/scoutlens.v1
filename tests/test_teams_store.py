@@ -1,31 +1,59 @@
 import sys
 from pathlib import Path
+import importlib
 
 # Ensure application modules can be imported as top-level modules
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
-from teams_store import add_team, list_teams
-import app_paths
 
-def test_add_team_success(tmp_path, monkeypatch):
-    monkeypatch.setattr("app_paths.DATA_DIR", tmp_path, raising=False)
-    from importlib import reload
+class FakeTable:
+    def __init__(self, name, db):
+        self.name = name
+        self.db = db
+        self._data = db.setdefault(name, [])
+        self._filter = None
+
+    def select(self, *args, **kwargs):
+        self._filter = None
+        return self
+
+    def execute(self):
+        return type("Res", (), {"data": list(self._data)})()
+
+    def insert(self, item):
+        self._data.append(item)
+        return self
+
+
+class FakeClient:
+    def __init__(self, db):
+        self.db = db
+
+    def table(self, name):
+        return FakeTable(name, self.db)
+
+
+def setup_store(monkeypatch):
+    db = {"teams": []}
+    fake_client = FakeClient(db)
+    import supabase_client
+    monkeypatch.setattr(supabase_client, "get_client", lambda: fake_client)
     import teams_store
-    reload(teams_store)
+    importlib.reload(teams_store)
+    return teams_store, db
 
-    ok, info = teams_store.add_team("Testers")
+
+def test_add_team_success(monkeypatch):
+    ts, db = setup_store(monkeypatch)
+    ok, info = ts.add_team("Testers")
     assert ok is True
-    assert (tmp_path / "teams" / "Testers" / "players.json").exists()
-    assert "Testers" in teams_store.list_teams()
+    assert info == "Testers"
+    assert "Testers" in ts.list_teams()
 
 
-def test_add_team_duplicate(tmp_path, monkeypatch):
-    monkeypatch.setattr("app_paths.DATA_DIR", tmp_path, raising=False)
-    from importlib import reload
-    import teams_store
-    reload(teams_store)
-
-    assert teams_store.add_team("Santos")[0] is True
-    ok, msg = teams_store.add_team("santos")   # case-insensitive
+def test_add_team_duplicate(monkeypatch):
+    ts, db = setup_store(monkeypatch)
+    assert ts.add_team("Santos")[0] is True
+    ok, msg = ts.add_team("santos")
     assert ok is False
     assert "exists" in msg.lower()

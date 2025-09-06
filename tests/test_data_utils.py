@@ -1,54 +1,101 @@
 import sys
 from pathlib import Path
 import importlib
-import json
 import pandas as pd
 
 # Ensure application modules can be imported as top-level modules
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
 
-def setup_data_utils(tmp_path, monkeypatch):
-    monkeypatch.setenv("SCOUTLENS_APPDATA", str(tmp_path))
-    import app_paths
-    importlib.reload(app_paths)
-    import storage
-    monkeypatch.setattr(storage, "IS_CLOUD", False)
+class FakeTable:
+    def __init__(self, name, db):
+        self.name = name
+        self.db = db
+        self._data = db.setdefault(name, [])
+        self._filter = None
+
+    def select(self, *args, **kwargs):
+        self._filter = None
+        return self
+
+    def eq(self, column, value):
+        self._filter = (column, value)
+        return self
+
+    def order(self, *args, **kwargs):
+        return self
+
+    def execute(self):
+        data = list(self._data)
+        if self._filter:
+            col, val = self._filter
+            data = [r for r in data if r.get(col) == val]
+        return type("Res", (), {"data": data})()
+
+    def upsert(self, data):
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            id = item.get("id")
+            for i, row in enumerate(self._data):
+                if row.get("id") == id:
+                    self._data[i] = item
+                    break
+            else:
+                self._data.append(item)
+        return self
+
+    def insert(self, data):
+        items = data if isinstance(data, list) else [data]
+        self._data.extend(items)
+        return self
+
+    def delete(self):
+        return self
+
+    def in_(self, column, values):
+        vals = set(values)
+        self._data[:] = [r for r in self._data if r.get(column) not in vals]
+        return self
+
+
+class FakeClient:
+    def __init__(self, db):
+        self.db = db
+
+    def table(self, name):
+        return FakeTable(name, self.db)
+
+
+def setup_data_utils(monkeypatch):
+    db = {"teams": [], "players": [], "matches": []}
+    fake_client = FakeClient(db)
+    import supabase_client
+    monkeypatch.setattr(supabase_client, "get_client", lambda: fake_client)
     import data_utils
     importlib.reload(data_utils)
-    return data_utils
+    return data_utils, db
 
 
-def test_list_teams(tmp_path, monkeypatch):
-    du = setup_data_utils(tmp_path, monkeypatch)
+def test_list_teams(monkeypatch):
+    du, db = setup_data_utils(monkeypatch)
     assert du.list_teams() == []
-    du.PLAYERS_FP.write_text(
-        json.dumps([{ "team_name": "Team A" }, { "team_name": "Team B" }]),
-        encoding="utf-8",
-    )
-    du.get_team_paths("Team B")["folder"].mkdir(parents=True, exist_ok=True)
-    du.get_team_paths("Team C")["folder"].mkdir(parents=True, exist_ok=True)
+    db["teams"].extend([{ "name": "Team A" }, { "name": "Team B" }])
     teams = du.list_teams()
-    assert "Team B" in teams
-    assert "TEAM_B" not in teams
-    assert set(teams) == {"Team A", "Team B", "TEAM_C"}
+    assert set(teams) == {"Team A", "Team B"}
 
 
-def test_load_master_creates_file(tmp_path, monkeypatch):
-    du = setup_data_utils(tmp_path, monkeypatch)
+def test_load_master_creates_empty(monkeypatch):
+    du, db = setup_data_utils(monkeypatch)
     team = "My Team"
-    master_path = du.get_team_paths(team)["master"]
-    assert not master_path.exists()
     df = du.load_master(team)
-    assert master_path.exists()
     assert list(df.columns) == du.MASTER_COLUMNS
     assert df.empty
 
 
-def test_save_master_persists_data(tmp_path, monkeypatch):
-    du = setup_data_utils(tmp_path, monkeypatch)
+def test_save_master_persists_data(monkeypatch):
+    du, db = setup_data_utils(monkeypatch)
     team = "My Team"
-    df_new = pd.DataFrame([{ "PlayerID": 1, "Name": "Alice" }])
+    df_new = pd.DataFrame([{ "PlayerID": 1, "Name": "Alice", "id": "1" }])
     du.save_master(df_new, team)
     df_loaded = du.load_master(team)
     assert df_loaded.loc[0, "PlayerID"] == 1

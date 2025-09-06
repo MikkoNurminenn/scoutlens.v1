@@ -8,15 +8,13 @@
 # - Fast table fallback, optional position guessing
 
 from __future__ import annotations
-import json
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date
 
 import pandas as pd
 import streamlit as st
 
-from app_paths import file_path, DATA_DIR
+from supabase_client import get_client
 
 # -------------------- CONFIG / STATE KEYS --------------------
 STATE_TEAM_KEY        = "team_view__selected_team"
@@ -33,9 +31,7 @@ STATE_CACHE_BUSTER    = "team_view__cache_buster"
 # Threshold for switching cards -> table
 CARD_THRESHOLD = 80
 
-# Data files
-PLAYERS_FP   = file_path("players.json")
-SHORTLIST_FP = file_path("shortlist.json")
+# Data tables
 
 # External (optional) teams source
 try:
@@ -51,60 +47,22 @@ def _safe_str(v: Any) -> str:
     return "" if v is None else str(v)
 
 @st.cache_data(show_spinner=False)
-def _load_json(fp: Path, default, cache_buster: int = 0):
-    """Load JSON data from ``fp`` with caching.
-
-    The cache can be invalidated by adjusting ``cache_buster``.
-
-    Args:
-        fp: Path to the JSON file.
-        default: Value to return if loading fails.
-        cache_buster: Manual version flag to bust Streamlit cache.
-
-    Returns:
-        Parsed JSON content or ``default`` if the file is missing or malformed.
-    """
-
-    try:
-        p = Path(fp)
-        if p.exists():
-            return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
-
-def _save_json(fp: Path, data: Any) -> None:
-    """Persist ``data`` as JSON to ``fp``.
-
-    Args:
-        fp: Target file path.
-        data: Serializable object to write.
-    """
-
-    try:
-        Path(fp).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
-
 def _load_shortlist() -> set:
-    """Return shortlist player IDs from disk.
+    client = get_client()
+    if not client:
+        return set()
+    res = client.table("shortlists").select("player_id").execute()
+    return {str(r.get("player_id")) for r in (res.data or []) if r.get("player_id")}
 
-    Returns:
-        A ``set`` of player identifiers. If the file cannot be read,
-        an empty set is returned.
-    """
-
-    try:
-        if SHORTLIST_FP.exists():
-            return set(json.loads(SHORTLIST_FP.read_text(encoding="utf-8")))
-    except Exception:
-        pass
-    return set()
 
 def _save_shortlist(s: set) -> None:
-    """Persist the shortlist ``s`` to disk."""
-
-    _save_json(SHORTLIST_FP, sorted(list(s)))
+    client = get_client()
+    if not client:
+        return
+    client.table("shortlists").delete().neq("player_id", None).execute()
+    if s:
+        rows = [{"player_id": str(pid)} for pid in s]
+        client.table("shortlists").insert(rows).execute()
 
 def _norm_team(p: Dict[str, Any]) -> str:
     """Extract a normalised team name from a player record."""
@@ -197,7 +155,11 @@ def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, An
     """Gather normalised player rows for ``team`` from storage."""
 
     team = (team or "").strip()
-    players = _load_json(PLAYERS_FP, [], cache_buster)
+    client = get_client()
+    if not client:
+        return []
+    res = client.table("players").select("*").eq("team_name", team).execute()
+    players = res.data or []
     out: List[Dict[str, Any]] = []
     for p in players:
         if _norm_team(p) == team:
@@ -216,8 +178,11 @@ def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, An
 def _teams_from_players_json(cache_buster: int) -> List[str]:
     """Return a sorted list of unique team names from players data."""
 
-    players = _load_json(PLAYERS_FP, [], cache_buster)
-    teams = sorted({_norm_team(p) for p in players if _norm_team(p)})
+    client = get_client()
+    if not client:
+        return []
+    res = client.table("players").select("team_name").execute()
+    teams = sorted({(p.get("team_name") or "").strip() for p in (res.data or []) if (p.get("team_name") or "").strip()})
     return teams
 
 def _rows_to_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:

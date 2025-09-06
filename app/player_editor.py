@@ -9,9 +9,8 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
-# --- storage (Supabase jos secrets, muuten JSON) ---
-from storage import Storage
-storage = Storage()
+# --- Supabase client ---
+from supabase_client import get_client
 
 # --- projektin apurit ---
 from app_paths import DATA_DIR, PLAYERS_FP, SHORTLISTS_FP, PLAYER_PHOTOS_DIR
@@ -205,10 +204,22 @@ def _valid_tm_url(url: str) -> bool:
 # Storage-ohjatut apurit
 # -------------------------------------------------------
 def upsert_player_storage(player: dict) -> str:
-    return storage.upsert_player(player)
+    client = get_client()
+    if not client:
+        return ""
+    pid = str(player.get("id") or "").strip()
+    if not pid:
+        pid = uuid4().hex
+        player["id"] = pid
+    client.table("players").upsert(player).execute()
+    return pid
 
 def remove_from_players_storage_by_ids(ids: List[str]) -> int:
-    return storage.remove_by_ids([str(x) for x in ids])
+    client = get_client()
+    if not client:
+        return 0
+    client.table("players").delete().in_("id", [str(i) for i in ids]).execute()
+    return len(ids)
 
 def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) -> Path:
     PLAYER_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
@@ -216,7 +227,9 @@ def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) 
     safe_name = Path(filename).stem.replace(" ", "-")
     out = PLAYER_PHOTOS_DIR / f"{safe_name}-{player_id[:6]}{ext}"
     out.write_bytes(content)
-    storage.set_photo_path(player_id, str(out))
+    client = get_client()
+    if client:
+        client.table("players").update({"photo_path": str(out)}).eq("id", player_id).execute()
     return out
 
 # -------------------------------------------------------
@@ -241,10 +254,12 @@ def _save_shortlists(data: Dict[str, List[Any]]):
     _save_json(SHORTLISTS_FP, data)
 
 def _players_index_by_id() -> Dict[str, Dict[str, Any]]:
-    # LUETAAN PELAAJAT STORAGESTA (ei enää players.jsonista)
-    players = storage.list_players()
-    out = {}
-    for p in players:
+    client = get_client()
+    out: Dict[str, Dict[str, Any]] = {}
+    if not client:
+        return out
+    res = client.table("players").select("*").execute()
+    for p in res.data or []:
         pid = str(p.get("id") or "")
         if pid:
             out[pid] = p
@@ -621,7 +636,9 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
 
         if st.button("💾 Save tags", key=f"pe_save_tags__{selected_team}_{pid_int}"):
             tags = [t.strip() for t in tag_str.split(",") if t.strip()]
-            storage.set_tags(pid_str, tags)
+            client = get_client()
+            if client:
+                client.table("players").update({"tags": tags}).eq("id", pid_str).execute()
             st.success("Tags saved.")
 
     # 📅 Season Stats
@@ -747,7 +764,9 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             nm = selected_name.strip()
             tm = _as_str(selected_team)
             ids = []
-            for p in storage.list_players():
+            client = get_client()
+            players = (client.table("players").select("*").execute().data if client else [])
+            for p in players or []:
                 if (p.get("name","").strip() == nm) and (p.get("team_name","").strip() == tm):
                     ids.append(str(p.get("id")))
             if ids:
