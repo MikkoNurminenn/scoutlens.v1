@@ -1,100 +1,35 @@
-# sync_utils.py
-import json
+from __future__ import annotations
 from pathlib import Path
-from uuid import uuid4
-from datetime import date
-import pandas as pd
+import streamlit as st
+from supabase import create_client
 
-from app_paths import file_path
-from data_utils import load_master
-from supabase_client import get_client
 
-PLAYERS_FP = file_path("players.json")
+def _client():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_ANON_KEY"]
+    return create_client(url, key)
 
-def _load_json(fp: Path, default):
+
+def push_json(bucket: str, key: str, local_fp: Path) -> tuple[bool, str]:
     try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
-
-def _save_json(fp: Path, data):
-    fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-def _norm_nat(v):
-    if v is None: return ""
-    if isinstance(v, (list, tuple, set)): 
-        return ", ".join(str(x).strip() for x in v if str(x).strip())
-    return str(v).strip()
-
-def bulk_sync_team_to_players_json(team_name: str) -> int:
-    df = load_master(team_name)
-    if df is None or df.empty:
-        return 0
-
-    players = _load_json(PLAYERS_FP, [])
-    index_by_key = {(p.get("name","").strip(), p.get("team_name","").strip()): i for i,p in enumerate(players)}
-
-    added_or_updated = 0
-    for _, r in df.iterrows():
-        name = str(r.get("Name","")).strip()
-        if not name:
-            continue
-        pid  = str(r.get("PlayerID") or uuid4().hex)
-        rec  = {
-            "id": pid,
-            "name": name,
-            "team_name": team_name,
-            "date_of_birth": str(r.get("DateOfBirth","")),
-            "nationality": _norm_nat(r.get("Nationality","")),
-            "preferred_foot": str(r.get("PreferredFoot","")),
-            "club_number": int(r.get("ClubNumber",0) or 0),
-            "position": str(r.get("Position","")),
-            "scout_rating": int(r.get("ScoutRating",0) or 0),
-        }
-        key = (rec["name"], rec["team_name"])
-        if key in index_by_key:
-            players[index_by_key[key]] = {**players[index_by_key[key]], **rec}
-        else:
-            players.append(rec)
-        added_or_updated += 1
-
-    _save_json(PLAYERS_FP, players)
-    return added_or_updated
+        sb = _client()
+        data_bytes = local_fp.read_bytes()
+        sb.storage.from_(bucket).upload(
+            path=key,
+            file=data_bytes,
+            file_options={"content-type": "application/json", "upsert": True},
+        )
+        return True, f"Uploaded {key}"
+    except Exception as e:
+        return False, str(e)
 
 
-def upload_players_to_supabase() -> int:
-    """Upload players.json into Supabase 'players' table.
-
-    Returns number of records uploaded or 0 if Supabase not configured.
-    """
-    sb = get_client()
-    if not sb:
-        return 0
-    players = _load_json(PLAYERS_FP, [])
-    if not players:
-        return 0
+def pull_json(bucket: str, key: str, local_fp: Path) -> tuple[bool, str]:
     try:
-        sb.table("players").upsert(players).execute()
-        return len(players)
-    except Exception:
-        return 0
-
-
-def download_players_from_supabase() -> int:
-    """Fetch players from Supabase into players.json.
-
-    Returns number of records stored locally or 0 if Supabase not configured.
-    """
-    sb = get_client()
-    if not sb:
-        return 0
-    try:
-        res = sb.table("players").select("*").execute()
-    except Exception:
-        return 0
-    players = res.data or []
-    _save_json(PLAYERS_FP, players)
-    return len(players)
-
+        sb = _client()
+        res = sb.storage.from_(bucket).download(key)
+        local_fp.parent.mkdir(parents=True, exist_ok=True)
+        local_fp.write_bytes(res)
+        return True, f"Downloaded {key}"
+    except Exception as e:
+        return False, str(e)

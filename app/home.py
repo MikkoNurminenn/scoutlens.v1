@@ -9,6 +9,7 @@ import platform
 
 import streamlit as st
 from app_paths import file_path  # meidän polkuapuri (kirjoittaa %APPDATA%/ScoutLens tms.)
+from sync_utils import push_json, pull_json
 
 # ---------------- Pienet, paikalliset JSON-apurit (ei storage-riippuvuutta) ----------------
 def load_json_fp(fp: Path, default):
@@ -39,6 +40,13 @@ PLAYERS_FN    = "players.json"
 REPORTS_FN    = "scout_reports.json"
 MATCHES_FN    = "matches.json"
 NOTES_FN      = "notes.json"
+FILES = [
+    "players.json",
+    "matches.json",
+    "shortlists.json",
+    "scout_reports.json",
+    "notes.json",
+]
 
 # ---------------- Optional import calendar_ui ----------------
 def _fallback_load_matches() -> List[Dict[str, Any]]:
@@ -177,6 +185,31 @@ def show_home():
             "⬇️ Export (ZIP)", data=_export_zip(), file_name="scoutlens_backup.zip",
             use_container_width=True
         )
+
+    # ---- Cloud Sync (Supabase)
+    bucket = st.secrets.get("SUPABASE_BUCKET", "scoutlens")
+    st.subheader("Cloud Sync (Supabase)")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Backup → Supabase"):
+            for name in FILES:
+                ok, msg = push_json(bucket, name, file_path(name))
+                if ok:
+                    st.write("✅ " + msg)
+                else:
+                    st.error("❌ " + msg)
+
+    with col2:
+        if st.button("Restore ← Supabase"):
+            for name in FILES:
+                ok, msg = pull_json(bucket, name, file_path(name))
+                if ok:
+                    st.write("✅ " + msg)
+                else:
+                    st.error("❌ " + msg)
+            st.cache_data.clear()
+            st.success("Restored and cache cleared.")
 
     # ---- Data loads
     players = _load_players()
