@@ -19,6 +19,7 @@ from data_utils import (
     load_master, save_master,
     load_seasonal_stats, save_seasonal_stats, BASE_DIR,
 )
+from data_utils_players import clear_players_cache
 from teams_store import add_team, list_teams
 
 # -------------------------------------------------------
@@ -582,7 +583,10 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 st.error("Transfermarkt URL näyttää virheelliseltä.")
             else:
                 pid_out = upsert_player_storage(player_data)
-                st.success(f"✅ Saved (id={pid_out})")
+                clear_players_cache()
+                st.success("Player saved.")
+                if st.button("Go to Match Report", key=f"pe_goto_report__{pid_str}"):
+                    st.switch_page("scout_reporter.py")
 
         st.markdown("</div>", unsafe_allow_html=True)
     # 🔗 Links
@@ -734,6 +738,8 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         conf2 = st.text_input("Type REMOVE to confirm", key=f"pe_del_json_conf__{selected_team}_{pid_int}", placeholder="REMOVE")
         if st.button("Remove by PlayerID", key=f"pe_del_json_byid__{selected_team}_{pid_int}", disabled=(conf2 != "REMOVE")):
             n = remove_from_players_storage_by_ids([str(pid_str)])
+            if n:
+                clear_players_cache()
             st.success(f"Removed {n} record(s) by id.")
 
         # (name, team) -poisto: etsitään id:t storagesta ja poistetaan ne
@@ -746,6 +752,8 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                     ids.append(str(p.get("id")))
             if ids:
                 n = remove_from_players_storage_by_ids(ids)
+                if n:
+                    clear_players_cache()
                 st.success(f"Removed {n} record(s) by (name, team).")
             else:
                 st.info("No records matched (name, team) in storage.")
