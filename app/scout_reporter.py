@@ -23,6 +23,8 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
+from data_utils import list_players_by_team, list_teams
+
 
 # ---------------- Mini CSS helper ----------------
 def _inject_css_once(key: str, css_html: str):
@@ -33,7 +35,6 @@ def _inject_css_once(key: str, css_html: str):
 
 
 # ---------------- File targets (JSON) ----------------
-PLAYERS_FP    = file_path("players.json")
 MATCHES_FP    = file_path("matches.json")
 SHORTLISTS_FP = file_path("shortlists.json")
 REPORTS_FP    = file_path("scout_reports.json")
@@ -71,18 +72,10 @@ def _save_json_atomic(fp, data):
 
 # ---------------- Data access ----------------
 def get_all_players() -> List[Dict[str, Any]]:
-    raw = _load_json(PLAYERS_FP, [])
-    out = []
-    for p in raw:
-        pid  = str(p.get("id") or uuid.uuid4().hex)
-        name = p.get("name") or p.get("Name") or "Unknown"
-        team = p.get("team_name") or p.get("Team") or p.get("team") or ""
-        out.append({**p, "id": pid, "name": name, "team_name": team})
+    out: List[Dict[str, Any]] = []
+    for t in list_teams():
+        out.extend(list_players_by_team(t))
     return out
-
-
-def list_teams() -> List[str]:
-    return sorted({p["team_name"] for p in get_all_players() if p.get("team_name")})
 
 
 def list_shortlists() -> List[str]:
@@ -253,16 +246,15 @@ def show_scout_match_reporter():
         key="scout_reporter__source"
     )
 
-    all_players = get_all_players()
     players: List[Dict[str, Any]] = []
 
     if source == "Team":
         teams = list_teams()
         if not teams:
-            st.warning("No teams found. Fill team_name in players.json.")
+            st.warning("No teams found.")
             return
         sel_team = st.selectbox("Team", teams, key="scout_reporter__team")
-        players = [p for p in all_players if (p.get("team_name") or "") == sel_team]
+        players = list_players_by_team(sel_team)
     else:
         sls = list_shortlists()
         if not sls:
@@ -270,7 +262,8 @@ def show_scout_match_reporter():
             return
         sel_sl = st.selectbox("Shortlist", sls, key="scout_reporter__shortlist")
         ids = set(get_shortlist_members(sel_sl))
-        players = [p for p in all_players if str(p["id"]) in ids]
+        all_players = get_all_players()
+        players = [p for p in all_players if str(p.get("id")) in ids]
 
     if not players:
         st.warning("No players for this selection.")

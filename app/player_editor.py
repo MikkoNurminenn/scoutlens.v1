@@ -18,6 +18,7 @@ from app_paths import DATA_DIR, PLAYERS_FP, SHORTLISTS_FP, PLAYER_PHOTOS_DIR
 from data_utils import (
     load_master, save_master,
     load_seasonal_stats, save_seasonal_stats, BASE_DIR,
+    parse_date, _ser_date,
 )
 from teams_store import add_team, list_teams
 
@@ -133,24 +134,6 @@ def _to_date(x) -> Optional[date]:
     dt = pd.to_datetime(s, errors="coerce")
     return dt.date() if pd.notna(dt) else None
 
-def _as_date_str(x) -> str:
-    """Palauttaa YYYY-MM-DD tai tyhjän."""
-    # Suora normalisointi pd.NaT/None/tyhjään
-    try:
-        if pd.isna(x):
-            return ""
-    except Exception:
-        pass
-    if isinstance(x, date) and not isinstance(x, datetime):
-        return x.isoformat()
-    if isinstance(x, datetime):
-        return x.date().isoformat()
-    s = _as_str(x)
-    if not s:
-        return ""
-    dt = pd.to_datetime(s, errors="coerce")
-    return dt.date().isoformat() if pd.notna(dt) else ""
-
 def _date_input(label: str, value, key: str) -> Optional[date]:
     """Streamlit date_input kovalla varmistuksella ja selkeillä rajoilla (1900 → tänään).
     Palauttaa None jos arvo puuttuu."""
@@ -177,22 +160,24 @@ def _date_input(label: str, value, key: str) -> Optional[date]:
         )
     return None if (missing and picked == BIRTHDATE_MIN) else picked
 
-def _next_free_id(existing_ids):
-    existing = set(int(x) for x in existing_ids if pd.notna(x))
-    idx = 1
-    while idx in existing:
-        idx += 1
-    return idx
+def _new_player_id() -> str:
+    return uuid4().hex
 
 def _ensure_player_id(df: pd.DataFrame):
-    if "PlayerID" not in df.columns or df["PlayerID"].isnull().all():
-        df["PlayerID"] = [i + 1 for i in range(len(df))]
+    if "PlayerID" not in df.columns:
+        df["PlayerID"] = [ _new_player_id() for _ in range(len(df)) ]
+    else:
+        df["PlayerID"] = df["PlayerID"].astype(str).fillna("")
+        mask = df["PlayerID"].str.strip() == ""
+        df.loc[mask, "PlayerID"] = [ _new_player_id() for _ in range(mask.sum()) ]
     return df
 
 def _ensure_min_columns(df: pd.DataFrame):
     for col in DEFAULT_COLUMNS:
         if col not in df.columns:
-            df[col] = "" if col not in ("ClubNumber","ScoutRating","PlayerID") else 0
+            df[col] = "" if col not in ("ClubNumber","ScoutRating") else 0
+    if "PlayerID" in df.columns:
+        df = _ensure_player_id(df)
     return df
 
 def _valid_tm_url(url: str) -> bool:
@@ -409,16 +394,17 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         st.warning("No player data for the selected team. Create the first row below.")
         df_master = pd.DataFrame(columns=DEFAULT_COLUMNS)
 
-    df_master = _ensure_player_id(_ensure_min_columns(df_master))
+    df_master = _ensure_min_columns(df_master)
 
     # ---------- Lisää ensimmäinen rivi, jos rosteri on tyhjä ----------
     if empty_state:
         if st.button("➕ Create first player row", key=f"pe_first_row__{selected_team}"):
-            new_id = _next_free_id(df_master["PlayerID"].dropna().astype(int).tolist()) if "PlayerID" in df_master.columns else 1
+            new_id = _new_player_id()
             new_row = {col: "" for col in df_master.columns}
             new_row.update({"PlayerID": new_id, "Name": "New Player"})
             df_master = pd.concat([df_master, pd.DataFrame([new_row])], ignore_index=True)
             save_master(df_master, selected_team)
+            st.cache_data.clear()
             st.success("First player row created.")
             st.rerun()
 
@@ -434,8 +420,8 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         if st.button("💾 Save table", key=f"pe_save_table__{selected_team}"):
             df_master.loc[:, edit_cols] = table_edit.loc[:, edit_cols].values
 
-            # numerot
-            for num_col in ("PlayerID","ClubNumber","ScoutRating"):
+            # numerot (except PlayerID)
+            for num_col in ("ClubNumber","ScoutRating"):
                 if num_col in df_master.columns:
                     df_master[num_col] = pd.to_numeric(df_master[num_col], errors="coerce").fillna(0).astype(int)
 
@@ -444,27 +430,23 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 if text_col in df_master.columns:
                     df_master[text_col] = df_master[text_col].apply(_as_str)
             if "DateOfBirth" in df_master.columns:
-                df_master["DateOfBirth"] = df_master["DateOfBirth"].apply(_as_date_str)
+                df_master["DateOfBirth"] = df_master["DateOfBirth"].apply(lambda x: _ser_date(parse_date(_as_str(x))))
 
-            # täytä puuttuvat PlayerID:t
-            if (df_master["PlayerID"] == 0).any():
-                used = [x for x in df_master["PlayerID"].tolist() if x > 0]
-                for _, idx in enumerate(df_master.index[df_master["PlayerID"] == 0], start=1):
-                    df_master.at[idx, "PlayerID"] = _next_free_id(used)
-                    used.append(df_master.at[idx, "PlayerID"])
+            df_master = _ensure_player_id(df_master)
 
             save_master(df_master, selected_team)
+            st.cache_data.clear()
             st.success("Table saved.")
 
     # ---------- Lisää uusi rivi aina näkyvissä ----------
     with st.expander("➕ Add New Player", expanded=False):
         if st.button("Add row", key=f"pe_add_row__{selected_team}"):
-            existing_ids = df_master["PlayerID"].dropna().astype(int).tolist()
-            new_id = _next_free_id(existing_ids)
+            new_id = _new_player_id()
             new_row = {col: "" for col in df_master.columns}
             new_row.update({"PlayerID": new_id, "Name": "New Player"})
             df_master = pd.concat([df_master, pd.DataFrame([new_row])], ignore_index=True)
             save_master(df_master, selected_team)
+            st.cache_data.clear()
             st.success("New player row added.")
             st.rerun()
         st.caption("Vinkki: käytä yläpuolen 'Full table editor' -osiota massamuokkaukseen.")
@@ -498,8 +480,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         st.warning("Selected player not found in master after filtering.")
         return
     row = selected_row_df.iloc[0].to_dict()
-    pid_int = _as_int(row.get("PlayerID"), 0)
-    pid_str = str(pid_int or uuid4().hex)
+    pid_str = _as_str(row.get("PlayerID")) or _new_player_id()
 
     # ---------- Välilehdet ----------
     tabs = st.tabs(["✏️ Basic Info", "🔗 Links", "🖼️ Photo & Tags", "📅 Season Stats", "⭐ Shortlist", "🗑️ Actions"])
@@ -511,65 +492,73 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
 
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.text_input("PlayerID", value=str(pid_int or ""), disabled=True)
+            st.text_input("PlayerID", value=pid_str, disabled=True)
         with c2:
-            name_val = st.text_input("Name", value=_as_str(row.get("Name","")), key=f"pe_name__{selected_team}_{pid_int}")
+            name_val = st.text_input("Name", value=_as_str(row.get("Name","")), key=f"pe_name__{selected_team}_{pid_str}")
         with c3:
             st.text_input("Team (master file)", value=str(selected_team), disabled=True)
 
         c4, c5, c6 = st.columns(3)
         with c4:
-            dob_date = _date_input("DateOfBirth", value=row.get("DateOfBirth"), key=f"pe_dob__{selected_team}_{pid_int}")
+            dob_date = _date_input("DateOfBirth", value=row.get("DateOfBirth"), key=f"pe_dob__{selected_team}_{pid_str}")
         with c5:
-            nat_val = st.text_input("Nationality (A, B)", value=_normalize_nationality(_as_str(row.get("Nationality",""))), key=f"pe_nat__{selected_team}_{pid_int}")
+            nat_val = st.text_input("Nationality (A, B)", value=_normalize_nationality(_as_str(row.get("Nationality",""))), key=f"pe_nat__{selected_team}_{pid_str}")
         with c6:
-            pos_val = st.text_input("Position", value=_as_str(row.get("Position","")), key=f"pe_pos__{selected_team}_{pid_int}")
+            pos_val = st.text_input("Position", value=_as_str(row.get("Position","")), key=f"pe_pos__{selected_team}_{pid_str}")
 
         c7, c8, c9 = st.columns(3)
         pref_options = ["", "Right", "Left", "Both"]
         current_pref = _as_str(row.get("PreferredFoot",""))
         pref_index   = pref_options.index(current_pref) if current_pref in pref_options else 0
         with c7:
-            pref_foot = st.selectbox("PreferredFoot", pref_options, index=pref_index, key=f"pe_pref__{selected_team}_{pid_int}")
+            pref_foot = st.selectbox("PreferredFoot", pref_options, index=pref_index, key=f"pe_pref__{selected_team}_{pid_str}")
         with c8:
-            club_num = st.number_input("ClubNumber", min_value=0, max_value=999, value=_as_int(row.get("ClubNumber"), 0), key=f"pe_clubnum__{selected_team}_{pid_int}")
+            club_num = st.number_input("ClubNumber", min_value=0, max_value=999, value=_as_int(row.get("ClubNumber"), 0), key=f"pe_clubnum__{selected_team}_{pid_str}")
         with c9:
-            scout_rating = st.number_input("ScoutRating (0–100)", min_value=0, max_value=100, value=_as_int(row.get("ScoutRating"), 0), key=f"pe_rating__{selected_team}_{pid_int}")
+            scout_rating = st.number_input("ScoutRating (0–100)", min_value=0, max_value=100, value=_as_int(row.get("ScoutRating"), 0), key=f"pe_rating__{selected_team}_{pid_str}")
 
-        tm_url_val = st.text_input("Transfermarkt URL", value=_as_str(row.get("TransfermarktURL","")), placeholder="https://www.transfermarkt.com/...", key=f"pe_tmurl__{selected_team}_{pid_int}")
+        tm_url_val = st.text_input("Transfermarkt URL", value=_as_str(row.get("TransfermarktURL","")), placeholder="https://www.transfermarkt.com/...", key=f"pe_tmurl__{selected_team}_{pid_str}")
         if tm_url_val and not _valid_tm_url(tm_url_val):
             st.warning("URL ei näytä Transfermarkt-osoitteelta.")
 
         problems = []
         if not name_val.strip(): problems.append("Name is required.")
         if not selected_team.strip(): problems.append("Team is required.")
+        if not pos_val.strip(): problems.append("Position is required.")
         if problems:
             st.info(" | ".join(problems))
 
-        if st.button("💾 Save Basic Info", key=f"pe_save_basic__{selected_team}_{pid_int}"):
-            idxs = df_master[df_master["PlayerID"] == pid_int].index
+        if st.button("💾 Save Basic Info", key=f"pe_save_basic__{selected_team}_{pid_str}"):
+            idxs = df_master[df_master["PlayerID"] == pid_str].index
             if not idxs.empty:
                 idx = idxs[0]
                 df_master.at[idx, "Name"]            = name_val.strip()
                 df_master.at[idx, "Nationality"]     = _as_str(nat_val)
-                df_master.at[idx, "DateOfBirth"]     = _as_date_str(dob_date)
+                df_master.at[idx, "DateOfBirth"]     = _ser_date(dob_date)
                 df_master.at[idx, "PreferredFoot"]   = _as_str(pref_foot)
                 df_master.at[idx, "ClubNumber"]      = _as_int(club_num, 0)
                 df_master.at[idx, "Position"]        = _as_str(pos_val)
                 df_master.at[idx, "ScoutRating"]     = _as_int(scout_rating, 0)
                 df_master.at[idx, "TransfermarktURL"]= _as_str(tm_url_val)
                 save_master(df_master, selected_team)
+                st.cache_data.clear()
                 st.success("Basic info saved.")
+                st.session_state["pe_last_saved_pid"] = pid_str
             else:
                 st.error("Could not locate row to update.")
 
+        if st.session_state.get("pe_last_saved_pid") == pid_str:
+            if st.button("Create match report for this player", key=f"pe_nav_report__{pid_str}"):
+                st.session_state["nav_page"] = "Scout Match Report"
+                st.rerun()
+
         st.markdown("---")
         st.markdown("### 📄 Save THIS player to storage")
-        if st.button("⬇️ Save THIS player", key=f"pe_push_this__{selected_team}_{pid_int}"):
+        if st.button("⬇️ Save THIS player", key=f"pe_push_this__{selected_team}_{pid_str}"):
             player_data = {
                 "id": pid_str,
                 "name": _as_str(name_val),
-                "date_of_birth": _as_date_str(dob_date),
+                "date_of_birth": _ser_date(dob_date),
                 "nationality": _normalize_nationality(_as_str(nat_val)),
                 "preferred_foot": _as_str(pref_foot),
                 "club_number": _as_int(club_num, 0),
@@ -582,6 +571,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 st.error("Transfermarkt URL näyttää virheelliseltä.")
             else:
                 pid_out = upsert_player_storage(player_data)
+                st.cache_data.clear()
                 st.success(f"✅ Saved (id={pid_out})")
 
         st.markdown("</div>", unsafe_allow_html=True)
@@ -591,7 +581,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         tm_url = ""
         try:
             if "TransfermarktURL" in df_master.columns:
-                tm_url = _as_str(df_master.loc[df_master["PlayerID"]==pid_int, "TransfermarktURL"].values[0])
+            tm_url = _as_str(df_master.loc[df_master["PlayerID"]==pid_str, "TransfermarktURL"].values[0])
         except Exception:
             tm_url = ""
         st.write("Transfermarkt:", tm_url or "—")
@@ -604,18 +594,18 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
     # 🖼️ Photo & Tags
     with tabs[2]:
         st.subheader("🖼️ Photo & Tags")
-        up = st.file_uploader("Upload player photo (PNG/JPG)", type=["png","jpg","jpeg"], key=f"pe_photo__{selected_team}_{pid_int}")
+        up = st.file_uploader("Upload player photo (PNG/JPG)", type=["png","jpg","jpeg"], key=f"pe_photo__{selected_team}_{pid_str}")
         if up is not None:
             out = _save_photo_and_link_storage(pid_str, up.name, up.read())
             st.success(f"Photo saved: {out}")
 
         tags_key = f"tags_{pid_str}"
         current_tags = st.session_state.get(tags_key, "")
-        tag_str = st.text_input("Tags (comma-separated)", value=current_tags, key=f"pe_tags__{selected_team}_{pid_int}")
+        tag_str = st.text_input("Tags (comma-separated)", value=current_tags, key=f"pe_tags__{selected_team}_{pid_str}")
         st.session_state[tags_key] = tag_str
         st.caption("Vinkki: muutama iskevä tagi (esim. 'Press-resistance, Pace, Leader').")
 
-        if st.button("💾 Save tags", key=f"pe_save_tags__{selected_team}_{pid_int}"):
+        if st.button("💾 Save tags", key=f"pe_save_tags__{selected_team}_{pid_str}"):
             tags = [t.strip() for t in tag_str.split(",") if t.strip()]
             storage.set_tags(pid_str, tags)
             st.success("Tags saved.")
@@ -648,9 +638,9 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                         df_new,
                         num_rows="fixed",
                         use_container_width=True,
-                        key=f"pe_stats_new__{selected_team}_{pid_int}"
+                        key=f"pe_stats_new__{selected_team}_{pid_str}"
                     )
-                    if st.button("💾 Create Season Stats", key=f"pe_stats_create__{selected_team}_{pid_int}"):
+                    if st.button("💾 Create Season Stats", key=f"pe_stats_create__{selected_team}_{pid_str}"):
                         merged = pd.concat([stats_df, edited_stats], ignore_index=True)
                         save_seasonal_stats(merged, selected_team)
                         st.success("Season stats created.")
@@ -659,9 +649,9 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                         player_stats,
                         num_rows="fixed",
                         use_container_width=True,
-                        key=f"pe_stats_edit__{selected_team}_{pid_int}"
+                        key=f"pe_stats_edit__{selected_team}_{pid_str}"
                     )
-                    if st.button("💾 Save Season Stats", key=f"pe_stats_save__{selected_team}_{pid_int}"):
+                    if st.button("💾 Save Season Stats", key=f"pe_stats_save__{selected_team}_{pid_str}"):
                         mask = stats_df[name_col] == selected_name
                         stats_df.loc[mask, :] = edited_stats.values
                         save_seasonal_stats(stats_df, selected_team)
@@ -678,7 +668,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             for sl_name in sorted(shortlists.keys()):
                 items = shortlists.get(sl_name, [])
                 on_list, _ = _is_member(items, pid_str, current_name, _as_str(selected_team))
-                new_val = st.checkbox(sl_name, value=on_list, key=f"pe_sl_mem__{sl_name}_{selected_team}_{pid_int}")
+                new_val = st.checkbox(sl_name, value=on_list, key=f"pe_sl_mem__{sl_name}_{selected_team}_{pid_str}")
                 if new_val != on_list:
                     if new_val:
                         _add_to_shortlist(shortlists, sl_name, pid_str, current_name, _as_str(selected_team))
@@ -692,52 +682,56 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         st.subheader("🗑️ Actions")
         a1, a2, a3 = st.columns(3)
         with a1:
-            if st.button("Duplicate row", key=f"pe_dup__{selected_team}_{pid_int}"):
-                copy = df_master[df_master["PlayerID"]==pid_int].iloc[0].copy()
-                copy["PlayerID"] = _next_free_id(df_master["PlayerID"].dropna().astype(int).tolist())
+            if st.button("Duplicate row", key=f"pe_dup__{selected_team}_{pid_str}"):
+                copy = df_master[df_master["PlayerID"]==pid_str].iloc[0].copy()
+                copy["PlayerID"] = _new_player_id()
                 copy["Name"] = f"{copy.get('Name','')} (copy)"
                 df_master = pd.concat([df_master, pd.DataFrame([copy])], ignore_index=True)
                 save_master(df_master, selected_team)
+                st.cache_data.clear()
                 st.success("Row duplicated.")
         with a2:
-            new_team = st.selectbox("Move to team", options=[""] + list_teams(), index=0, key=f"pe_move_team__{selected_team}_{pid_int}")
-            if new_team and st.button("Move now", key=f"pe_move_now__{selected_team}_{pid_int}"):
+            new_team = st.selectbox("Move to team", options=[""] + list_teams(), index=0, key=f"pe_move_team__{selected_team}_{pid_str}")
+            if new_team and st.button("Move now", key=f"pe_move_now__{selected_team}_{pid_str}"):
                 if new_team == selected_team:
                     st.warning("Same team selected.")
                 else:
                     src = df_master.copy()
-                    row_to_move = src[src["PlayerID"] == pid_int]
-                    src = src[src["PlayerID"] != pid_int]
+                    row_to_move = src[src["PlayerID"] == pid_str]
+                    src = src[src["PlayerID"] != pid_str]
                     save_master(src, selected_team)
+                    st.cache_data.clear()
                     if not row_to_move.empty:
                         target_master = load_master(new_team)
                         if target_master is None:
                             target_master = pd.DataFrame(columns=DEFAULT_COLUMNS)
                         target_master = _ensure_player_id(_ensure_min_columns(target_master))
-                        new_pid = _next_free_id(target_master["PlayerID"].dropna().astype(int).tolist())
+                        new_pid = _new_player_id()
                         row_to_move = row_to_move.copy()
                         row_to_move.loc[:, "PlayerID"] = new_pid
                         target_master = pd.concat([target_master, row_to_move], ignore_index=True)
                         save_master(target_master, new_team)
+                        st.cache_data.clear()
                         st.success(f"Player moved to {new_team}.")
         with a3:
             st.warning("Type DELETE to confirm deletion from master file", icon="⚠️")
-            conf = st.text_input("Confirmation", key=f"pe_del_conf__{selected_team}_{pid_int}", placeholder="DELETE")
-            if st.button("Delete row from master", key=f"pe_del_row__{selected_team}_{pid_int}", disabled=(conf != "DELETE")):
-                df_master = df_master[df_master["PlayerID"] != pid_int]
+            conf = st.text_input("Confirmation", key=f"pe_del_conf__{selected_team}_{pid_str}", placeholder="DELETE")
+            if st.button("Delete row from master", key=f"pe_del_row__{selected_team}_{pid_str}", disabled=(conf != "DELETE")):
+                df_master = df_master[df_master["PlayerID"] != pid_str]
                 save_master(df_master, selected_team)
+                st.cache_data.clear()
                 st.success("Row deleted from master.")
 
         st.markdown("---")
         st.subheader("Remove from storage")
         st.caption("Siivoa taustavarastoa sotkematta master-tiedostoa.")
-        conf2 = st.text_input("Type REMOVE to confirm", key=f"pe_del_json_conf__{selected_team}_{pid_int}", placeholder="REMOVE")
-        if st.button("Remove by PlayerID", key=f"pe_del_json_byid__{selected_team}_{pid_int}", disabled=(conf2 != "REMOVE")):
+        conf2 = st.text_input("Type REMOVE to confirm", key=f"pe_del_json_conf__{selected_team}_{pid_str}", placeholder="REMOVE")
+        if st.button("Remove by PlayerID", key=f"pe_del_json_byid__{selected_team}_{pid_str}", disabled=(conf2 != "REMOVE")):
             n = remove_from_players_storage_by_ids([str(pid_str)])
             st.success(f"Removed {n} record(s) by id.")
 
         # (name, team) -poisto: etsitään id:t storagesta ja poistetaan ne
-        if st.button("Remove by (name, team) pair", key=f"pe_del_json_bykey__{selected_team}_{pid_int}", disabled=(conf2 != "REMOVE")):
+        if st.button("Remove by (name, team) pair", key=f"pe_del_json_bykey__{selected_team}_{pid_str}", disabled=(conf2 != "REMOVE")):
             nm = selected_name.strip()
             tm = _as_str(selected_team)
             ids = []

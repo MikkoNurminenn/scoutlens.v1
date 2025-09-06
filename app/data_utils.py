@@ -55,6 +55,13 @@ def parse_date(s: Optional[str]) -> Optional[date]:
             continue
     return None
 
+
+def _ser_date(d: Optional[date]) -> Optional[str]:
+    """Serialize ``date`` to ``YYYY-MM-DD`` string (or ``None``)."""
+    if d is None:
+        return None
+    return d.strftime("%Y-%m-%d")
+
 def _read_json_local(fp: Path, default: Any):
     try:
         if fp.exists():
@@ -139,16 +146,13 @@ def _coerce_master(df: pd.DataFrame) -> pd.DataFrame:
         if col not in df.columns:
             df[col] = pd.Series(dtype="object")
 
-    # PlayerID
+    # PlayerID: always string UUID
     if "PlayerID" in df.columns:
-        df["PlayerID"] = pd.to_numeric(df["PlayerID"], errors="coerce").astype("Int64")
+        df["PlayerID"] = df["PlayerID"].astype(str).fillna("")
 
-    # DateOfBirth normalisointi (datetime/str -> date)
+    # DateOfBirth -> YYYY-MM-DD string (safe)
     if "DateOfBirth" in df.columns:
-        try:
-            df["DateOfBirth"] = pd.to_datetime(df["DateOfBirth"], errors="coerce").dt.date
-        except Exception:
-            pass
+        df["DateOfBirth"] = df["DateOfBirth"].apply(lambda x: _ser_date(parse_date(str(x))))
 
     # Stable column order
     df = df[[c for c in MASTER_COLUMNS if c in df.columns] + [c for c in df.columns if c not in MASTER_COLUMNS]]
@@ -162,7 +166,7 @@ def _coerce_seasonal(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = pd.Series(dtype="object")
     # Types
     if "PlayerID" in df.columns:
-        df["PlayerID"] = pd.to_numeric(df["PlayerID"], errors="coerce").astype("Int64")
+        df["PlayerID"] = df["PlayerID"].astype(str).fillna("")
     if "Season" in df.columns:
         df["Season"] = df["Season"].astype(str)
     if "MinutesPlayed" in df.columns:
@@ -177,9 +181,11 @@ def _records_json_safe(df: pd.DataFrame) -> List[dict]:
         if pd.api.types.is_datetime64_any_dtype(tmp[col]):
             tmp[col] = tmp[col].astype(str)
         else:
-            # date-objektit -> isoformat
+            # date-objektit -> ISO using _ser_date
             try:
-                tmp[col] = tmp[col].apply(lambda x: x.isoformat() if isinstance(x, (date, datetime)) else x)
+                tmp[col] = tmp[col].apply(
+                    lambda x: _ser_date(x if isinstance(x, date) else x.date()) if isinstance(x, (date, datetime)) else x
+                )
             except Exception:
                 pass
     return tmp.to_dict(orient="records")
@@ -226,6 +232,19 @@ def load_players(team: str) -> pd.DataFrame:
 
 def save_players(df: pd.DataFrame, team: str) -> None:
     save_master(df, team)
+
+
+def list_players_by_team(team: str) -> List[Dict[str, Any]]:
+    """Return list of player dicts for a team (id/name/team_name serialized)."""
+    df = load_master(team)
+    if df is None or df.empty:
+        return []
+    recs = _records_json_safe(df)
+    for r in recs:
+        r["id"] = str(r.get("PlayerID") or r.get("id") or "")
+        r["name"] = r.get("Name", "")
+        r["team_name"] = team
+    return recs
 
 # -----------------------------------------------------------------------------
 # Seasonal stats per team
