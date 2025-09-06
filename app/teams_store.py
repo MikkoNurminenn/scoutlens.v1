@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 from app_paths import file_path
+from supabase_client import get_client
 
 TEAMS_FP   = file_path("teams.json")
 PLAYERS_FP = file_path("players.json")
@@ -22,7 +23,20 @@ def _norm_team(p: dict) -> str:
     return (p.get("team_name") or p.get("Team") or p.get("team") or "").strip()
 
 def list_teams_all() -> list[str]:
-    """teams.json ∪ players.json(team_name/Team/team)"""
+    """Return all known team names.
+
+    If Supabase credentials are configured, teams are loaded from the
+    "teams" table. Otherwise teams.json ∪ players.json(team_name/Team/team)
+    is used.
+    """
+    sb = get_client()
+    if sb:
+        try:
+            res = sb.table("teams").select("name").execute()
+            return sorted(t.get("name", "") for t in res.data or [])
+        except Exception:
+            pass
+
     teams = set(_load(TEAMS_FP, []))
     for p in _load(PLAYERS_FP, []):
         t = _norm_team(p)
@@ -34,6 +48,13 @@ def add_team(name: str) -> bool:
     name = (name or "").strip()
     if not name:
         return False
+    sb = get_client()
+    if sb:
+        try:
+            sb.table("teams").upsert({"name": name}).execute()
+            return True
+        except Exception:
+            pass
     teams = set(_load(TEAMS_FP, []))
     if name not in teams:
         teams.add(name)
@@ -41,5 +62,13 @@ def add_team(name: str) -> bool:
     return True
 
 def remove_team(name: str) -> None:
+    sb = get_client()
+    if sb:
+        try:
+            sb.table("teams").delete().eq("name", name).execute()
+            return
+        except Exception:
+            pass
     teams = [t for t in _load(TEAMS_FP, []) if t != name]
     _save(TEAMS_FP, teams)
+

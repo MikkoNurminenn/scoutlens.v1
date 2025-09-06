@@ -7,6 +7,7 @@ import pandas as pd
 
 from app_paths import file_path
 from data_utils import load_master
+from supabase_client import get_client
 
 PLAYERS_FP = file_path("players.json")
 
@@ -61,3 +62,39 @@ def bulk_sync_team_to_players_json(team_name: str) -> int:
 
     _save_json(PLAYERS_FP, players)
     return added_or_updated
+
+
+def upload_players_to_supabase() -> int:
+    """Upload players.json into Supabase 'players' table.
+
+    Returns number of records uploaded or 0 if Supabase not configured.
+    """
+    sb = get_client()
+    if not sb:
+        return 0
+    players = _load_json(PLAYERS_FP, [])
+    if not players:
+        return 0
+    try:
+        sb.table("players").upsert(players).execute()
+        return len(players)
+    except Exception:
+        return 0
+
+
+def download_players_from_supabase() -> int:
+    """Fetch players from Supabase into players.json.
+
+    Returns number of records stored locally or 0 if Supabase not configured.
+    """
+    sb = get_client()
+    if not sb:
+        return 0
+    try:
+        res = sb.table("players").select("*").execute()
+    except Exception:
+        return 0
+    players = res.data or []
+    _save_json(PLAYERS_FP, players)
+    return len(players)
+
