@@ -7,30 +7,22 @@ from pathlib import Path
 
 from app_paths import file_path, DATA_DIR
 from data_utils import list_teams, load_master
+from storage import load_json
 
 # ---------- JSON-polut ----------
 PLAYERS_FP    = file_path("players.json")
 SHORTLISTS_FP = file_path("shortlists.json")
 
-# ---------- apurit ----------
-def _load_json(fp: Path, default):
-    try:
-        if Path(fp).exists():
-            return json.loads(Path(fp).read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
-
 def list_shortlists_json():
-    return sorted(_load_json(SHORTLISTS_FP, {}).keys())
+    return sorted(load_json(SHORTLISTS_FP, {}).keys())
 
 def get_shortlist_members_json(name: str):
-    sl = _load_json(SHORTLISTS_FP, {})
+    sl = load_json(SHORTLISTS_FP, {})
     return [str(x) for x in sl.get(name, [])]
 
 def get_all_players_map_id_to_name():
     """Palauttaa dictin: {player_id(str): name(str)} players.jsonista."""
-    players = _load_json(PLAYERS_FP, [])
+    players = load_json(PLAYERS_FP, [])
     out = {}
     for p in players:
         pid = str(p.get("id") or p.get("PlayerID") or "")

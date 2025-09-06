@@ -6,6 +6,8 @@ import re
 import pandas as pd
 import streamlit as st
 
+from storage import load_json
+
 def _inject_css_once(key: str, css_html: str):
     sskey = f"__css_injected__{key}"
     if not st.session_state.get(sskey):
@@ -23,13 +25,8 @@ MATCHES_FP = file_path("matches.json")
 TEAMS_FP   = file_path("teams.json")  # fallbackia varten
 
 # ---- perus JSON-apurit
-def _load_json(fp: Path, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
+def _load_json(fp: Path, default: object | None = None):
+    return load_json(fp, default)
 
 # ---- tiimit: käytä teams_storea, muuten fallback
 try:

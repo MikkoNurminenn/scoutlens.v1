@@ -20,7 +20,16 @@ def file_path(name: str) -> Path:
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
-def load_json(name_or_fp: str | Path, default):
+def load_json(name_or_fp: str | Path, default: object | None = None):
+    """Read JSON from *name_or_fp* using UTF-8.
+
+    Returns ``default`` (or ``[]`` when omitted) if the file is missing or
+    cannot be decoded. A new list is created for the implicit default to avoid
+    sharing state between calls.
+    """
+    if default is None:
+        default = []
+
     p = file_path(name_or_fp) if isinstance(name_or_fp, str) else Path(name_or_fp)
     try:
         if p.exists():
@@ -45,7 +54,9 @@ class Storage:
     def file_path(self, name: str) -> Path:
         return self.base_dir / name
 
-    def read_json(self, fp: Path, default):
+    def read_json(self, fp: Path, default: object | None = None):
+        if default is None:
+            default = []
         try:
             if fp.exists():
                 return json.loads(fp.read_text(encoding="utf-8"))

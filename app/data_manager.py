@@ -17,18 +17,10 @@ PLAYERS_FP = file_path("players.json")
 
 # ---------- JSON apurit ----------
 def _load_players():
-    try:
-        if PLAYERS_FP.exists():
-            return json.loads(PLAYERS_FP.read_text(encoding="utf-8"))
-    except Exception as e:
-        st.error(f"Failed to read players.json: {e}")
-    return []
+    return load_json(PLAYERS_FP, [])
 
 def _save_players(players):
-    try:
-        PLAYERS_FP.write_text(json.dumps(players, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as e:
-        st.error(f"Failed to write players.json: {e}")
+    save_json(PLAYERS_FP, players)
 
 def _norm_team(p: dict) -> str:
     return (

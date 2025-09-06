@@ -13,6 +13,7 @@ import streamlit as st
 from zoneinfo import ZoneInfo
 
 from app_paths import file_path, DATA_DIR
+from storage import load_json, save_json
 
 MATCHES_FP = file_path("matches.json")
 
@@ -37,18 +38,10 @@ LOCAL_TZ = "Europe/Helsinki"
 # -------------- IO --------------
 @st.cache_data(show_spinner=False)
 def _load_json(_: int = 0):
-    try:
-        if MATCHES_FP.exists():
-            return json.loads(MATCHES_FP.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return []
+    return load_json(MATCHES_FP, [])
 
 def _save_json(data: Any) -> None:
-    try:
-        MATCHES_FP.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    save_json(MATCHES_FP, data)
 
 def _bust():
     st.cache_data.clear()
