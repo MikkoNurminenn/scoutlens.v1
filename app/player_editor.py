@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 # --- storage (Supabase jos secrets, muuten JSON) ---
-from storage import Storage
+from storage import Storage, load_json, save_json
 storage = Storage()
 
 # --- projektin apurit ---
@@ -38,16 +38,11 @@ DEFAULT_COLUMNS = [
 
 TM_RX = re.compile(r"^https?://(www\.)?transfermarkt\.[^/\s]+/.*", re.IGNORECASE)
 
-def _load_json(fp: Path, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
+def _load_json(fp: Path, default: object | None = None):
+    return load_json(fp, default)
 
 def _save_json(fp: Path, data):
-    fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_json(fp, data)
 
 def _normalize_nationality(val) -> str:
     if val is None:

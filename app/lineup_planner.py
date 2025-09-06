@@ -3,6 +3,7 @@ import pandas as pd
 import json
 from pathlib import Path
 from data_utils import BASE_DIR, list_teams, load_master
+from storage import load_json, save_json
 
 # Attempt mplsoccer import
 try:
@@ -44,17 +45,12 @@ def get_color(pos):
 def save_lineup(lineup, key):
     LINEUP_DIR.mkdir(exist_ok=True)
     path = LINEUP_DIR / f"{key}_lineup.json"
-    with open(path, 'w') as f:
-        json.dump(lineup, f)
+    save_json(path, lineup)
 
 # Load lineup from JSON file
 def load_lineup(key):
     path = LINEUP_DIR / f"{key}_lineup.json"
-    try:
-        with open(path, 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
+    return load_json(path, {})
 
 # Draw 4-3-3 lineup on pitch using mplsoccer
 def draw_lineup(lineup):
@@ -94,11 +90,7 @@ def show_lineup_planner():
     else:
         # Load shortlist data
         sl_file = BASE_DIR / "shortlists.json"
-        try:
-            raw = json.loads(sl_file.read_text())
-            shortlists = raw if isinstance(raw, dict) else {}
-        except:
-            shortlists = {}
+        shortlists = load_json(sl_file, {})
         sl_names = list(shortlists.keys())
         key = st.selectbox("Select Shortlist", sl_names)
         if not key:

@@ -7,28 +7,19 @@ from typing import Any, Dict, List
 import streamlit as st
 
 from app_paths import file_path
+from storage import load_json, save_json
 
 PLAYERS_FP     = file_path("players.json")
 SHORTLISTS_FP  = file_path("shortlists.json")
 
 # ---------- IO ----------
 @st.cache_data(show_spinner=False)
-def _read_json(path: Path):
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-
-def _save_json(path: Path, data: Any):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
 def _load_players() -> List[Dict[str, Any]]:
-    data = _read_json(PLAYERS_FP) or []
+    data = load_json(PLAYERS_FP, [])
     return data if isinstance(data, list) else []
 
 def _load_shortlists() -> Dict[str, List[str]]:
-    root = _read_json(SHORTLISTS_FP) or {}
+    root = load_json(SHORTLISTS_FP, {})
     return root if isinstance(root, dict) else {}
 
 # ---------- helpers ----------
@@ -77,12 +68,12 @@ def show_shortlists():
             nn = new_nm.strip()
             if nn and nn not in shortlists:
                 shortlists[nn] = []
-                _save_json(SHORTLISTS_FP, shortlists)
+                save_json(SHORTLISTS_FP, shortlists)
                 st.success(f"Created '{nn}'")
                 st.cache_data.clear(); st.rerun()
         if sel in shortlists and c2.button("Delete"):
             shortlists.pop(sel, None)
-            _save_json(SHORTLISTS_FP, shortlists)
+            save_json(SHORTLISTS_FP, shortlists)
             st.warning(f"Deleted '{sel}'")
             st.cache_data.clear(); st.rerun()
 
@@ -91,7 +82,7 @@ def show_shortlists():
             rn = st.text_input("Rename", value=sel, key="sl_rename")
             if rn.strip() and rn.strip() != sel and st.button("Apply rename"):
                 shortlists[rn.strip()] = shortlists.pop(sel)
-                _save_json(SHORTLISTS_FP, shortlists)
+                save_json(SHORTLISTS_FP, shortlists)
                 st.success("Renamed")
                 st.cache_data.clear(); st.rerun()
 
@@ -111,12 +102,12 @@ def show_shortlists():
                         shortlists[sel].append(n)
                         added += 1
                 if added:
-                    _save_json(SHORTLISTS_FP, shortlists)
+                    save_json(SHORTLISTS_FP, shortlists)
                     st.success(f"Added {added} players")
                     st.cache_data.clear(); st.rerun()
             if cclear.button("Clear list"):
                 shortlists[sel] = []
-                _save_json(SHORTLISTS_FP, shortlists)
+                save_json(SHORTLISTS_FP, shortlists)
                 st.warning("Cleared")
                 st.cache_data.clear(); st.rerun()
 
@@ -132,12 +123,12 @@ def show_shortlists():
                     rc1.write(f"- **{nm}**")
                     if rc2.button("⬆️", key=f"up_{sel}_{i}", help="Move up") and i>0:
                         items[i-1], items[i] = items[i], items[i-1]
-                        _save_json(SHORTLISTS_FP, shortlists); st.rerun()
+                        save_json(SHORTLISTS_FP, shortlists); st.rerun()
                     if rc3.button("⬇️", key=f"dn_{sel}_{i}", help="Move down") and i < len(items)-1:
                         items[i+1], items[i] = items[i], items[i+1]
-                        _save_json(SHORTLISTS_FP, shortlists); st.rerun()
+                        save_json(SHORTLISTS_FP, shortlists); st.rerun()
                     if rc4.button("Remove", key=f"rm_{sel}_{i}"):
-                        items.pop(i); _save_json(SHORTLISTS_FP, shortlists); st.rerun()
+                        items.pop(i); save_json(SHORTLISTS_FP, shortlists); st.rerun()
 
                 # export
                 st.divider()

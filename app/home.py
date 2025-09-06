@@ -11,20 +11,20 @@ import streamlit as st
 from app_paths import file_path  # meidän polkuapuri (kirjoittaa %APPDATA%/ScoutLens tms.)
 
 # ---------------- Pienet, paikalliset JSON-apurit (ei storage-riippuvuutta) ----------------
-def load_json_fp(fp: Path, default):
+def load_json_fp(fp: Path, default: object | None = None):
     try:
         if fp.exists():
             return json.loads(fp.read_text(encoding="utf-8"))
     except Exception:
         pass
-    return default
+    return [] if default is None else default
 
 def save_json_fp(fp: Path, data):
     fp.parent.mkdir(parents=True, exist_ok=True)
     fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 # Nämä wrapperit mahdollistavat myöhemmin helpon vaihdon KV/Supabaseen (vaihda vain toteutusta)
-def load_json(name_or_fp: str | Path, default):
+def load_json(name_or_fp: str | Path, default: object | None = None):
     fp = file_path(name_or_fp) if isinstance(name_or_fp, str) else name_or_fp
     return load_json_fp(fp, default)
 

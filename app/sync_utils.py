@@ -7,19 +7,9 @@ import pandas as pd
 
 from app_paths import file_path
 from data_utils import load_master
+from storage import load_json, save_json
 
 PLAYERS_FP = file_path("players.json")
-
-def _load_json(fp: Path, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
-
-def _save_json(fp: Path, data):
-    fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def _norm_nat(v):
     if v is None: return ""
@@ -32,7 +22,7 @@ def bulk_sync_team_to_players_json(team_name: str) -> int:
     if df is None or df.empty:
         return 0
 
-    players = _load_json(PLAYERS_FP, [])
+    players = load_json(PLAYERS_FP, [])
     index_by_key = {(p.get("name","").strip(), p.get("team_name","").strip()): i for i,p in enumerate(players)}
 
     added_or_updated = 0
@@ -59,5 +49,5 @@ def bulk_sync_team_to_players_json(team_name: str) -> int:
             players.append(rec)
         added_or_updated += 1
 
-    _save_json(PLAYERS_FP, players)
+    save_json(PLAYERS_FP, players)
     return added_or_updated

@@ -22,6 +22,7 @@ from typing import Any, Dict, List
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+from storage import load_json, save_json
 
 
 # ---------------- Mini CSS helper ----------------
@@ -40,20 +41,12 @@ REPORTS_FP    = file_path("scout_reports.json")
 
 
 # ---------------- JSON helpers ----------------
-def _load_json(fp, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception as e:
-        st.warning(f"Could not read {fp.name}: {e}")
-    return default
+def _load_json(fp, default: object | None = None):
+    return load_json(fp, default)
 
 
 def _save_json(fp, data):
-    try:
-        fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as e:
-        st.error(f"Could not write {fp.name}: {e}")
+    save_json(fp, data)
 
 
 def _save_json_atomic(fp, data):
