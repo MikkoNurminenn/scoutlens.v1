@@ -123,6 +123,8 @@ def list_scout_reports() -> List[Dict[str, Any]]:
 
 def insert_scout_report(r: Dict[str, Any]) -> None:
     reps = _load_json(REPORTS_FP, [])
+    if "created_at" not in r:
+        r["created_at"] = datetime.now().isoformat()
     reps.append({"id": uuid.uuid4().hex, **r})
     _save_json_atomic(REPORTS_FP, reps)
 
@@ -366,8 +368,7 @@ def show_scout_match_reporter():
             "foot": foot,
             "position": position_final,
             "ratings": json.dumps(ratings, ensure_ascii=False),
-            "general_comment": general.strip(),
-            "created_at": datetime.now().isoformat()
+            "general_comment": general.strip()
         })
         st.success(f"Report saved for {sel_player.get('name','?')}.")
 
