@@ -1,7 +1,5 @@
 /* Cards & KPI */
-.sl-kpi {
-  text-align:left;
-}
+.sl-kpi { text-align:left; }
 .sl-kpi .label { font-size: var(--fs-14); color: var(--fg-muted); }
 .sl-kpi .value { font-size: var(--fs-28); font-weight:700; }
 
@@ -28,6 +26,8 @@
 .stButton>button:disabled {
   opacity:0.5;
   cursor:not-allowed;
+  transform:none;
+  box-shadow:none;
 }
 
 /* Anchor buttons */
