@@ -1,29 +1,46 @@
-# app/home.py — Home (pilvi-yhteensopiva, siisti ja vakaa)
+# app/home.py — Home (lokaali + pilvi-valmis adapteroitavaksi, siisti ja vakaa)
 from __future__ import annotations
 import io
 import json
 from datetime import datetime, date, time as dtime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+import platform
 
 import streamlit as st
+from app_paths import file_path  # meidän polkuapuri (kirjoittaa %APPDATA%/ScoutLens tms.)
 
-# Tallennusadapteri (local JSON ↔ Supabase kv)
-from storage import IS_CLOUD, load_json, save_json
+# ---------------- Pienet, paikalliset JSON-apurit (ei storage-riippuvuutta) ----------------
+def load_json_fp(fp: Path, default):
+    try:
+        if fp.exists():
+            return json.loads(fp.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return default
 
-try:
-    import app.storage as _stg
-    import streamlit as st
-    st.write("Using storage module:", getattr(_stg, "__file__", "?"))
-except Exception as e:
-    st.write("storage import failed:", repr(e))
-# ---------------- "Tiedostonimet" (avaimet kv:ssä) ----------------
+def save_json_fp(fp: Path, data):
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+# Nämä wrapperit mahdollistavat myöhemmin helpon vaihdon KV/Supabaseen (vaihda vain toteutusta)
+def load_json(name_or_fp: str | Path, default):
+    fp = file_path(name_or_fp) if isinstance(name_or_fp, str) else name_or_fp
+    return load_json_fp(fp, default)
+
+def save_json(name_or_fp: str | Path, data):
+    fp = file_path(name_or_fp) if isinstance(name_or_fp, str) else name_or_fp
+    save_json_fp(fp, data)
+
+IS_CLOUD = (platform.system() not in ("Windows", "Darwin"))
+
+# ---------------- "Tiedostonimet" ----------------
 PLAYERS_FN    = "players.json"
 REPORTS_FN    = "scout_reports.json"
 MATCHES_FN    = "matches.json"
 NOTES_FN      = "notes.json"
 
 # ---------------- Optional import calendar_ui ----------------
-# calendar_ui.py voi halutessaan tarjota omat loaderit/saverit.
 def _fallback_load_matches() -> List[Dict[str, Any]]:
     return load_json(MATCHES_FN, default=[])
 
@@ -31,7 +48,6 @@ def _fallback_save_matches(items: List[Dict[str, Any]]) -> None:
     save_json(MATCHES_FN, items)
 
 try:
-    # Jos nämä on määritelty, käytetään niitä
     from calendar_ui import _load_matches as _load_matches  # type: ignore
 except Exception:
     _load_matches = _fallback_load_matches  # type: ignore
@@ -85,7 +101,7 @@ def _go_to(page: str):
     st.session_state["nav_page"] = page
     st.rerun()
 
-# ---------------- Data helpers (adapterin päällä) ----------------
+# ---------------- Data helpers ----------------
 def _load_players() -> List[Dict[str, Any]]:
     return load_json(PLAYERS_FN, default=[])
 
@@ -127,7 +143,7 @@ def _metric(label: str, value: Any, help_text: Optional[str] = None):
 
 # ---------------- Admin / Utilities ----------------
 def _cloud_health() -> Tuple[bool, Optional[Dict[str, Any]]]:
-    """Kirjoita+Lue testi kv:hen. Palauttaa (ok, data)."""
+    """Kirjoita+Lue testi (lokaalisti tiedostoon). Palauttaa (ok, data)."""
     try:
         now = datetime.now(timezone.utc).isoformat()
         save_json("healthcheck.json", {"ping": now, "mode": "cloud" if IS_CLOUD else "local"})
@@ -137,14 +153,14 @@ def _cloud_health() -> Tuple[bool, Optional[Dict[str, Any]]]:
         return False, None
 
 def _export_zip() -> bytes:
-    """Luo zip, jossa tämän näkymän keskeiset JSONit (kv:stä tai lokaalista)."""
+    """Luo zip, jossa tämän näkymän keskeiset JSONit."""
     from zipfile import ZipFile, ZIP_DEFLATED
     buf = io.BytesIO()
     with ZipFile(buf, "w", compression=ZIP_DEFLATED) as z:
-        z.writestr(PLAYERS_FN,     json.dumps(_load_players(), ensure_ascii=False, indent=2))
-        z.writestr(REPORTS_FN,     json.dumps(_load_reports(), ensure_ascii=False, indent=2))
-        z.writestr(MATCHES_FN,     json.dumps(_load_matches(), ensure_ascii=False, indent=2))
-        z.writestr(NOTES_FN,       json.dumps(_load_notes(),   ensure_ascii=False, indent=2))
+        z.writestr(PLAYERS_FN, json.dumps(_load_players(), ensure_ascii=False, indent=2))
+        z.writestr(REPORTS_FN, json.dumps(_load_reports(), ensure_ascii=False, indent=2))
+        z.writestr(MATCHES_FN, json.dumps(_load_matches(), ensure_ascii=False, indent=2))
+        z.writestr(NOTES_FN,   json.dumps(_load_notes(),   ensure_ascii=False, indent=2))
     buf.seek(0)
     return buf.read()
 
@@ -156,14 +172,14 @@ def show_home():
     st.markdown("### 🏠 Home")
     st.caption("ScoutLens • LATAM scouting toolkit")
 
-    # ---- Cloud health (näkyy pienessä expanderissa, auttaa debugissa)
+    # ---- Cloud health (expanderina, hyödyllinen debugiin)
     with st.expander("Cloud health", expanded=False):
         ok, data = _cloud_health()
         if ok:
             st.success("Write+read OK")
             st.json(data)
         else:
-            st.warning("Healthcheck ei onnistunut. Tarkista secrets/verkko.")
+            st.warning("Healthcheck ei onnistunut. Tarkista polut/oikeudet.")
 
         st.download_button(
             "⬇️ Export (ZIP)", data=_export_zip(), file_name="scoutlens_backup.zip",
@@ -191,7 +207,7 @@ def show_home():
 
     st.divider()
 
-    # ---- Quick Actions (ei syviä nested columns -virheitä)
+    # ---- Quick Actions (ei nested columns -ongelmia)
     st.markdown("#### ⚡ Pika-toiminnot")
     qa1, qa2, qa3, qa4, qa5 = st.columns(5)
     if qa1.button("👥 Team View", use_container_width=True):
@@ -227,7 +243,6 @@ def show_home():
     if not rows:
         st.info("Ei tulevia otteluita valitulla aikajänteellä.")
     else:
-        # Listakortit, ei sisäkkäisiä columns→columns -rakenteita
         for row in rows:
             c1, c2, c3, c4 = st.columns([1.2, 2.5, 1.6, 0.9])
             with c1:
