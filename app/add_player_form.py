@@ -13,6 +13,7 @@ from app_paths import file_path, DATA_DIR
 from data_utils import (  # NEW
     load_master, save_master
 )
+from storage import load_json, save_json
 
 PLAYERS_FP = file_path("players.json")
 
@@ -20,15 +21,10 @@ PLAYERS_FP = file_path("players.json")
 # Helpers
 # ---------------------------
 def _load_players() -> list:
-    try:
-        if PLAYERS_FP.exists():
-            return json.loads(PLAYERS_FP.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return []
+    return load_json(PLAYERS_FP, [])
 
 def _save_players(data: list) -> None:
-    PLAYERS_FP.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_json(PLAYERS_FP, data)
 
 def _norm_name(s: str) -> str:
     s = (s or "").strip()

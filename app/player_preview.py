@@ -15,21 +15,13 @@ def _inject_css_once(key: str, css_html: str):
 import plotly.express as px
 
 from app_paths import file_path, DATA_DIR
+from storage import load_json
 
 # ---- tiedostopolut
 PLAYERS_FP = file_path("players.json")
 REPORTS_FP = file_path("scout_reports.json")
 MATCHES_FP = file_path("matches.json")
 TEAMS_FP   = file_path("teams.json")  # fallbackia varten
-
-# ---- perus JSON-apurit
-def _load_json(fp: Path, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
 
 # ---- tiimit: käytä teams_storea, muuten fallback
 try:
@@ -40,8 +32,8 @@ except Exception:
         return (p.get("team_name") or p.get("Team") or p.get("team") or "").strip()
 
     def list_teams_all() -> list[str]:
-        teams = set(_load_json(TEAMS_FP, []))
-        for p in _load_json(PLAYERS_FP, []):
+        teams = set(load_json(TEAMS_FP, []))
+        for p in load_json(PLAYERS_FP, []):
             t = _norm_team_for_list(p)
             if t:
                 teams.add(t)
@@ -52,7 +44,7 @@ def _norm_team(p: dict) -> str:
     return (p.get("team_name") or p.get("Team") or p.get("team") or "").strip()
 
 def _players_by_team(team: str) -> list[dict]:
-    players = _load_json(PLAYERS_FP, [])
+    players = load_json(PLAYERS_FP, [])
     t = (team or "").strip()
     return [p for p in players if _norm_team(p) == t]
 
@@ -180,7 +172,7 @@ def _update_player_photo(rec_id: str, photo_bytes: bytes, suggested_name: str) -
     out = photos_dir / f"{safe}-{rec_id[:6]}{ext}"
     out.write_bytes(photo_bytes)
 
-    data = _load_json(PLAYERS_FP, [])
+    data = load_json(PLAYERS_FP, [])
     for p in data:
         if str(p.get("id") or "") == str(rec_id):
             p["photo_path"] = str(out)
@@ -343,8 +335,8 @@ def show_player_preview():
         st.info("Player ID missing; cannot map reports.")
         return
 
-    reports = _load_json(REPORTS_FP, [])
-    matches = {m.get("id"): m for m in _load_json(MATCHES_FP, [])}
+    reports = load_json(REPORTS_FP, [])
+    matches = {m.get("id"): m for m in load_json(MATCHES_FP, [])}
     my_reports = [r for r in reports if str(r.get("player_id")) == player_id]
     if not my_reports:
         st.info("No reports for this player yet. Create one in **Scout Match Reporter**.")

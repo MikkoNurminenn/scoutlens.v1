@@ -17,6 +17,7 @@ import pandas as pd
 import streamlit as st
 
 from app_paths import file_path, DATA_DIR
+from storage import load_json, save_json
 
 # -------------------- CONFIG / STATE KEYS --------------------
 STATE_TEAM_KEY        = "team_view__selected_team"
@@ -51,27 +52,17 @@ def _safe_str(v: Any) -> str:
 @st.cache_data(show_spinner=False)
 def _load_json(fp: Path, default, cache_buster: int = 0):
     """Cached JSON loader with a manual cache-buster."""
-    try:
-        p = Path(fp)
-        if p.exists():
-            return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
+    return load_json(fp, default)
 
 def _save_json(fp: Path, data: Any) -> None:
     try:
-        Path(fp).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        save_json(fp, data)
     except Exception:
         pass
 
 def _load_shortlist() -> set:
-    try:
-        if SHORTLIST_FP.exists():
-            return set(json.loads(SHORTLIST_FP.read_text(encoding="utf-8")))
-    except Exception:
-        pass
-    return set()
+    data = load_json(SHORTLIST_FP, [])
+    return set(data) if isinstance(data, list) else set()
 
 def _save_shortlist(s: set) -> None:
     _save_json(SHORTLIST_FP, sorted(list(s)))

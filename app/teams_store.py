@@ -2,20 +2,16 @@
 from pathlib import Path
 import json
 from app_paths import file_path
+from storage import load_json, save_json
 
 TEAMS_FP   = file_path("teams.json")
 PLAYERS_FP = file_path("players.json")
 
 def _load(fp: Path, default):
-    try:
-        if Path(fp).exists():
-            return json.loads(Path(fp).read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
+    return load_json(fp, default)
 
 def _save(fp: Path, data):
-    Path(fp).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_json(fp, data)
 
 def _norm_team(p: dict) -> str:
     # ✅ Huom: ei enää lueta current_club/CurrentClub kenttiä
