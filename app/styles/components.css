@@ -1,7 +1,5 @@
 /* Cards & KPI */
-.sl-kpi {
-  text-align:left;
-}
+.sl-kpi { text-align:left; }
 .sl-kpi .label { font-size: var(--fs-14); color: var(--fg-muted); }
 .sl-kpi .value { font-size: var(--fs-28); font-weight:700; }
 
@@ -14,6 +12,7 @@
   padding: var(--space-2) var(--space-3);
   font-size: var(--fs-14);
   transition: background .2s ease, box-shadow .2s ease, transform .2s ease;
+  cursor: pointer;
 }
 .stButton>button:hover, .sl-btn:hover {
   background: linear-gradient(90deg,var(--accent-1),var(--accent-2));
@@ -27,6 +26,23 @@
 .stButton>button:disabled {
   opacity:0.5;
   cursor:not-allowed;
+  transform:none;
+  box-shadow:none;
+}
+
+/* Anchor buttons */
+.sl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  text-decoration: none;
+}
+
+/* Quick action container */
+.sl-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 /* Chips */
