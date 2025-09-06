@@ -73,6 +73,18 @@ def _as_int(x: object, default: int = 0) -> int:
     except Exception:
         return default
 
+# ---------- DOB: salli 1900 ... tänään ----------
+BIRTHDATE_MIN = date(1900, 1, 1)
+BIRTHDATE_MAX = date.today()
+
+def _clamp_date(d: date, lo: date, hi: date) -> date:
+    try:
+        if d < lo: return lo
+        if d > hi: return hi
+        return d
+    except Exception:
+        return lo
+
 # ---------- NaT-safe päivämäärät ----------
 def _to_date(x) -> date:
     """Palauttaa aina python date-olion. Kestää str, date/datetime, pd.Timestamp, np.datetime64, pd.NaT."""
@@ -137,12 +149,28 @@ def _as_date_str(x) -> str:
     return dt.date().isoformat() if pd.notna(dt) else ""
 
 def _date_input(label: str, value, key: str) -> date:
-    """Streamlit date_input kovalla varmistuksella: pakota aina python date."""
-    safe = _to_date(value)
+    """Streamlit date_input kovalla varmistuksella ja selkeillä rajoilla (1900 → tänään)."""
+    safe_raw = _to_date(value)
+    safe = _clamp_date(safe_raw, BIRTHDATE_MIN, BIRTHDATE_MAX)
     try:
-        return st.date_input(label, value=safe, format="YYYY-MM-DD", key=key)
+        return st.date_input(
+            label,
+            value=safe,
+            min_value=BIRTHDATE_MIN,
+            max_value=BIRTHDATE_MAX,
+            format="YYYY-MM-DD",
+            key=key,
+            help="Select birth date (1900 → today)"
+        )
     except TypeError:
-        return st.date_input(label, value=safe, key=key)
+        # vanhemmat Streamlit-versiot ilman format-paramia
+        return st.date_input(
+            label,
+            value=safe,
+            min_value=BIRTHDATE_MIN,
+            max_value=BIRTHDATE_MAX,
+            key=key
+        )
 
 def _next_free_id(existing_ids):
     existing = set(int(x) for x in existing_ids if pd.notna(x))
