@@ -1,51 +1,33 @@
-# app_paths.py
+# app_paths.py — yhtenäinen datapolku local/Cloud
 from pathlib import Path
-import os, platform, tempfile
+import os, json
 
-def _is_writable(p: Path) -> bool:
-    try:
-        p.mkdir(parents=True, exist_ok=True)
-        test = p / ".write_test"
-        test.write_text("ok", encoding="utf-8")
-        test.unlink(missing_ok=True)
-        return True
-    except Exception:
-        return False
+APP_NAME = "ScoutLens"
+CLOUD = os.getenv("SCOUTLENS_CLOUD", "0") == "1"
 
-def get_data_dir() -> Path:
-    home = Path.home()
-    system = platform.system()
+if CLOUD:
+    # Streamlit Cloud: repojuuren alle väliaikainen kansio
+    DATA_DIR = Path("./cloud_data")
+else:
+    # Windows/macOS local
+    DATA_DIR = Path(
+        os.getenv("SCOUTLENS_APPDATA") or
+        (Path(os.getenv("APPDATA", Path.home())) / APP_NAME)
+    )
 
-    candidates = []
-    if system == "Windows":
-        appdata = Path(os.getenv("APPDATA", home))
-        candidates += [appdata / "ScoutLens"]
-    elif system == "Darwin":  # macOS
-        candidates += [
-            home / "Library" / "Application Support" / "ScoutLens",
-            home / "ScoutLens",  # fallback
-        ]
-    else:  # Linux & muut
-        candidates += [
-            home / ".local" / "share" / "ScoutLens",
-            home / "ScoutLens",  # fallback
-        ]
-
-    # Viimeinen hätävara: temp-kansio
-    candidates.append(Path(tempfile.gettempdir()) / "ScoutLens")
-
-    for c in candidates:
-        if _is_writable(c):
-            return c
-
-    # Jos mikään ei onnistu (erittäin harvinaista), käytä current working dir
-    cwd = Path.cwd() / "ScoutLens"
-    cwd.mkdir(parents=True, exist_ok=True)
-    return cwd
-
-DATA_DIR = get_data_dir()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 def file_path(name: str) -> Path:
-    p = DATA_DIR / name
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+    return DATA_DIR / name
+
+# Luo oletustiedostot jos puuttuu (turvallinen ajaa aina)
+for fname, default in [
+    ("players.json", []),
+    ("matches.json", []),
+    ("scout_reports.json", []),
+    ("shortlists.json", {}),
+    ("notes.json", [])
+]:
+    fp = file_path(fname)
+    if not fp.exists():
+        fp.write_text(json.dumps(default), encoding="utf-8")
