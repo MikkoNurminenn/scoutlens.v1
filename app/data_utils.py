@@ -40,6 +40,21 @@ def _safe_team_name(name: str) -> str:
 def _ensure_parent(p: Path) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
 
+def parse_date(s: Optional[str]) -> Optional[date]:
+    """Muuntaa päivämäärämerkkijonon ``date``-objektiksi.
+
+    Hyväksyy yleisiä formaatteja (``YYYY-MM-DD``, ``DD.MM.YYYY``, ``YYYY/MM/DD``).
+    Palauttaa ``None`` jos arvo puuttuu tai muunnos epäonnistuu.
+    """
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except Exception:
+            continue
+    return None
+
 def _read_json_local(fp: Path, default: Any):
     try:
         if fp.exists():
