@@ -1,7 +1,7 @@
+# app/data_utils_players_json.py
 """Utility helpers for accessing players stored in the Supabase ``players`` table."""
 
 from __future__ import annotations
-
 from typing import List, Tuple, Dict
 
 import streamlit as st
@@ -27,15 +27,13 @@ def _normalize_player_row(p: Dict) -> Dict[str, str]:
 def load_master() -> List[dict]:
     """Return all players from the ``players`` table.
 
-    Each player is normalised to a dictionary containing the keys
-    ``id``, ``name``, ``team_name`` and ``position``. Players with a
-    missing name or id are skipped.
+    Each player is normalized to contain id, name, team_name, position.
+    Players with missing name or id are skipped.
     """
     client = get_client()
     if not client:
         return []
 
-    # Noudetaan vain tarvittavat sarakkeet – kevyempi ja varmempi
     res = client.table("players").select("id,name,team_name,position").execute()
     raw = res.data or []
 
@@ -49,11 +47,10 @@ def load_master() -> List[dict]:
 
 
 def save_master(data: List[dict]) -> None:
-    """Persist ``data`` to the ``players`` table (upsert)."""
+    """Persist data to the players table (upsert)."""
     client = get_client()
     if not client or not data:
         return
-    # Oletetaan että riveissä on id/name; muut kentät upsertataan sellaisenaan
     client.table("players").upsert(data).execute()
 
 
@@ -66,11 +63,7 @@ def list_teams() -> List[str]:
 
 
 def list_players_by_team(team_name: str) -> List[Tuple[str, str]]:
-    """Return a list of (id, label) for players belonging to ``team_name``.
-
-    Label-muoto: "Name (POS) — Team" jos positio on tiedossa,
-                 muuten "Name — Team".
-    """
+    """Return list of (id, label) for players of team_name."""
     norm = (team_name or "").strip().lower()
     opts: List[Tuple[str, str]] = []
     for p in load_master():
@@ -91,10 +84,8 @@ def list_players_by_team(team_name: str) -> List[Tuple[str, str]]:
 # Cache control
 # ---------------------------------------------------------------------------
 def clear_players_cache() -> None:
-    """Invalidate cached ``load_master`` results, safely."""
+    """Invalidate cached load_master results."""
     try:
-        # streamlit.cache_data decorated functions expose a .clear() helper
         load_master.clear()  # type: ignore[attr-defined]
     except Exception:
-        # Jos ympäristö ei tarjoa .clear():ia, älä kaada sovellusta
         pass
