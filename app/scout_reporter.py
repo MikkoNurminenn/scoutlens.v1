@@ -1,29 +1,17 @@
-# scout_reporter.py
-# -------------------------------------------------------
-# ScoutLens — Scout Match Reporter (JSON)
-# - Kaikki widget-avaimet prefiksillä "scout_reporter__" → ei törmäyksiä
-# - Turvalliset JSON-kirjoitukset (_save_json_atomic)
-# - Nopeutettu poistotila (fast delete)
-# - Puhdas pagination (Page + Rows per page)
-# - Siistitty UI ja KPI:t
-
+# scout_reporter.py — Supabase-backed Scout Match Reporter (clean)
 from __future__ import annotations
-
-# --- central paths: always use app_paths ---
-from app_paths import DATA_DIR
-from data_utils_players import load_master, list_teams, list_players_by_team
 
 import json
 import uuid
 from datetime import date, datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 import pandas as pd
 import streamlit as st
 import plotly.express as px
 
 from supabase_client import get_client
-
+from data_utils import list_teams, list_players_by_team  # käyttää Supabasea
 
 # ---------------- Mini CSS helper ----------------
 def _inject_css_once(key: str, css_html: str):
@@ -32,16 +20,14 @@ def _inject_css_once(key: str, css_html: str):
         st.markdown(css_html, unsafe_allow_html=True)
         st.session_state[sskey] = True
 
-
-"""Supabase data access"""
-
+# ---------------- Supabase: shortlistit ----------------
 def list_shortlists() -> List[str]:
     client = get_client()
     if not client:
         return []
     res = client.table("shortlists").select("name").execute()
-    return sorted(r.get("name") for r in (res.data or []) if r.get("name"))
-
+    names = [r.get("name") for r in (res.data or []) if r.get("name")]
+    return sorted(set(names))
 
 def get_shortlist_members(shortlist_name: str) -> List[str]:
     client = get_client()
@@ -55,7 +41,39 @@ def get_shortlist_members(shortlist_name: str) -> List[str]:
     )
     return [str(r.get("player_id")) for r in (res.data or []) if r.get("player_id")]
 
+# ---------------- Pelaajadata koosteeksi ----------------
+def _normalize_player_record(p: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": str(p.get("id") or p.get("PlayerID") or p.get("player_id") or "").strip(),
+        "name": str(p.get("name") or p.get("Name") or "").strip(),
+        "team_name": str(p.get("team_name") or p.get("Team") or p.get("team") or "").strip(),
+        "position": str(p.get("position") or p.get("Position") or "").strip(),
+    }
 
+def get_all_players() -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for t in list_teams() or []:
+        try:
+            players = list_players_by_team(t) or []
+        except Exception:
+            players = []
+        if isinstance(players, pd.DataFrame):
+            for _, row in players.iterrows():
+                out.append(_normalize_player_record(row.to_dict()))
+        else:
+            for p in players:
+                out.append(_normalize_player_record(p))
+    # dedup id:n mukaan
+    seen = set(); uniq = []
+    for p in out:
+        pid = p.get("id")
+        if not pid or pid in seen:
+            continue
+        seen.add(pid)
+        uniq.append(p)
+    return uniq
+
+# ---------------- Ottelut & raportit (Supabase) ----------------
 def list_matches() -> List[Dict[str, Any]]:
     client = get_client()
     if not client:
@@ -74,7 +92,6 @@ def list_matches() -> List[Dict[str, Any]]:
         )
     return out
 
-
 def insert_match(m: Dict[str, Any]) -> None:
     client = get_client()
     if not client:
@@ -87,7 +104,6 @@ def insert_match(m: Dict[str, Any]) -> None:
         "competition": m.get("competition", ""),
     }
     client.table("matches").insert(new_item).execute()
-
 
 def list_scout_reports() -> List[Dict[str, Any]]:
     client = get_client()
@@ -106,13 +122,12 @@ def list_scout_reports() -> List[Dict[str, Any]]:
         })
     return out
 
-
 def insert_scout_report(r: Dict[str, Any]) -> None:
     client = get_client()
     if not client:
         return
-    client.table("scout_reports").insert({"id": uuid.uuid4().hex, **r}).execute()
-
+    payload = {"id": uuid.uuid4().hex, "created_at": datetime.now().isoformat(), **r}
+    client.table("scout_reports").insert(payload).execute()
 
 def delete_scout_reports(ids: List[str]) -> None:
     client = get_client()
@@ -120,12 +135,10 @@ def delete_scout_reports(ids: List[str]) -> None:
         return
     client.table("scout_reports").delete().in_("id", [str(i) for i in ids]).execute()
 
-
 # ---------------- UI helpers ----------------
 def _fmt_match(r: Dict[str, Any]) -> str:
     dt = (r.get("datetime","") or "")[:10]
     return f"{r.get('home_team','?')} vs {r.get('away_team','?')} ({dt})"
-
 
 FOOT_OPTIONS = ["Right","Left","Both"]
 POSITION_OPTIONS = ["GK","RB","RWB","CB","LB","LWB","DM","CM","AM","RW","LW","ST","Other / free text"]
@@ -150,7 +163,6 @@ BADGE_CSS = """
 </style>
 """
 
-
 def _ratings_to_df(ratings) -> pd.DataFrame:
     """
     Palauttaa DataFramen sarakkeilla ['attribute','rating','comment'].
@@ -169,19 +181,16 @@ def _ratings_to_df(ratings) -> pd.DataFrame:
         return pd.DataFrame(columns=["attribute", "rating", "comment"])
 
     s = pd.to_numeric(df["rating"], errors="coerce").fillna(1)
-
-    # MIGRAATIO: jos data näyttää 1–20 asteikolta, skaalaa 1–5:een
-    if s.max() > 5:
+    if s.max() > 5:  # 1–20 → 1–5
         s = ((s - 1) // 4 + 1).clip(1, 5)
-
     df["rating"] = s.round().clip(1, 5).astype(int)
-    return df[["attribute","rating","comment"]] if "comment" in df.columns else df.assign(comment="")
-
+    if "comment" not in df.columns:
+        df["comment"] = ""
+    return df[["attribute","rating","comment"]]
 
 # ---------------- Main ----------------
 def show_scout_match_reporter():
-    st.header("📋 Scout Match Reporter (JSON)")
-    st.caption(f"Data folder → {DATA_DIR}")
+    st.header("📋 Scout Match Reporter")
     _inject_css_once("BADGE_CSS_scout_reporter", BADGE_CSS)
 
     # 1) Create/Select Match
@@ -225,9 +234,9 @@ def show_scout_match_reporter():
         key="scout_reporter__source"
     )
 
-    all_players = load_master()
-    player_map = {p["id"]: p for p in all_players}
+    # Rakennetaan player_opts = List[Tuple[id, label]] ja player_map id→player
     player_opts: List[Tuple[str, str]] = []
+    player_map: Dict[str, Dict[str, Any]] = {}
 
     if source == "Team":
         teams = list_teams()
@@ -235,24 +244,38 @@ def show_scout_match_reporter():
             st.warning("No teams found in database.")
             return
         sel_team = st.selectbox("Team", teams, key="scout_reporter__team")
-        player_opts = list_players_by_team(sel_team)
-    else:
-        sls = list_shortlists()
-        if not sls:
-            st.warning("No shortlists found in database.")
-            return
-        sel_sl = st.selectbox("Shortlist", sls, key="scout_reporter__shortlist")
-        ids = get_shortlist_members(sel_sl)
-        for pid in ids:
-            p = player_map.get(pid)
-            if not p:
+        raw_players = list_players_by_team(sel_team) or []
+        if isinstance(raw_players, pd.DataFrame):
+            records = [_normalize_player_record(r.to_dict()) for _, r in raw_players.iterrows()]
+        else:
+            records = [_normalize_player_record(p) for p in raw_players]
+        for p in records:
+            if not p.get("id") or not p.get("name"):
                 continue
             label = (
                 f"{p['name']} ({p['position']}) — {p['team_name']}"
                 if p.get("position")
                 else f"{p['name']} — {p['team_name']}"
             )
-            player_opts.append((pid, label))
+            player_opts.append((p["id"], label))
+            player_map[p["id"]] = p
+    else:
+        sls = list_shortlists()
+        if not sls:
+            st.warning("No shortlists found in database.")
+            return
+        sel_sl = st.selectbox("Shortlist", sls, key="scout_reporter__shortlist")
+        ids = set(get_shortlist_members(sel_sl))
+        for p in get_all_players():
+            pid = p.get("id")
+            if pid and pid in ids:
+                label = (
+                    f"{p['name']} ({p['position']}) — {p['team_name']}"
+                    if p.get("position")
+                    else f"{p['name']} — {p['team_name']}"
+                )
+                player_opts.append((pid, label))
+                player_map[pid] = p
 
     if not player_opts:
         st.warning("No players for this selection.")
@@ -298,43 +321,21 @@ def show_scout_match_reporter():
     colA, colB = st.columns(2)
     for i, (label, key) in enumerate(CORE_AREAS):
         with (colA if i % 2 == 0 else colB):
-            val = st.slider(label, 1, 5, 3, step=1, key=f"scout_reporter__rt_{key}")  # 1..5
+            val = st.slider(label, 1, 5, 3, step=1, key=f"scout_reporter__rt_{key}")
             note = st.text_input(f"Comment – {label}", key=f"scout_reporter__cm_{key}", placeholder="optional")
             ratings.append({"attribute": label, "rating": val, "comment": note})
 
-    # --- General comment (styled, clearer) ---
+    # General comment
     st.markdown("#### Conclusion / General comment")
     with st.container(border=True):
-        c_help, c_tools = st.columns([2, 3])
-        with c_help:
-            st.markdown(
-                "<span class='small'>Keep it concise: standout traits, projection, role fit, and risk.</span>",
-                unsafe_allow_html=True
-            )
-        with c_tools:
-            st.caption("Quick inserts")
-            tcol1, tcol2, tcol3, tcol4 = st.columns(4)
-
-            def _add(fragment: str):
-                st.session_state.setdefault("scout_reporter__general_comment_text", "")
-                base = st.session_state["scout_reporter__general_comment_text"]
-                sep = "" if (not base or base.endswith((" ", "\n"))) else " "
-                st.session_state["scout_reporter__general_comment_text"] = f"{base}{sep}{fragment}"
-
-            if tcol1.button("High ceiling",   key="scout_reporter__q_hi"):   _add("High ceiling; raw but trending up.")
-            if tcol2.button("Low risk",       key="scout_reporter__q_lr"):   _add("Low risk profile; consistent decision-making.")
-            if tcol3.button("Physical upside", key="scout_reporter__q_ph"):  _add("Physical upside; acceleration and strength above level.")
-            if tcol4.button("Monitor",        key="scout_reporter__q_mo"):   _add("Monitor closely next 3–5 games for consistency.")
-
         default_text = st.session_state.get("scout_reporter__general_comment_text", "")
-        # 🔧 Korjaus: anna ei-tyhjä label ja piilota se
         general_text = st.text_area(
             label="General comment",
             value=default_text,
             key="scout_reporter__general_comment_text",
             max_chars=600,
             height=140,
-            placeholder="Summarize overall impression, projection, and next steps.",
+            placeholder="Standouts, projection, role fit, risk.",
             label_visibility="collapsed"
         )
         st.markdown(f"<div style='text-align:right' class='small'>{len(general_text)}/600</div>", unsafe_allow_html=True)
@@ -342,7 +343,6 @@ def show_scout_match_reporter():
             st.markdown("**Preview**")
             with st.container(border=True):
                 st.write(general_text.strip())
-
     general = general_text
 
     if st.button("💾 Save Report", key="scout_reporter__save_report_btn"):
@@ -353,12 +353,11 @@ def show_scout_match_reporter():
             "foot": foot,
             "position": position_final,
             "ratings": json.dumps(ratings, ensure_ascii=False),
-            "general_comment": general.strip(),
-            "created_at": datetime.now().isoformat()
+            "general_comment": general.strip()
         })
         st.success(f"Report saved for {sel_player.get('name','?')}.")
 
-    # --- FAST DELETE MODE toggle ---
+    # FAST DELETE MODE toggle
     st.markdown("---")
     fast_delete = st.checkbox(
         "⚡ Fast delete mode (skip charts & heavy UI)",
@@ -367,14 +366,14 @@ def show_scout_match_reporter():
         key="scout_reporter__fast_delete"
     )
 
-    # 4) Inspect Reports (revamped)
+    # 4) Inspect Reports
     st.subheader("4️⃣ Inspect Reports")
     reps = list_scout_reports()
     if not reps:
         st.info("No reports yet.")
         return
 
-    name_map = {str(p["id"]): p.get("name","Unknown") for p in load_master()}
+    name_map = {str(p.get("id")): p.get("name", "Unknown") for p in get_all_players()}
 
     if not fast_delete:
         for rep in reps:
@@ -422,11 +421,6 @@ def show_scout_match_reporter():
                 fig.update_layout(coloraxis_showscale=False, margin=dict(l=10,r=10,t=10,b=10), height=320)
                 fig.update_traces(textposition="outside", cliponaxis=False)
                 st.plotly_chart(fig, use_container_width=True)
-
-                st.dataframe(
-                    df_sorted.rename(columns={"attribute":"Attribute","rating":"Rating","comment":"Comment"}),
-                    use_container_width=True, hide_index=True
-                )
     else:
         st.caption("Fast mode on — charts & per-report UI skipped.")
 
@@ -480,17 +474,11 @@ def show_scout_match_reporter():
 
     st.caption(f"{len(filt)} / {len(df_all)} reports shown")
 
-    # Pagination for editor
+    # Pagination
     page_size = st.selectbox("Rows per page", [50, 100, 200, 500], index=1, key="scout_reporter__page_size")
     total = int(len(filt))
     pages = max(1, (total + int(page_size) - 1) // int(page_size))
-    page = st.number_input(
-        "Page",
-        min_value=1,
-        max_value=int(pages),
-        value=1,
-        key="scout_reporter__page_num"
-    )
+    page = st.number_input("Page", min_value=1, max_value=int(pages), value=1, key="scout_reporter__page_num")
 
     start = (int(page) - 1) * int(page_size)
     end = start + int(page_size)
@@ -511,11 +499,11 @@ def show_scout_match_reporter():
         use_container_width=True,
         hide_index=True,
         disabled=["id","date","Player","Match","Competition","Created"],
-        key=f"scout_reporter__del_editor_p{page}"  # eri avain per sivu → nopeampi
+        key=f"scout_reporter__del_editor_p{page}"
     )
 
     selected_ids = edited.loc[edited["Select"] == True, "id"].astype(str).tolist()
-    filtered_ids = filt["id"].astype(str).tolist()  # kaikki suodatetut (kaikilta sivuilta)
+    filtered_ids = filt["id"].astype(str).tolist()
 
     st.markdown("---")
     st.warning("Type **DELETE** to confirm removals.", icon="⚠️")
@@ -544,7 +532,6 @@ def show_scout_match_reporter():
             st.rerun()
     with cdel3:
         st.caption("Selected = rows checked in the table. Filtered = all rows currently visible after filters.")
-
 
 if __name__ == "__main__":
     show_scout_match_reporter()

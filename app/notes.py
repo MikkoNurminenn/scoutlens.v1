@@ -80,7 +80,7 @@ def show_notes():
             t = (text or "").strip()
             tags = _clean_tags(tags_str or "")
             if t:
-                item = {"id": uuid.uuid4().hex, "ts": _now_iso(), "text": t, "tags": tags}
+                item = {"id": uuid.uuid4().hex, "created_at": _now_iso(), "text": t, "tags": tags}
                 notes.append(item)
                 _save_notes(notes)
                 st.cache_data.clear()
@@ -138,16 +138,16 @@ def show_notes():
             tags = n.get("tags", [])
             ok = any(t in tags for t in tag_sel)
         if ok and from_date:
-            ts = _parse_dt(n.get("ts",""))
+            ts = _parse_dt(n.get("created_at",""))
             ok = (ts is not None) and (ts.date() >= from_date)
         if ok and to_date:
-            ts = _parse_dt(n.get("ts",""))
+            ts = _parse_dt(n.get("created_at",""))
             ok = (ts is not None) and (ts.date() <= to_date)
         if ok:
             filt.append(n)
 
     reverse = (sort_order == "Newest first")
-    filt.sort(key=lambda n: n.get("ts",""), reverse=reverse)
+    filt.sort(key=lambda n: n.get("created_at",""), reverse=reverse)
 
     st.caption(f"{len(filt)} / {len(notes)} notes shown")
 
@@ -167,7 +167,7 @@ def show_notes():
     st.markdown("#### Bulk delete")
     if page_items:
         ids = [n["id"] for n in page_items]
-        picks = st.multiselect("Select notes to delete", options=ids, format_func=lambda nid: next((f"{_fmt_ts(n['ts'])}  •  {(n['text'][:40] + '…' if len(n['text'])>40 else n['text'])}" for n in page_items if n['id']==nid), nid), key="notes__bulk")
+        picks = st.multiselect("Select notes to delete", options=ids, format_func=lambda nid: next((f"{_fmt_ts(n['created_at'])}  •  {(n['text'][:40] + '…' if len(n['text'])>40 else n['text'])}" for n in page_items if n['id']==nid), nid), key="notes__bulk")
         st.warning("Type DELETE to confirm bulk deletion.", icon="⚠️")
         confirm = st.text_input("Confirmation", key="notes__confirm", placeholder="DELETE")
         if st.button(f"🗑️ Delete selected ({len(picks)})", disabled=(len(picks)==0 or confirm!="DELETE"), key="notes__bulk_del"):
@@ -187,7 +187,7 @@ def show_notes():
             with st.container(border=True):
                 top = st.columns([2.4, 1.2, 0.9])
                 with top[0]:
-                    st.caption(_fmt_ts(n.get("ts")))
+                    st.caption(_fmt_ts(n.get("created_at")))
                 with top[1]:
                     tg = n.get("tags", []) or []
                     if tg:

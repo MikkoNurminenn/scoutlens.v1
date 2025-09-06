@@ -1,4 +1,4 @@
-# data_utils.py — Supabase-backed helpers
+# data_utils.py — Supabase-backed helpers (clean)
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,18 +10,27 @@ import pandas as pd
 from schema import MASTER_FIELDS, COMMON_FIELDS
 from supabase_client import get_client
 
-# Compatibility placeholder for modules that still expect a BASE_DIR
+# Yhteensopivuus: jotkin moduulit odottavat BASE_DIR -muuttujaa
 BASE_DIR = Path(".")
 
-# Public re-exports
+# Julkiset re-exportit
 MASTER_COLUMNS = MASTER_FIELDS
 DEFAULT_PLAYER_COLUMNS = COMMON_FIELDS.copy()
 DEFAULT_STATS_COLUMNS = ["PlayerID", "Season", "Goals", "Assists", "MinutesPlayed"]
 
 
-def parse_date(s: Optional[str]) -> Optional[date]:
-    """Parse a date string into a ``date`` object."""
-
+# ---------------------------------------------------------------------------
+# Päivämääräapureita
+# ---------------------------------------------------------------------------
+def parse_date(s: Optional[str | date | datetime]) -> Optional[date]:
+    """Muunna erilaiset merkkijonot/objektit turvallisesti date-objektiksi."""
+    if s is None or s == "" or (isinstance(s, float) and pd.isna(s)):
+        return None
+    if isinstance(s, date) and not isinstance(s, datetime):
+        return s
+    if isinstance(s, datetime):
+        return s.date()
+    s = str(s).strip()
     if not s:
         return None
     for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y/%m/%d"):
@@ -29,26 +38,52 @@ def parse_date(s: Optional[str]) -> Optional[date]:
             return datetime.strptime(s, fmt).date()
         except Exception:
             continue
+    # viimeinen oljenkorsi: pandas parseri
+    try:
+        dt = pd.to_datetime(s, errors="coerce")
+        if pd.isna(dt):
+            return None
+        if isinstance(dt, pd.Timestamp):
+            return dt.date()
+    except Exception:
+        pass
     return None
 
 
+def _ser_date(d: Optional[date | datetime]) -> Optional[str]:
+    """Serialisoi date/datetime → 'YYYY-MM-DD' merkkijono (tai None)."""
+    if d is None:
+        return None
+    if isinstance(d, datetime):
+        d = d.date()
+    return d.strftime("%Y-%m-%d")
+
+
 # ---------------------------------------------------------------------------
-# DataFrame helpers
+# DataFrame-kohdistus ja turvallinen sarjoitus
 # ---------------------------------------------------------------------------
 def _coerce_master(df: pd.DataFrame) -> pd.DataFrame:
+    """Varmista MASTER_COLUMNS, PlayerID stringiksi, DateOfBirth → date-objekti."""
     if df is None or df.empty:
         return pd.DataFrame(columns=MASTER_COLUMNS)
+
+    # Lisää puuttuvat sarakkeet tyhjinä
     for col in MASTER_COLUMNS:
         if col not in df.columns:
             df[col] = pd.Series(dtype="object")
+
+    # PlayerID aina string (UUID) — ei Int64
     if "PlayerID" in df.columns:
-        df["PlayerID"] = pd.to_numeric(df["PlayerID"], errors="coerce").astype("Int64")
+        df["PlayerID"] = df["PlayerID"].astype(str).fillna("")
+
+    # DateOfBirth DataFrameen python date-objektina (ei NaT) → toimii st.date_inputissa
     if "DateOfBirth" in df.columns:
-        try:
-            df["DateOfBirth"] = pd.to_datetime(df["DateOfBirth"], errors="coerce").dt.date
-        except Exception:
-            pass
-    df = df[[c for c in MASTER_COLUMNS if c in df.columns] + [c for c in df.columns if c not in MASTER_COLUMNS]]
+        df["DateOfBirth"] = df["DateOfBirth"].apply(parse_date)
+
+    # Pidä stabiili sarakejärjestys
+    ordered = [c for c in MASTER_COLUMNS if c in df.columns]
+    rest = [c for c in df.columns if c not in ordered]
+    df = df[ordered + rest]
     return df
 
 
@@ -58,32 +93,45 @@ def _coerce_seasonal(df: pd.DataFrame) -> pd.DataFrame:
     for col in DEFAULT_STATS_COLUMNS:
         if col not in df.columns:
             df[col] = pd.Series(dtype="object")
+
+    # PlayerID string
     if "PlayerID" in df.columns:
-        df["PlayerID"] = pd.to_numeric(df["PlayerID"], errors="coerce").astype("Int64")
+        df["PlayerID"] = df["PlayerID"].astype(str).fillna("")
+
+    # Season string
     if "Season" in df.columns:
         df["Season"] = df["Season"].astype(str)
+
+    # MinutesPlayed numero (Int64) mutta NaN→0
     if "MinutesPlayed" in df.columns:
-        df["MinutesPlayed"] = pd.to_numeric(df["MinutesPlayed"], errors="coerce").fillna(0).astype("Int64")
+        df["MinutesPlayed"] = (
+            pd.to_numeric(df["MinutesPlayed"], errors="coerce").fillna(0).astype("Int64")
+        )
     return df
 
 
 def _records_json_safe(df: pd.DataFrame) -> List[dict]:
+    """Muunna DataFrame listaksi dict-olioita: date/datetime → ISO-stringiksi."""
     tmp = df.copy()
     for col in tmp.columns:
         if pd.api.types.is_datetime64_any_dtype(tmp[col]):
+            # pandas datetime → string
             tmp[col] = tmp[col].astype(str)
         else:
+            # date/datetime objektit → ISO
+            def _conv(x):
+                if isinstance(x, (date, datetime)):
+                    return _ser_date(x)
+                return x
             try:
-                tmp[col] = tmp[col].apply(
-                    lambda x: x.isoformat() if isinstance(x, (date, datetime)) else x
-                )
+                tmp[col] = tmp[col].apply(_conv)
             except Exception:
                 pass
     return tmp.to_dict(orient="records")
 
 
 # ---------------------------------------------------------------------------
-# Supabase helpers
+# Supabase-toiminnot
 # ---------------------------------------------------------------------------
 def list_teams() -> List[str]:
     client = get_client()
@@ -112,6 +160,7 @@ def save_master(df: pd.DataFrame, team: str) -> None:
     client.table("players").upsert(data).execute()
 
 
+# Aliasit
 def load_players(team: str) -> pd.DataFrame:
     return load_master(team)
 
@@ -120,6 +169,20 @@ def save_players(df: pd.DataFrame, team: str) -> None:
     save_master(df, team)
 
 
+def list_players_by_team(team: str) -> List[Dict[str, Any]]:
+    """Palauta tiimin pelaajat dict-listana (id/name/team_name mukaan)."""
+    df = load_master(team)
+    if df is None or df.empty:
+        return []
+    recs = _records_json_safe(df)
+    for r in recs:
+        r["id"] = str(r.get("PlayerID") or r.get("id") or "")
+        r["name"] = r.get("Name", "")
+        r["team_name"] = team
+    return recs
+
+
+# Seasonal stats (voit säätää taulun nimen/kolumnit oman skeeman mukaan)
 def load_seasonal_stats(team: str) -> pd.DataFrame:
     client = get_client()
     if not client:
@@ -140,14 +203,15 @@ def save_seasonal_stats(df: pd.DataFrame, team: str) -> None:
 
 
 def initialize_team_folder(team_name: str, stat_columns: Optional[List[str]] = None, base_dir: Path | None = None) -> Path:
+    """Supabase-versiossa varmistetaan tiimin olemassaolo ja palautetaan symbolinen polku."""
     client = get_client()
     if client:
         client.table("teams").upsert({"name": team_name}).execute()
-    # Return a symbolic path for compatibility
-    return Path(team_name)
+    return Path(team_name)  # symbolinen (yhteensopivuus muun koodin kanssa)
 
 
 def ensure_team_exists(team_name: str) -> bool:
+    """True jos luotiin, False jos oli jo olemassa."""
     client = get_client()
     if not client:
         return False
@@ -168,9 +232,10 @@ def validate_player_input(name: str, df: pd.DataFrame) -> Tuple[bool, str]:
 
 
 # ---------------------------------------------------------------------------
-# Compatibility helpers
+# Yhteensopivuus: polkujen "generointi" (ei käytä enää tiedostoja)
 # ---------------------------------------------------------------------------
 def get_team_paths(team_name: str, base_dir: Path | None = None) -> Dict[str, Path]:
+    """Palauta symboliset polut jotta legacy-koodi ei hajoa."""
     base = Path(base_dir) if base_dir else Path(".")
     root = base / team_name
     return {
@@ -179,4 +244,3 @@ def get_team_paths(team_name: str, base_dir: Path | None = None) -> Dict[str, Pa
         "players": root / "players.csv",
         "seasonal_stats": root / "seasonal_stats.csv",
     }
-
