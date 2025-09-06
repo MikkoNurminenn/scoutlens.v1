@@ -193,17 +193,26 @@ def show_home():
     matches = _load_matches()   # tärkeä: lataa aina funktiokutsulla
 
     # ---- KPI-rivi
-    k1, k2, k3, k4 = st.columns(4)
+    teams = {
+        str(
+            p.get("team_name")
+            or p.get("Team")
+            or p.get("team")
+            or p.get("current_club")
+            or p.get("CurrentClub")
+            or ""
+        ).strip()
+        for p in players
+    }
+    teams_cnt = len([t for t in teams if t])
+
+    k1, k2, k3 = st.columns(3)
     with k1:
         _metric("Pelaajia", _safe_len(players))
     with k2:
-        _metric("Raportteja", _safe_len(reports))
+        _metric("Joukkueita", teams_cnt)
     with k3:
-        today0 = datetime.combine(date.today(), dtime.min)
-        upcoming_cnt = sum(1 for m in matches if (lambda dt=_match_dt(m): dt and dt >= today0)())
-        _metric("Tulevat ottelut", upcoming_cnt)
-    with k4:
-        _metric("Muistiinpanoja", _safe_len(notes))
+        _metric("Raportteja", _safe_len(reports))
 
     st.divider()
 
