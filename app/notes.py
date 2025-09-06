@@ -8,18 +8,14 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import streamlit as st
 from app_paths import file_path, DATA_DIR
+from storage import load_json
 
 NOTES_FP = file_path("notes.json")
 
 # ---------- IO ----------
 @st.cache_data(show_spinner=False)
 def _load_json(fp: Path, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
+    return load_json(fp, default)
 
 def _save_json_atomic(fp: Path, data: Any) -> None:
     try:

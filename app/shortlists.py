@@ -7,29 +7,24 @@ from typing import Any, Dict, List
 import streamlit as st
 
 from app_paths import file_path
+from storage import load_json, save_json
 
 PLAYERS_FP     = file_path("players.json")
 SHORTLISTS_FP  = file_path("shortlists.json")
 
 # ---------- IO ----------
 @st.cache_data(show_spinner=False)
-def _read_json(path: Path):
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-
-def _save_json(path: Path, data: Any):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
 def _load_players() -> List[Dict[str, Any]]:
-    data = _read_json(PLAYERS_FP) or []
+    data = load_json(PLAYERS_FP, [])
     return data if isinstance(data, list) else []
 
+@st.cache_data(show_spinner=False)
 def _load_shortlists() -> Dict[str, List[str]]:
-    root = _read_json(SHORTLISTS_FP) or {}
+    root = load_json(SHORTLISTS_FP, {})
     return root if isinstance(root, dict) else {}
+
+def _save_json(path: Path, data: Any):
+    save_json(path, data)
 
 # ---------- helpers ----------
 def _player_name(p: Dict[str, Any]) -> str:

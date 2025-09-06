@@ -11,6 +11,7 @@ from __future__ import annotations
 
 # --- central paths: always use app_paths ---
 from app_paths import DATA_DIR, file_path
+from storage import load_json, save_json
 
 import json
 import uuid
@@ -40,18 +41,9 @@ REPORTS_FP    = file_path("scout_reports.json")
 
 
 # ---------------- JSON helpers ----------------
-def _load_json(fp, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception as e:
-        st.warning(f"Could not read {fp.name}: {e}")
-    return default
-
-
 def _save_json(fp, data):
     try:
-        fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        save_json(fp, data)
     except Exception as e:
         st.error(f"Could not write {fp.name}: {e}")
 
@@ -71,7 +63,7 @@ def _save_json_atomic(fp, data):
 
 # ---------------- Data access ----------------
 def get_all_players() -> List[Dict[str, Any]]:
-    raw = _load_json(PLAYERS_FP, [])
+    raw = load_json(PLAYERS_FP, [])
     out = []
     for p in raw:
         pid  = str(p.get("id") or uuid.uuid4().hex)
@@ -86,16 +78,16 @@ def list_teams() -> List[str]:
 
 
 def list_shortlists() -> List[str]:
-    return sorted(_load_json(SHORTLISTS_FP, {}).keys())
+    return sorted(load_json(SHORTLISTS_FP, {}).keys())
 
 
 def get_shortlist_members(shortlist_name: str) -> List[str]:
-    sl = _load_json(SHORTLISTS_FP, {})
+    sl = load_json(SHORTLISTS_FP, {})
     return [str(x) for x in sl.get(shortlist_name, [])]
 
 
 def list_matches() -> List[Dict[str, Any]]:
-    raw = _load_json(MATCHES_FP, [])
+    raw = load_json(MATCHES_FP, [])
     out = []
     for m in raw:
         out.append({
@@ -109,7 +101,7 @@ def list_matches() -> List[Dict[str, Any]]:
 
 
 def insert_match(m: Dict[str, Any]) -> None:
-    raw = _load_json(MATCHES_FP, [])
+    raw = load_json(MATCHES_FP, [])
     new_item = {
         "id": uuid.uuid4().hex,
         "home_team": m["home_team"],
@@ -122,7 +114,7 @@ def insert_match(m: Dict[str, Any]) -> None:
 
 
 def list_scout_reports() -> List[Dict[str, Any]]:
-    reps = _load_json(REPORTS_FP, [])
+    reps = load_json(REPORTS_FP, [])
     match_map = {m["id"]: m for m in list_matches()}
     out = []
     for r in reps:
@@ -137,14 +129,14 @@ def list_scout_reports() -> List[Dict[str, Any]]:
 
 
 def insert_scout_report(r: Dict[str, Any]) -> None:
-    reps = _load_json(REPORTS_FP, [])
+    reps = load_json(REPORTS_FP, [])
     reps.append({"id": uuid.uuid4().hex, **r})
     _save_json_atomic(REPORTS_FP, reps)
 
 
 def delete_scout_reports(ids: List[str]) -> None:
     ids = {str(i) for i in ids}
-    reps = _load_json(REPORTS_FP, [])
+    reps = load_json(REPORTS_FP, [])
     kept = [r for r in reps if str(r.get("id")) not in ids]
     _save_json_atomic(REPORTS_FP, kept)
 

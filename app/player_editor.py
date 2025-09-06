@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 # --- storage (Supabase jos secrets, muuten JSON) ---
-from storage import Storage
+from storage import Storage, load_json, save_json
 storage = Storage()
 
 # --- projektin apurit ---
@@ -36,16 +36,8 @@ DEFAULT_COLUMNS = [
 
 TM_RX = re.compile(r"^https?://(www\.)?transfermarkt\.[^/\s]+/.*", re.IGNORECASE)
 
-def _load_json(fp: Path, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
-
 def _save_json(fp: Path, data):
-    fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_json(fp, data)
 
 def _normalize_nationality(val) -> str:
     if val is None:
@@ -222,7 +214,7 @@ def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) 
 # Shortlist apurit (säilytetään JSONissa toistaiseksi)
 # -------------------------------------------------------
 def _load_shortlists() -> Dict[str, List[Any]]:
-    raw = _load_json(SHORTLISTS_FP, {})
+    raw = load_json(SHORTLISTS_FP, {})
     if isinstance(raw, dict) and "lists" in raw and isinstance(raw["lists"], list):
         out: Dict[str, List[Any]] = {}
         for lst in raw["lists"]:

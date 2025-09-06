@@ -3,6 +3,7 @@ import pandas as pd
 import json
 from pathlib import Path
 from data_utils import BASE_DIR, list_teams, load_master
+from storage import load_json
 
 # Attempt mplsoccer import
 try:
@@ -94,11 +95,7 @@ def show_lineup_planner():
     else:
         # Load shortlist data
         sl_file = BASE_DIR / "shortlists.json"
-        try:
-            raw = json.loads(sl_file.read_text())
-            shortlists = raw if isinstance(raw, dict) else {}
-        except:
-            shortlists = {}
+        shortlists = load_json(sl_file, {})
         sl_names = list(shortlists.keys())
         key = st.selectbox("Select Shortlist", sl_names)
         if not key:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 import json, os, platform
+from typing import Any
 
 # --- Base dir: Windows -> %APPDATA%\ScoutLens, muut -> repo/.data
 def _default_base_dir() -> Path:
@@ -20,14 +21,19 @@ def file_path(name: str) -> Path:
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
-def load_json(name_or_fp: str | Path, default):
+def load_json(name_or_fp: str | Path, default: Any | None = None):
+    """Read JSON data or return *default* (``[]`` if not provided).
+
+    This helper ensures a missing or malformed file never raises and
+    instead falls back to an empty list (or the provided ``default``).
+    """
     p = file_path(name_or_fp) if isinstance(name_or_fp, str) else Path(name_or_fp)
     try:
         if p.exists():
             return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         pass
-    return default
+    return [] if default is None else default
 
 def save_json(name_or_fp: str | Path, data):
     p = file_path(name_or_fp) if isinstance(name_or_fp, str) else Path(name_or_fp)
@@ -45,13 +51,13 @@ class Storage:
     def file_path(self, name: str) -> Path:
         return self.base_dir / name
 
-    def read_json(self, fp: Path, default):
+    def read_json(self, fp: Path, default: Any | None = None):
         try:
             if fp.exists():
                 return json.loads(fp.read_text(encoding="utf-8"))
         except Exception:
             pass
-        return default
+        return [] if default is None else default
 
     def write_json(self, fp: Path, data):
         fp.parent.mkdir(parents=True, exist_ok=True)
