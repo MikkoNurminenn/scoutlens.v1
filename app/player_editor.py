@@ -20,12 +20,18 @@ from data_utils import (
     load_seasonal_stats, save_seasonal_stats, BASE_DIR,
     parse_date, _ser_date,
 )
-from teams_store import add_team, list_teams
 
-# -------------------------------------------------------
-# Polut
-# -------------------------------------------------------
-# Huom: PLAYERS_FP ei ole enää välttämätön storagen kanssa, mutta pidetään polut yhtenäisinä
+# clear_players_cache: tee armollinen fallback, koska tiedoston nimi on vaihdellut
+try:
+    from data_utils_players import clear_players_cache  # oletus-nimi
+except Exception:
+    try:
+        from data_utils_players_json import clear_players_cache  # joissain repo-versioissa tämä
+    except Exception:
+        def clear_players_cache():
+            return None
+
+from teams_store import add_team, list_teams
 
 # -------------------------------------------------------
 # Yleiset apurit
@@ -90,6 +96,7 @@ def _clamp_date(d: date, lo: date, hi: date) -> date:
         return lo
 
 # ---------- NaT-safe päivämäärät ----------
+
 def _to_date(x) -> Optional[date]:
     """Palauttaa python date-olion tai None. Kestää str, date/datetime,
     pd.Timestamp, np.datetime64, pd.NaT."""
@@ -188,6 +195,7 @@ def _valid_tm_url(url: str) -> bool:
 # -------------------------------------------------------
 # Storage-ohjatut apurit
 # -------------------------------------------------------
+
 def upsert_player_storage(player: dict) -> str:
     return storage.upsert_player(player)
 
@@ -206,6 +214,7 @@ def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) 
 # -------------------------------------------------------
 # Shortlist apurit (säilytetään JSONissa toistaiseksi)
 # -------------------------------------------------------
+
 def _load_shortlists() -> Dict[str, List[Any]]:
     raw = _load_json(SHORTLISTS_FP, {})
     if isinstance(raw, dict) and "lists" in raw and isinstance(raw["lists"], list):
@@ -225,7 +234,6 @@ def _save_shortlists(data: Dict[str, List[Any]]):
     _save_json(SHORTLISTS_FP, data)
 
 def _players_index_by_id() -> Dict[str, Dict[str, Any]]:
-    # LUETAAN PELAAJAT STORAGESTA (ei enää players.jsonista)
     players = storage.list_players()
     out = {}
     for p in players:
@@ -262,7 +270,7 @@ def _resolve_shortlist_items(items: List[Any]) -> List[Dict[str, Any]]:
     # dedup
     seen = set(); deduped = []
     for r in out:
-        key = r["id"] or (r["name"], r["team_name"])
+        key = r["id"] or (r["name"], r["team_name"]) 
         if key in seen:
             continue
         seen.add(key); deduped.append(r)
@@ -297,6 +305,7 @@ def _remove_from_shortlist(shortlists: Dict[str, List[Any]], list_name: str, pid
 # -------------------------------------------------------
 # UI — päätoiminto
 # -------------------------------------------------------
+
 def show_player_editor():
     st.header("💼 Player Editor")
     st.caption(f"Data folder → {DATA_DIR}")
@@ -333,6 +342,7 @@ def show_player_editor():
 # -------------------------------------------------------
 # Shortlist-selailu ja ohjaus editoriin
 # -------------------------------------------------------
+
 def _render_shortlist_flow():
     shortlists = _load_shortlists()
     if not shortlists:
@@ -385,6 +395,7 @@ def _render_shortlist_flow():
 # -------------------------------------------------------
 # Tiimi-editorin varsinainen virta
 # -------------------------------------------------------
+
 def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]):
     df_master = load_master(selected_team)
 
@@ -571,17 +582,18 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 st.error("Transfermarkt URL näyttää virheelliseltä.")
             else:
                 pid_out = upsert_player_storage(player_data)
-                st.cache_data.clear()
+                clear_players_cache()
                 st.success(f"✅ Saved (id={pid_out})")
 
         st.markdown("</div>", unsafe_allow_html=True)
+
     # 🔗 Links
     with tabs[1]:
         st.subheader("🔗 Links")
         tm_url = ""
         try:
             if "TransfermarktURL" in df_master.columns:
-            tm_url = _as_str(df_master.loc[df_master["PlayerID"]==pid_str, "TransfermarktURL"].values[0])
+                tm_url = _as_str(df_master.loc[df_master["PlayerID"]==pid_str, "TransfermarktURL"].values[0])
         except Exception:
             tm_url = ""
         st.write("Transfermarkt:", tm_url or "—")
@@ -728,6 +740,8 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         conf2 = st.text_input("Type REMOVE to confirm", key=f"pe_del_json_conf__{selected_team}_{pid_str}", placeholder="REMOVE")
         if st.button("Remove by PlayerID", key=f"pe_del_json_byid__{selected_team}_{pid_str}", disabled=(conf2 != "REMOVE")):
             n = remove_from_players_storage_by_ids([str(pid_str)])
+            if n:
+                clear_players_cache()
             st.success(f"Removed {n} record(s) by id.")
 
         # (name, team) -poisto: etsitään id:t storagesta ja poistetaan ne
@@ -740,6 +754,8 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                     ids.append(str(p.get("id")))
             if ids:
                 n = remove_from_players_storage_by_ids(ids)
+                if n:
+                    clear_players_cache()
                 st.success(f"Removed {n} record(s) by (name, team).")
             else:
                 st.info("No records matched (name, team) in storage.")

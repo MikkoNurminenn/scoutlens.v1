@@ -9,21 +9,38 @@
 
 from __future__ import annotations
 
-# --- central paths: always use app_paths ---
-from app_paths import DATA_DIR, file_path
-
 import json
 import uuid
 import os
 import tempfile
 from datetime import date, datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-from data_utils import list_players_by_team, list_teams
+# --- central paths: always use app_paths ---
+from app_paths import DATA_DIR, file_path
+
+# -----------------------------------------------
+# Armolliset importit data-apureista (eri repon versiot)
+# -----------------------------------------------
+# Tarvitaan: load_master(team), list_teams(), list_players_by_team(team)
+# Huom: eri repoissa nämä ovat olleet eri moduleissa → kokeile useampi
+try:
+    from data_utils import load_master, list_teams, list_players_by_team  # uudempi polku
+except Exception:
+    try:
+        from data_utils_players_json import load_master, list_teams, list_players_by_team  # vanhempi nimi
+    except Exception:
+        # Fallbackit: minimaalit jotta skripti ei kaadu; UI kertoo "No teams found" jne.
+        def list_teams() -> List[str]:
+            return []
+        def load_master(team: str) -> pd.DataFrame:
+            return pd.DataFrame()
+        def list_players_by_team(team: str) -> List[Dict[str, Any]]:
+            return []
 
 
 # ---------------- Mini CSS helper ----------------
@@ -46,15 +63,8 @@ def _load_json(fp, default):
         if fp.exists():
             return json.loads(fp.read_text(encoding="utf-8"))
     except Exception as e:
-        st.warning(f"Could not read {fp.name}: {e}")
+        st.warning(f"Could not read {getattr(fp, 'name', fp)}: {e}")
     return default
-
-
-def _save_json(fp, data):
-    try:
-        fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as e:
-        st.error(f"Could not write {fp.name}: {e}")
 
 
 def _save_json_atomic(fp, data):
@@ -67,24 +77,86 @@ def _save_json_atomic(fp, data):
             tmp_path = tmp.name
         os.replace(tmp_path, fp)
     except Exception as e:
-        st.error(f"Could not atomically write {fp.name}: {e}")
+        st.error(f"Could not atomically write {getattr(fp, 'name', fp)}: {e}")
 
 
 # ---------------- Data access ----------------
+
+def _normalize_player_record(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Palauta vakioitu pelaaja-dict: id, name, team_name, position.
+    Hyväksyy eri avainmuotoja (PlayerID/Name vs id/name)."""
+    return {
+        "id": str(p.get("id") or p.get("PlayerID") or p.get("player_id") or "").strip(),
+        "name": str(p.get("name") or p.get("Name") or "").strip(),
+        "team_name": str(p.get("team_name") or p.get("Team") or p.get("team") or "").strip(),
+        "position": str(p.get("position") or p.get("Position") or "").strip(),
+    }
+
+
 def get_all_players() -> List[Dict[str, Any]]:
+    """Käy läpi kaikki tiimit ja kerää pelaajat yhtenäiseen muotoon."""
     out: List[Dict[str, Any]] = []
-    for t in list_teams():
-        out.extend(list_players_by_team(t))
-    return out
+    for t in list_teams() or []:
+        try:
+            players = list_players_by_team(t) or []
+        except Exception:
+            players = []
+        # list_players_by_team voi palauttaa DF:n tai listan dictiä → normalisoi
+        if isinstance(players, pd.DataFrame):
+            for _, row in players.iterrows():
+                out.append(_normalize_player_record(row.to_dict()))
+        else:
+            for p in players:
+                out.append(_normalize_player_record(p))
+    # Poista duplikaatit id:n perusteella
+    seen = set(); uniq = []
+    for p in out:
+        pid = p.get("id")
+        if not pid or pid in seen:
+            continue
+        seen.add(pid)
+        uniq.append(p)
+    return uniq
 
 
 def list_shortlists() -> List[str]:
-    return sorted(_load_json(SHORTLISTS_FP, {}).keys())
+    raw = _load_json(SHORTLISTS_FP, {})
+    if isinstance(raw, dict) and "lists" in raw and isinstance(raw["lists"], list):
+        # Uudempi malli: {"lists": [{"name": ..., "items": [...]}, ...]}
+        return sorted([ (x.get("name") or x.get("title") or "default").strip() for x in raw["lists"] ])
+    if isinstance(raw, dict):
+        return sorted(raw.keys())
+    if isinstance(raw, list):
+        return ["default"]
+    return []
 
 
 def get_shortlist_members(shortlist_name: str) -> List[str]:
-    sl = _load_json(SHORTLISTS_FP, {})
-    return [str(x) for x in sl.get(shortlist_name, [])]
+    raw = _load_json(SHORTLISTS_FP, {})
+    # Tuki molemmille formaateille
+    if isinstance(raw, dict) and "lists" in raw and isinstance(raw["lists"], list):
+        for lst in raw["lists"]:
+            nm = (lst.get("name") or lst.get("title") or "default").strip()
+            if nm == shortlist_name:
+                items = lst.get("items") or lst.get("players") or []
+                # palautetaan id:t merkkijonoina kun mahdollista
+                out = []
+                for it in items:
+                    if isinstance(it, (str, int)):
+                        out.append(str(it))
+                    elif isinstance(it, dict) and it.get("id"):
+                        out.append(str(it["id"]))
+                return out
+        return []
+    # Vanha malli: {"SL1": [id...], ...} tai list of pairs/dicts
+    vals = raw.get(shortlist_name, []) if isinstance(raw, dict) else []
+    out = []
+    for it in vals:
+        if isinstance(it, (str, int)):
+            out.append(str(it))
+        elif isinstance(it, dict) and it.get("id"):
+            out.append(str(it["id"]))
+    return out
 
 
 def list_matches() -> List[Dict[str, Any]]:
@@ -143,6 +215,7 @@ def delete_scout_reports(ids: List[str]) -> None:
 
 
 # ---------------- UI helpers ----------------
+
 def _fmt_match(r: Dict[str, Any]) -> str:
     dt = (r.get("datetime","") or "")[:10]
     return f"{r.get('home_team','?')} vs {r.get('away_team','?')} ({dt})"
@@ -200,6 +273,7 @@ def _ratings_to_df(ratings) -> pd.DataFrame:
 
 
 # ---------------- Main ----------------
+
 def show_scout_match_reporter():
     st.header("📋 Scout Match Reporter (JSON)")
     st.caption(f"Data folder → {DATA_DIR}")
@@ -246,7 +320,9 @@ def show_scout_match_reporter():
         key="scout_reporter__source"
     )
 
-    players: List[Dict[str, Any]] = []
+    # Rakennetaan player_opts = List[Tuple[id, label]] ja player_map id→player
+    player_opts: List[Tuple[str, str]] = []
+    player_map: Dict[str, Dict[str, Any]] = {}
 
     if source == "Team":
         teams = list_teams()
@@ -254,7 +330,22 @@ def show_scout_match_reporter():
             st.warning("No teams found.")
             return
         sel_team = st.selectbox("Team", teams, key="scout_reporter__team")
-        players = list_players_by_team(sel_team)
+        raw_players = list_players_by_team(sel_team) or []
+        # DF tai lista dict → normalisoi
+        if isinstance(raw_players, pd.DataFrame):
+            records = [_normalize_player_record(r._asdict() if hasattr(r, "_asdict") else r.to_dict()) for _, r in raw_players.iterrows()]
+        else:
+            records = [_normalize_player_record(p) for p in raw_players]
+        for p in records:
+            if not p.get("id") or not p.get("name"):
+                continue
+            label = (
+                f"{p['name']} ({p['position']}) — {p['team_name']}"
+                if p.get("position")
+                else f"{p['name']} — {p['team_name']}"
+            )
+            player_opts.append((p["id"], label))
+            player_map[p["id"]] = p
     else:
         sls = list_shortlists()
         if not sls:
@@ -262,28 +353,39 @@ def show_scout_match_reporter():
             return
         sel_sl = st.selectbox("Shortlist", sls, key="scout_reporter__shortlist")
         ids = set(get_shortlist_members(sel_sl))
-        all_players = get_all_players()
-        players = [p for p in all_players if str(p.get("id")) in ids]
+        # hae kaikki pelaajat ja suodata id:llä
+        for p in get_all_players():
+            pid = p.get("id")
+            if pid and pid in ids:
+                label = (
+                    f"{p['name']} ({p['position']}) — {p['team_name']}"
+                    if p.get("position")
+                    else f"{p['name']} — {p['team_name']}"
+                )
+                player_opts.append((pid, label))
+                player_map[pid] = p
 
-    if not players:
+    if not player_opts:
         st.warning("No players for this selection.")
         return
 
     q = st.text_input("Search Player", key="scout_reporter__search")
     if q:
         ql = q.lower().strip()
-        players = [p for p in players if ql in (p.get("name","").lower())]
-    if not players:
+        player_opts = [p for p in player_opts if ql in p[1].lower()]
+    if not player_opts:
         st.warning("No players match the search.")
         return
 
-    sel_player = st.selectbox(
+    opts_dict = dict(player_opts)
+    player_id = st.selectbox(
         "Player",
-        players,
-        format_func=lambda p: f"{p.get('name','?')} ({p.get('team_name','')})",
-        key="scout_reporter__player"
+        options=[pid for pid, _ in player_opts],
+        format_func=lambda pid: opts_dict.get(pid, pid),
+        key="scout_reporter__player",
     )
-    pid = str(sel_player["id"])
+    pid = str(player_id)
+    sel_player = player_map.get(pid, {})
 
     # 3) Essentials (1–5 scale)
     st.subheader("3️⃣ Essentials")
@@ -383,7 +485,8 @@ def show_scout_match_reporter():
         st.info("No reports yet.")
         return
 
-    name_map = {str(p["id"]): p.get("name","Unknown") for p in get_all_players()}
+    # Nimikartta kaikista pelaajista (ei team-riippuvuutta)
+    name_map = {str(p.get("id")): p.get("name", "Unknown") for p in get_all_players()}
 
     if not fast_delete:
         for rep in reps:
