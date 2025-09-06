@@ -1,1 +1,2 @@
-**/.streamlit/secrets.toml
+# Ignore local secrets but keep example config
+**/.streamlit/secrets.local.toml

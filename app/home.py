@@ -10,6 +10,7 @@ import platform
 import streamlit as st
 from app_paths import file_path  # meidän polkuapuri (kirjoittaa %APPDATA%/ScoutLens tms.)
 from sync_utils import push_json, pull_json
+from supabase_client import get_sb
 
 # ---------------- Pienet, paikalliset JSON-apurit (ei storage-riippuvuutta) ----------------
 def load_json_fp(fp: Path, default):
@@ -188,6 +189,7 @@ def show_home():
 
     # ---- Cloud Sync (Supabase)
     bucket = st.secrets.get("SUPABASE_BUCKET", "scoutlens")
+    sb = get_sb()  # Uses anon key; no service role here
     st.subheader("Cloud Sync (Supabase)")
     col1, col2 = st.columns(2)
 

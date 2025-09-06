@@ -1,12 +1,16 @@
 from __future__ import annotations
 from pathlib import Path
+import os
 import streamlit as st
 from supabase import create_client
 
 
 def _client():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_ANON_KEY"]
+    """Supabase client authenticated with the service role key."""
+    url = st.secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_SERVICE_ROLE") or os.environ.get("SUPABASE_SERVICE_ROLE")
+    if not url or not key:
+        raise RuntimeError("Supabase service role credentials missing")
     return create_client(url, key)
 
 
