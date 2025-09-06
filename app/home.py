@@ -119,7 +119,7 @@ def _load_notes() -> List[Dict[str, Any]]:
 
 def _append_note(text: str):
     notes = _load_notes()
-    notes.append({"ts": datetime.now().isoformat(timespec="seconds"), "text": text.strip()})
+    notes.append({"created_at": datetime.now().isoformat(timespec="seconds"), "text": text.strip()})
     save_json(NOTES_FN, notes)
 
 def _metric(label: str, value: Any, help_text: Optional[str] = None):
@@ -334,5 +334,5 @@ def show_home():
         else:
             for n in recent:
                 txt = n.get("text", "")
-                ts  = n.get("ts", "")
+                ts  = n.get("created_at", "")
                 st.markdown(f"- **{ts}** — {txt[:140]}{'…' if len(txt) > 140 else ''}")
