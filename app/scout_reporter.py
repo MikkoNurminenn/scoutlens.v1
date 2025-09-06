@@ -11,13 +11,14 @@ from __future__ import annotations
 
 # --- central paths: always use app_paths ---
 from app_paths import DATA_DIR, file_path
+from data_utils_players import load_master, list_teams, list_players_by_team
 
 import json
 import uuid
 import os
 import tempfile
 from datetime import date, datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -33,7 +34,6 @@ def _inject_css_once(key: str, css_html: str):
 
 
 # ---------------- File targets (JSON) ----------------
-PLAYERS_FP    = file_path("players.json")
 MATCHES_FP    = file_path("matches.json")
 SHORTLISTS_FP = file_path("shortlists.json")
 REPORTS_FP    = file_path("scout_reports.json")
@@ -70,21 +70,6 @@ def _save_json_atomic(fp, data):
 
 
 # ---------------- Data access ----------------
-def get_all_players() -> List[Dict[str, Any]]:
-    raw = _load_json(PLAYERS_FP, [])
-    out = []
-    for p in raw:
-        pid  = str(p.get("id") or uuid.uuid4().hex)
-        name = p.get("name") or p.get("Name") or "Unknown"
-        team = p.get("team_name") or p.get("Team") or p.get("team") or ""
-        out.append({**p, "id": pid, "name": name, "team_name": team})
-    return out
-
-
-def list_teams() -> List[str]:
-    return sorted({p["team_name"] for p in get_all_players() if p.get("team_name")})
-
-
 def list_shortlists() -> List[str]:
     return sorted(_load_json(SHORTLISTS_FP, {}).keys())
 
@@ -253,8 +238,9 @@ def show_scout_match_reporter():
         key="scout_reporter__source"
     )
 
-    all_players = get_all_players()
-    players: List[Dict[str, Any]] = []
+    all_players = load_master()
+    player_map = {p["id"]: p for p in all_players}
+    player_opts: List[Tuple[str, str]] = []
 
     if source == "Team":
         teams = list_teams()
@@ -262,35 +248,46 @@ def show_scout_match_reporter():
             st.warning("No teams found. Fill team_name in players.json.")
             return
         sel_team = st.selectbox("Team", teams, key="scout_reporter__team")
-        players = [p for p in all_players if (p.get("team_name") or "") == sel_team]
+        player_opts = list_players_by_team(sel_team)
     else:
         sls = list_shortlists()
         if not sls:
             st.warning("No shortlists found (shortlists.json).")
             return
         sel_sl = st.selectbox("Shortlist", sls, key="scout_reporter__shortlist")
-        ids = set(get_shortlist_members(sel_sl))
-        players = [p for p in all_players if str(p["id"]) in ids]
+        ids = get_shortlist_members(sel_sl)
+        for pid in ids:
+            p = player_map.get(pid)
+            if not p:
+                continue
+            label = (
+                f"{p['name']} ({p['position']}) — {p['team_name']}"
+                if p.get("position")
+                else f"{p['name']} — {p['team_name']}"
+            )
+            player_opts.append((pid, label))
 
-    if not players:
+    if not player_opts:
         st.warning("No players for this selection.")
         return
 
     q = st.text_input("Search Player", key="scout_reporter__search")
     if q:
         ql = q.lower().strip()
-        players = [p for p in players if ql in (p.get("name","").lower())]
-    if not players:
+        player_opts = [p for p in player_opts if ql in p[1].lower()]
+    if not player_opts:
         st.warning("No players match the search.")
         return
 
-    sel_player = st.selectbox(
+    opts_dict = dict(player_opts)
+    player_id = st.selectbox(
         "Player",
-        players,
-        format_func=lambda p: f"{p.get('name','?')} ({p.get('team_name','')})",
-        key="scout_reporter__player"
+        options=[pid for pid, _ in player_opts],
+        format_func=lambda pid: opts_dict.get(pid, pid),
+        key="scout_reporter__player",
     )
-    pid = str(sel_player["id"])
+    pid = str(player_id)
+    sel_player = player_map.get(pid, {})
 
     # 3) Essentials (1–5 scale)
     st.subheader("3️⃣ Essentials")
@@ -390,7 +387,7 @@ def show_scout_match_reporter():
         st.info("No reports yet.")
         return
 
-    name_map = {str(p["id"]): p.get("name","Unknown") for p in get_all_players()}
+    name_map = {str(p["id"]): p.get("name","Unknown") for p in load_master()}
 
     if not fast_delete:
         for rep in reps:
