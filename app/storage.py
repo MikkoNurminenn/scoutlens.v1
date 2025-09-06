@@ -1,36 +1,39 @@
-# --- generic helpers for JSON files (used by home.py & others) ---
-import os, json
+# app/storage.py
+from __future__ import annotations
 from pathlib import Path
-import streamlit as st
-try:
-    from app_paths import file_path, DATA_DIR
-except Exception:
-    DATA_DIR = Path("./data")
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    def file_path(name: str) -> Path:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        return DATA_DIR / name
+import json
+import os
+import platform
 
-# Cloud-indikaattori: totta jos Supabase-secrets on asetettu
-IS_CLOUD = bool(st.secrets.get("SUPABASE_URL") or st.secrets.get("SUPABASE_ANON_KEY"))
+def _default_base_dir() -> Path:
+    # Windows: %APPDATA%\ScoutLens ; Muut: ~/.scoutlens tai ./data Cloudissa
+    if platform.system() == "Windows":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        return base / "ScoutLens"
+    # Streamlit Cloud/Linux: käytä repojuuren alle .data
+    # __file__ on .../app/storage.py → parent.parent on repojuuri
+    repo_root = Path(__file__).resolve().parent.parent
+    return repo_root / ".data"
 
-def load_json(name_or_path, default):
-    """Lue JSON (nimi suhteessa DATA_DIRiin tai absoluuttinen polku)."""
-    fp = Path(name_or_path)
-    if not fp.is_absolute():
-        fp = file_path(str(fp))
-    try:
-        if fp.exists():
-            txt = fp.read_text(encoding="utf-8")
-            return json.loads(txt) if txt.strip() else default
-    except Exception:
-        pass
-    return default
+class Storage:
+    def __init__(self, base_dir: Path | None = None):
+        self.base_dir = Path(base_dir) if base_dir else _default_base_dir()
+        self.base_dir.mkdir(parents=True, exist_ok=True)
 
-def save_json(name_or_path, data):
-    """Kirjoita JSON (nimi suhteessa DATA_DIRiin tai absoluuttinen polku)."""
-    fp = Path(name_or_path)
-    if not fp.is_absolute():
-        fp = file_path(str(fp))
-    fp.parent.mkdir(parents=True, exist_ok=True)
-    fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    def file_path(self, name: str) -> Path:
+        p = self.base_dir / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+
+    # Yhteensopivat apurit
+    def read_json(self, fp: Path, default):
+        try:
+            if fp.exists():
+                return json.loads(fp.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        return default
+
+    def write_json(self, fp: Path, data):
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
