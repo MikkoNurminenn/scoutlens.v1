@@ -97,9 +97,6 @@ def _match_dt(m: Dict[str, Any]) -> Optional[datetime]:
         return datetime.combine(d, dtime(0, 0))
     return None
 
-def _go_to(page: str):
-    st.session_state["nav_page"] = page
-    st.rerun()
 
 # ---------------- Data helpers ----------------
 def _load_players() -> List[Dict[str, Any]]:
@@ -117,28 +114,12 @@ def _append_note(text: str):
     notes.append({"ts": datetime.now().isoformat(timespec="seconds"), "text": text.strip()})
     save_json(NOTES_FN, notes)
 
-# ---------------- CSS ----------------
-HOME_CSS = r"""
-:root{
-  --fg:#e5e7eb; --fg-dim:#cbd5e1;
-  --card:#0f172a; --card-2:#0b1220; --muted:#94a3b8;
-  --ac1:#6366f1; --ac2:#0ea5e9; --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
-}
-.block {background:var(--card); border:1px solid #1f2937; border-radius:14px; padding:14px;}
-.kpi   {background:var(--card-2); border:1px solid #1f2937; border-radius:14px; padding:14px;}
-h1,h2,h3, .small {color:var(--fg);}
-.small {font-size:0.9rem; color:var(--fg-dim);}
-.row {margin-top:8px; margin-bottom:6px;}
-.badge {display:inline-block; padding:2px 8px; border-radius:999px; background:#111827; color:var(--muted); border:1px solid #1f2937;}
-"""
-
 def _metric(label: str, value: Any, help_text: Optional[str] = None):
     st.markdown(
-        f'<div class="kpi"><div class="small">{label}</div>'
-        f'<div style="font-size:1.8rem;font-weight:700">{value}</div>'
-        f'{f"<div class=small>{help_text}</div>" if help_text else ""}'
-        f'</div>',
-        unsafe_allow_html=True
+        f"<div class='sl-kpi'><div class='label'>{label}</div>"
+        f"<div class='value'>{value}</div>"
+        f"{f'<div class=\"label\">{help_text}</div>' if help_text else ''}</div>",
+        unsafe_allow_html=True,
     )
 
 # ---------------- Admin / Utilities ----------------
@@ -166,7 +147,18 @@ def _export_zip() -> bytes:
 
 # ---------------- Main ----------------
 def show_home():
-    st.markdown(f"<style>{HOME_CSS}</style>", unsafe_allow_html=True)
+    if st.sidebar.checkbox("Style self-check", False):
+        st.markdown(
+            "<div class='sl-kpi'><div class='label'>Demo KPI</div><div class='value'>42</div></div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("<a class='sl-btn'>Primary</a>", unsafe_allow_html=True)
+        st.markdown("<span class='sl-chip'>Chip</span>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='sl-table'><table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td><span class='sl-badge-link'>7.5</span></td></tr></tbody></table></div>",
+            unsafe_allow_html=True,
+        )
+        return
 
     # ---- Header
     st.markdown("### 🏠 Home")
@@ -218,17 +210,18 @@ def show_home():
 
     # ---- Quick Actions (ei nested columns -ongelmia)
     st.markdown("#### ⚡ Pika-toiminnot")
-    qa1, qa2, qa3, qa4, qa5 = st.columns(5)
-    if qa1.button("👥 Team View", use_container_width=True):
-        _go_to("Team View")
-    if qa2.button("🧑‍💻 Player Editor", use_container_width=True):
-        _go_to("Player Editor")
-    if qa3.button("📝 Match Reporter", use_container_width=True):
-        _go_to("Match Reporter")
-    if qa4.button("🗓️ Kalenteri", use_container_width=True):
-        _go_to("Calendar")
-    if qa5.button("🗒️ Muistiinpanot", use_container_width=True):
-        _go_to("Notes")
+    st.markdown(
+        """
+        <div class='sl-quick-actions'>
+            <a href='?p=Team%20View' class='sl-btn'>👥 Team View</a>
+            <a href='?p=Player%20Editor' class='sl-btn'>🧑‍💻 Player Editor</a>
+            <a href='?p=Match%20Reporter' class='sl-btn'>📝 Match Reporter</a>
+            <a href='?p=Calendar' class='sl-btn'>🗓️ Kalenteri</a>
+            <a href='?p=Notes' class='sl-btn'>🗒️ Muistiinpanot</a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     st.divider()
 
@@ -257,7 +250,7 @@ def show_home():
             with c1:
                 st.markdown(
                     f'**{row["_dt"].strftime("%a %d.%m.%Y")}**\n\n'
-                    f'<span class="badge">{row.get("time","") or row["_dt"].strftime("%H:%M")}</span>',
+                    f'<span class="sl-chip">{row.get("time","") or row["_dt"].strftime("%H:%M")}</span>',
                     unsafe_allow_html=True
                 )
             with c2:

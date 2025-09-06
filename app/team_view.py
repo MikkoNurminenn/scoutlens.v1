@@ -409,7 +409,8 @@ def show_team_view():
             chips.append(f"🎂 {lo}-{hi}")
     if club_sel: chips.append("🏟️ " + "/".join(club_sel))
     if chips:
-        st.caption("Active filters: " + "   •   ".join(chips))
+        chips_html = " ".join(f"<span class='sl-chip'>{c}</span>" for c in chips)
+        st.markdown(chips_html, unsafe_allow_html=True)
 
     # --------- Advanced: sort + visible columns + starters + shortlist toggle ----------
     with st.expander("Advanced", expanded=False):
@@ -564,7 +565,9 @@ def show_team_view():
     else:
         # Fast table view
         show_cols = preferred_cols if preferred_cols else list(df_show.columns)
+        st.markdown("<div class='sl-table'>", unsafe_allow_html=True)
         st.dataframe(df_show[show_cols].reset_index(drop=True), use_container_width=True, height=520)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # --------- Export ----------
     st.markdown("### Export")
