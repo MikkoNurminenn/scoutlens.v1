@@ -56,3 +56,78 @@ class Storage:
     def write_json(self, fp: Path, data):
         fp.parent.mkdir(parents=True, exist_ok=True)
         fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # -----------------------------------------------------
+    # Player helpers
+    # -----------------------------------------------------
+    def _players_fp(self) -> Path:
+        """Return path to the JSON file storing players."""
+        return self.file_path("players.json")
+
+    def _load_players(self) -> list[dict]:
+        return self.read_json(self._players_fp(), [])
+
+    def _save_players(self, players: list[dict]):
+        self.write_json(self._players_fp(), players)
+
+    def list_players(self) -> list[dict]:
+        """Return all players stored on disk."""
+        return self._load_players()
+
+    def upsert_player(self, player: dict) -> str:
+        """Insert or update a player record.
+
+        If the supplied ``player`` dictionary does not include an ``id`` field,
+        a UUID4 string is generated. Existing players are matched by ``id`` and
+        replaced while keeping any unspecified fields intact. Returns the
+        player's id.
+        """
+        players = self._load_players()
+        pid = str(player.get("id") or "").strip()
+        if not pid:
+            from uuid import uuid4
+
+            pid = uuid4().hex
+            player["id"] = pid
+
+        replaced = False
+        for idx, existing in enumerate(players):
+            if str(existing.get("id")) == pid:
+                players[idx] = {**existing, **player}
+                replaced = True
+                break
+        if not replaced:
+            players.append(player)
+
+        self._save_players(players)
+        return pid
+
+    def remove_by_ids(self, ids: list[str]) -> int:
+        """Remove players whose id is in ``ids``. Returns number of removed."""
+        ids_set = {str(i) for i in ids}
+        players = self._load_players()
+        new_players = [p for p in players if str(p.get("id")) not in ids_set]
+        removed = len(players) - len(new_players)
+        if removed:
+            self._save_players(new_players)
+        return removed
+
+    def _update_field(self, player_id: str, field: str, value) -> bool:
+        players = self._load_players()
+        updated = False
+        for p in players:
+            if str(p.get("id")) == str(player_id):
+                p[field] = value
+                updated = True
+                break
+        if updated:
+            self._save_players(players)
+        return updated
+
+    def set_photo_path(self, player_id: str, path: str) -> bool:
+        """Persist photo path for the given player."""
+        return self._update_field(player_id, "photo_path", path)
+
+    def set_tags(self, player_id: str, tags: list[str]) -> bool:
+        """Persist list of tags for the given player."""
+        return self._update_field(player_id, "tags", tags)
