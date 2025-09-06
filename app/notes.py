@@ -195,7 +195,7 @@ def show_notes():
                 with top[2]:
                     if st.button("🗑️ Delete", key=f"notes__del_{n['id']}"):
                         kept = [m for m in notes if m.get("id") != n["id"]]
-                        _save_json_atomic(NOTES_FP, kept)
+                        _save_notes(kept)
                         st.cache_data.clear()
                         st.success("Deleted.")
                         st.rerun()
@@ -214,7 +214,7 @@ def show_notes():
                         updated = []
                         for m in notes:
                             updated.append(n if m.get("id")==n["id"] else m)
-                        _save_json_atomic(NOTES_FP, updated)
+                        _save_notes(updated)
                         st.cache_data.clear()
                         st.success("Updated.")
                         st.rerun()
