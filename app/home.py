@@ -191,25 +191,28 @@ def show_home():
     bucket = st.secrets.get("SUPABASE_BUCKET", "scoutlens")
     sb = get_sb()  # Uses anon key; no service role here
     st.subheader("Cloud Sync (Supabase)")
-    col1, col2 = st.columns(2)
+    if sb is None:
+        st.info("Supabase not configured")
+    else:
+        col1, col2 = st.columns(2)
 
-    with col1:
-        if st.button("Backup → Supabase"):
-            for name in FILES:
-                ok, msg = push_json(bucket, name, file_path(name))
-                if ok:
-                    st.write("✅ " + msg)
-                else:
-                    st.error("❌ " + msg)
+        with col1:
+            if st.button("Backup → Supabase"):
+                for name in FILES:
+                    ok, msg = push_json(bucket, name, file_path(name))
+                    if ok:
+                        st.write("✅ " + msg)
+                    else:
+                        st.error("❌ " + msg)
 
-    with col2:
-        if st.button("Restore ← Supabase"):
-            for name in FILES:
-                ok, msg = pull_json(bucket, name, file_path(name))
-                if ok:
-                    st.write("✅ " + msg)
-                else:
-                    st.error("❌ " + msg)
+        with col2:
+            if st.button("Restore ← Supabase"):
+                for name in FILES:
+                    ok, msg = pull_json(bucket, name, file_path(name))
+                    if ok:
+                        st.write("✅ " + msg)
+                    else:
+                        st.error("❌ " + msg)
             st.cache_data.clear()
             st.success("Restored and cache cleared.")
 
