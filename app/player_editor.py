@@ -544,6 +544,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
     # ✏️ Basic Info
     with tabs[0]:
         st.markdown(f"### Editing Player: {selected_name}")
+        st.markdown("<div class='sl-card'>", unsafe_allow_html=True)
 
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -620,6 +621,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 pid_out = upsert_player_storage(player_data)
                 st.success(f"✅ Saved (id={pid_out})")
 
+        st.markdown("</div>", unsafe_allow_html=True)
     # 🔗 Links
     with tabs[1]:
         st.subheader("🔗 Links")
@@ -631,10 +633,10 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             tm_url = ""
         st.write("Transfermarkt:", tm_url or "—")
         if tm_url:
-            try:
-                st.link_button("Open Transfermarkt", tm_url, help="Avaa pelaajan Transfermarkt-sivu")
-            except Exception:
-                st.markdown(f"[Open Transfermarkt]({tm_url})")
+            st.markdown(
+                f"<a href='{tm_url}' class='sl-badge-link' target='_blank'>Open Transfermarkt</a>",
+                unsafe_allow_html=True,
+            )
 
     # 🖼️ Photo & Tags
     with tabs[2]:

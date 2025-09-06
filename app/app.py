@@ -9,6 +9,7 @@
 # =============================================================================
 
 from __future__ import annotations
+from pathlib import Path
 import streamlit as st
 
 # --- Pages
@@ -26,107 +27,17 @@ APP_VERSION = "0.9.1"
 # Page config must be first Streamlit call
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 
-# --------- Sidebar CSS (inject every run) ----------
-SIDEBAR_CSS = r"""
-:root{
-  --sb-bg-1:#0d1117;
-  --sb-bg-2:#111827;
-  --sb-fg:#e5e7eb;
-  --sb-fg-dim:#cbd5e1;
-  --sb-ac-1:#6366f1;
-  --sb-ac-2:#0ea5e9;
-  --sb-border:rgba(255,255,255,.08);
-  --sb-border-strong:rgba(255,255,255,.18);
-  --sb-item:rgba(255,255,255,.04);
-  --sb-item-hover:rgba(255,255,255,.08);
-  --sb-shadow:0 6px 24px rgba(0,0,0,.35);
-}
+# --------- Global CSS injection ----------
+def inject_css():
+    base = Path("app/styles")
+    css = "\n".join(
+        (base / f).read_text(encoding="utf-8")
+        for f in ["tokens.css", "layout.css", "components.css", "sidebar.css", "animations.css"]
+        if (base / f).exists()
+    )
+    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
-section[data-testid="stSidebar"]{
-  background: linear-gradient(180deg,var(--sb-bg-1),var(--sb-bg-2));
-  color:var(--sb-fg);
-  box-shadow: inset -1px 0 0 rgba(255,255,255,.03);
-}
-section[data-testid="stSidebar"] .block-container{
-  padding-top: 12px; padding-bottom: 18px;
-}
-
-/* Brand */
-.scout-brand{
-  font-weight: 900; letter-spacing:.3px; margin: 2px 0 2px 0;
-  font-size: 1.15rem;
-  background: linear-gradient(90deg, var(--sb-fg), #ffffff 30%, var(--sb-fg));
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.scout-sub{ opacity:.75; margin-top:-4px; font-size:.85rem; color:var(--sb-fg-dim); }
-
-/* Section header */
-.nav-sep{
-  margin: 10px 0 6px 0; font-size:.78rem; text-transform:uppercase; letter-spacing:.12rem;
-  color:var(--sb-fg-dim); opacity:.9;
-}
-
-/* Radio pills (sidebar only) */
-section[data-testid="stSidebar"] [role="radiogroup"]{
-  gap:8px;
-}
-section[data-testid="stSidebar"] [role="radiogroup"] > label{
-  border:1px solid var(--sb-border);
-  background:var(--sb-item);
-  border-radius:12px;
-  padding:10px 12px;
-  transition:transform .08s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
-  cursor:pointer;
-  display:flex; align-items:center; gap:.55rem;
-  position: relative; isolation:isolate;
-  min-height: 42px;
-}
-
-/* Hide native bullet */
-section[data-testid="stSidebar"] [role="radiogroup"] input[type="radio"]{ display:none; }
-
-/* Hover */
-section[data-testid="stSidebar"] [role="radiogroup"] > label:hover{
-  background:var(--sb-item-hover);
-  border-color:var(--sb-border-strong);
-  transform:translateX(2px);
-  box-shadow: var(--sb-shadow);
-}
-
-/* Selected (preferred) */
-section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked){
-  background:linear-gradient(135deg, color-mix(in srgb, var(--sb-ac-1) 30%, transparent),
-                                      color-mix(in srgb, var(--sb-ac-2) 30%, transparent));
-  border-color: color-mix(in srgb, var(--sb-ac-1) 65%, var(--sb-border-strong));
-  box-shadow: 0 8px 26px color-mix(in srgb, var(--sb-ac-1) 35%, transparent);
-}
-/* Selected (fallback for browsers without :has) */
-section[data-testid="stSidebar"] [role="radiogroup"] > label:focus-within{
-  background:linear-gradient(135deg, color-mix(in srgb, var(--sb-ac-1) 22%, transparent),
-                                      color-mix(in srgb, var(--sb-ac-2) 22%, transparent));
-  border-color: color-mix(in srgb, var(--sb-ac-1) 55%, var(--sb-border-strong));
-}
-
-/* Left accent bar when selected */
-section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked)::before{
-  content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
-  border-radius:12px 0 0 12px;
-  background: linear-gradient(180deg, var(--sb-ac-1), var(--sb-ac-2));
-}
-
-/* Label text */
-section[data-testid="stSidebar"] [role="radiogroup"] > label *{ color:var(--sb-fg); }
-
-/* Footer card */
-.sb-footer{
-  margin-top:14px; padding:12px 12px;
-  border:1px solid var(--sb-border);
-  border-radius:12px; background:var(--sb-item);
-  color:var(--sb-fg-dim); font-size:.82rem;
-}
-.sb-footer strong{ color:var(--sb-fg); }
-"""
-st.markdown(f"<style>{SIDEBAR_CSS}</style>", unsafe_allow_html=True)
+inject_css()
 
 # --------- Navigation setup ----------
 # Näkyvät sivut sivupalkissa:

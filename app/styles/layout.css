@@ -1,0 +1,27 @@
+html, body, .stApp {
+  background: var(--bg-page);
+  color: var(--fg-strong);
+  font-family: var(--font-sans);
+  line-height: var(--lh-relaxed);
+}
+
+.stApp [data-testid="stHeader"]{
+  background: transparent;
+}
+
+/* Containers */
+.sl-card, .sl-kpi {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-4);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height:8px; }
+::-webkit-scrollbar-thumb { background: var(--accent-1); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (max-width:1024px){
+  .stSidebar { width:56px; }
+}
