@@ -1,4 +1,4 @@
-# player_editor.py — Optimized Player Editor (Create Team + safe team select + NaT-safe dates)
+# player_editor.py — Optimized Player Editor (Create Team + safe team select + NaT-safe dates + Storage backend)
 from __future__ import annotations
 import json, math, re
 from pathlib import Path
@@ -9,6 +9,7 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
+# --- storage (Supabase jos secrets, muuten JSON) ---
 from storage import Storage
 storage = Storage()
 
@@ -23,6 +24,7 @@ from data_utils import (
 # -------------------------------------------------------
 # Polut
 # -------------------------------------------------------
+# Huom: PLAYERS_FP ei ole enää välttämätön storagen kanssa, mutta pidetään polut yhtenäisinä
 PLAYERS_FP    = file_path("players.json")
 SHORTLISTS_FP = file_path("shortlists.json")
 
@@ -222,71 +224,26 @@ def _resolve_team_selection(value, teams: List[str]) -> str:
     return TEAM_PLACEHOLDER
 
 # -------------------------------------------------------
-# players.json apurit
+# Storage-ohjatut apurit
 # -------------------------------------------------------
-def upsert_player_to_players_json(player: dict):
-    players = _load_json(PLAYERS_FP, [])
-    pid = str(player.get("id") or player.get("PlayerID") or uuid4().hex)
-    player["id"] = pid
+def upsert_player_storage(player: dict) -> str:
+    return storage.upsert_player(player)
 
-    name = (player.get("name") or player.get("Name") or "").strip()
-    team = (player.get("team_name") or player.get("Team") or "").strip()
+def remove_from_players_storage_by_ids(ids: List[str]) -> int:
+    return storage.remove_by_ids([str(x) for x in ids])
 
-    idx = -1
-    for i, p in enumerate(players):
-        if str(p.get("id")) == pid:
-            idx = i
-            break
-        if name and team and (p.get("name","").strip() == name and p.get("team_name","").strip() == team):
-            idx = i
-            break
-
-    if "nationality" in player:
-        player["nationality"] = _normalize_nationality(player["nationality"])
-
-    if idx >= 0:
-        players[idx] = {**players[idx], **player}
-    else:
-        players.append(player)
-
-    _save_json(PLAYERS_FP, players)
-    return pid
-
-def remove_from_players_json(ids_or_names):
-    players = _load_json(PLAYERS_FP, [])
-    ids_or_names = set(ids_or_names)
-    kept = []
-    for p in players:
-        pid = str(p.get("id",""))
-        keypair = (str(p.get("name","")).strip(), str(p.get("team_name","")).strip())
-        if pid in ids_or_names or keypair in ids_or_names:
-            continue
-        kept.append(p)
-    _save_json(PLAYERS_FP, kept)
-    return len(players) - len(kept)
-
-def _save_photo_and_link(player_id: str, filename: str, content: bytes) -> Path:
+def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) -> Path:
     photos_dir = DATA_DIR / "player_photos"
     photos_dir.mkdir(parents=True, exist_ok=True)
     ext = Path(filename).suffix.lower() or ".png"
     safe_name = Path(filename).stem.replace(" ", "-")
     out = photos_dir / f"{safe_name}-{player_id[:6]}{ext}"
     out.write_bytes(content)
-
-    players = _load_json(PLAYERS_FP, [])
-    found = False
-    for p in players:
-        if str(p.get("id")) == str(player_id):
-            p["photo_path"] = str(out)
-            found = True
-            break
-    if not found:
-        players.append({"id": str(player_id), "photo_path": str(out)})
-    _save_json(PLAYERS_FP, players)
+    storage.set_photo_path(player_id, str(out))
     return out
 
 # -------------------------------------------------------
-# Shortlist apurit
+# Shortlist apurit (säilytetään JSONissa toistaiseksi)
 # -------------------------------------------------------
 def _load_shortlists() -> Dict[str, List[Any]]:
     raw = _load_json(SHORTLISTS_FP, {})
@@ -307,7 +264,8 @@ def _save_shortlists(data: Dict[str, List[Any]]):
     _save_json(SHORTLISTS_FP, data)
 
 def _players_index_by_id() -> Dict[str, Dict[str, Any]]:
-    players = _load_json(PLAYERS_FP, [])
+    # LUETAAN PELAAJAT STORAGESTA (ei enää players.jsonista)
+    players = storage.list_players()
     out = {}
     for p in players:
         pid = str(p.get("id") or "")
@@ -643,8 +601,8 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 st.error("Could not locate row to update.")
 
         st.markdown("---")
-        st.markdown("### 📄 Save THIS player to players.json")
-        if st.button("⬇️ Save THIS player to players.json", key=f"pe_push_this__{selected_team}_{pid_int}"):
+        st.markdown("### 📄 Save THIS player to storage")
+        if st.button("⬇️ Save THIS player", key=f"pe_push_this__{selected_team}_{pid_int}"):
             player_data = {
                 "id": pid_str,
                 "name": _as_str(name_val),
@@ -660,8 +618,8 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             if not _valid_tm_url(player_data["transfermarkt_url"]):
                 st.error("Transfermarkt URL näyttää virheelliseltä.")
             else:
-                pid_out = upsert_player_to_players_json(player_data)
-                st.success(f"✅ Saved to players.json (id={pid_out})")
+                pid_out = upsert_player_storage(player_data)
+                st.success(f"✅ Saved (id={pid_out})")
 
     # 🔗 Links
     with tabs[1]:
@@ -684,7 +642,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         st.subheader("🖼️ Photo & Tags")
         up = st.file_uploader("Upload player photo (PNG/JPG)", type=["png","jpg","jpeg"], key=f"pe_photo__{selected_team}_{pid_int}")
         if up is not None:
-            out = _save_photo_and_link(pid_str, up.name, up.read())
+            out = _save_photo_and_link_storage(pid_str, up.name, up.read())
             st.success(f"Photo saved: {out}")
 
         tags_key = f"tags_{pid_str}"
@@ -693,29 +651,10 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         st.session_state[tags_key] = tag_str
         st.caption("Vinkki: muutama iskevä tagi (esim. 'Press-resistance, Pace, Leader').")
 
-        if st.button("💾 Save tags to players.json", key=f"pe_save_tags__{selected_team}_{pid_int}"):
-            players = _load_json(PLAYERS_FP, [])
-            found = False
-            for p in players:
-                if str(p.get("id")) == pid_str:
-                    p["tags"] = [t.strip() for t in tag_str.split(",") if t.strip()]
-                    found = True
-                    break
-            if not found:
-                base_name = ""
-                try:
-                    if "Name" in df_master.columns:
-                        base_name = _as_str(df_master.loc[df_master["PlayerID"]==pid_int, "Name"].values[0])
-                except Exception:
-                    pass
-                players.append({
-                    "id": pid_str,
-                    "name": base_name,
-                    "team_name": _as_str(selected_team),
-                    "tags": [t.strip() for t in tag_str.split(",") if t.strip()]
-                })
-            _save_json(PLAYERS_FP, players)
-            st.success("Tags saved to players.json.")
+        if st.button("💾 Save tags", key=f"pe_save_tags__{selected_team}_{pid_int}"):
+            tags = [t.strip() for t in tag_str.split(",") if t.strip()]
+            storage.set_tags(pid_str, tags)
+            st.success("Tags saved.")
 
     # 📅 Season Stats
     with tabs[3]:
@@ -826,13 +765,23 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 st.success("Row deleted from master.")
 
         st.markdown("---")
-        st.subheader("Remove from players.json")
-        st.caption("Siivoa JSON-varastoa sotkematta master-tiedostoa.")
+        st.subheader("Remove from storage")
+        st.caption("Siivoa taustavarastoa sotkematta master-tiedostoa.")
         conf2 = st.text_input("Type REMOVE to confirm", key=f"pe_del_json_conf__{selected_team}_{pid_int}", placeholder="REMOVE")
-        if st.button("Remove by PlayerID (players.json)", key=f"pe_del_json_byid__{selected_team}_{pid_int}", disabled=(conf2 != "REMOVE")):
-            n = remove_from_players_json({str(pid_str)})
-            st.success(f"Removed {n} record(s) by id from players.json.")
+        if st.button("Remove by PlayerID", key=f"pe_del_json_byid__{selected_team}_{pid_int}", disabled=(conf2 != "REMOVE")):
+            n = remove_from_players_storage_by_ids([str(pid_str)])
+            st.success(f"Removed {n} record(s) by id.")
+
+        # (name, team) -poisto: etsitään id:t storagesta ja poistetaan ne
         if st.button("Remove by (name, team) pair", key=f"pe_del_json_bykey__{selected_team}_{pid_int}", disabled=(conf2 != "REMOVE")):
-            keypair = {(selected_name.strip(), _as_str(selected_team))}
-            n = remove_from_players_json(keypair)
-            st.success(f"Removed {n} record(s) by (name, team) from players.json.")
+            nm = selected_name.strip()
+            tm = _as_str(selected_team)
+            ids = []
+            for p in storage.list_players():
+                if (p.get("name","").strip() == nm) and (p.get("team_name","").strip() == tm):
+                    ids.append(str(p.get("id")))
+            if ids:
+                n = remove_from_players_storage_by_ids(ids)
+                st.success(f"Removed {n} record(s) by (name, team).")
+            else:
+                st.info("No records matched (name, team) in storage.")
