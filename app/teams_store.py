@@ -1,11 +1,11 @@
 # teams_store.py
 from pathlib import Path
 import json
-from app_paths import file_path
-from supabase_client import get_client
+from app_paths import file_path, DATA_DIR
 
-TEAMS_FP   = file_path("teams.json")
-PLAYERS_FP = file_path("players.json")
+TEAMS_FP = file_path("teams.json")
+TEAMS_DIR = DATA_DIR / "teams"
+
 
 def _load(fp: Path, default):
     try:
@@ -15,60 +15,51 @@ def _load(fp: Path, default):
         pass
     return default
 
-def _save(fp: Path, data):
-    Path(fp).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
-def _norm_team(p: dict) -> str:
-    # ✅ Huom: ei enää lueta current_club/CurrentClub kenttiä
-    return (p.get("team_name") or p.get("Team") or p.get("team") or "").strip()
+def _save(fp: Path, obj):
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    Path(fp).write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
 
-def list_teams_all() -> list[str]:
-    """Return all known team names.
 
-    If Supabase credentials are configured, teams are loaded from the
-    "teams" table. Otherwise teams.json ∪ players.json(team_name/Team/team)
-    is used.
+def _norm(s: str) -> str:
+    return (s or "").strip()
+
+
+def add_team(name: str) -> tuple[bool, str]:
     """
-    sb = get_client()
-    if sb:
-        try:
-            res = sb.table("teams").select("name").execute()
-            return sorted(t.get("name", "") for t in res.data or [])
-        except Exception:
-            pass
-
-    teams = set(_load(TEAMS_FP, []))
-    for p in _load(PLAYERS_FP, []):
-        t = _norm_team(p)
-        if t:
-            teams.add(t)
-    return sorted(teams)
-
-def add_team(name: str) -> bool:
-    name = (name or "").strip()
+    Lisää tiimin ja alustaa varaston.
+    Palauttaa (ok, msg_or_folder).
+    - ok=True  → msg_or_folder = polku tiimikansioon
+    - ok=False → msg_or_folder = virheviesti
+    """
+    name = _norm(name)
     if not name:
-        return False
-    sb = get_client()
-    if sb:
-        try:
-            sb.table("teams").upsert({"name": name}).execute()
-            return True
-        except Exception:
-            pass
-    teams = set(_load(TEAMS_FP, []))
-    if name not in teams:
-        teams.add(name)
-        _save(TEAMS_FP, sorted(teams))
-    return True
+        return (False, "Team name is empty.")
 
-def remove_team(name: str) -> None:
-    sb = get_client()
-    if sb:
-        try:
-            sb.table("teams").delete().eq("name", name).execute()
-            return
-        except Exception:
-            pass
-    teams = [t for t in _load(TEAMS_FP, []) if t != name]
-    _save(TEAMS_FP, teams)
+    teams = _load(TEAMS_FP, [])
+    if any((t or "").lower().strip() == name.lower() for t in teams):
+        return (False, "Team already exists.")
 
+    # 1) Päivitä teams.json
+    teams.append(name)
+    _save(TEAMS_FP, sorted(teams, key=lambda x: x.lower()))
+
+    # 2) Luo kansio
+    folder = TEAMS_DIR / name
+    folder.mkdir(parents=True, exist_ok=True)
+
+    # 3) Tyhjä players.json jos puuttuu
+    players_fp = folder / "players.json"
+    if not players_fp.exists():
+        players_fp.write_text("[]", encoding="utf-8")
+
+    return (True, str(folder))
+
+
+def list_teams() -> list[str]:
+    # Yhtenäinen listaus samasta lähteestä
+    return _load(TEAMS_FP, [])
+
+
+# Säilytetään aiemman rajapinnan yhteensopivuus
+list_teams_all = list_teams

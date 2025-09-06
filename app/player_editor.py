@@ -16,10 +16,10 @@ storage = Storage()
 # --- projektin apurit ---
 from app_paths import DATA_DIR, PLAYERS_FP, SHORTLISTS_FP, PLAYER_PHOTOS_DIR
 from data_utils import (
-    list_teams, load_master, save_master,
+    load_master, save_master,
     load_seasonal_stats, save_seasonal_stats, BASE_DIR,
-    initialize_team_folder
 )
+from teams_store import add_team, list_teams
 
 # -------------------------------------------------------
 # Polut
@@ -201,29 +201,6 @@ def _valid_tm_url(url: str) -> bool:
     return bool(TM_RX.match(url.strip()))
 
 # -------------------------------------------------------
-# Selectbox-suoja joukkuevalinnalle
-# -------------------------------------------------------
-TEAM_PLACEHOLDER = "— Select team —"
-
-def _safe_team_name_ui(name: str) -> str:
-    return (name or "").strip().replace("  ", " ").replace(" ", "_").upper()
-
-def _resolve_team_selection(value, teams: List[str]) -> str:
-    if not value:
-        return TEAM_PLACEHOLDER
-    if value in teams:
-        return value
-    val_safe = _safe_team_name_ui(str(value))
-    for t in teams:
-        if t == value:
-            return t
-        if _safe_team_name_ui(t) == str(value):
-            return t
-        if _safe_team_name_ui(t) == val_safe:
-            return t
-    return TEAM_PLACEHOLDER
-
-# -------------------------------------------------------
 # Storage-ohjatut apurit
 # -------------------------------------------------------
 def upsert_player_storage(player: dict) -> str:
@@ -350,35 +327,21 @@ def show_player_editor():
         return _render_shortlist_flow()
 
     # --- TEAM FLOW ---
-    with st.expander("🆕 Create Team", expanded=False):
-        new_team = st.text_input("Team name", key="pe_new_team_name", placeholder="Club Atlético Example")
-        if st.button("Create team", key="pe_create_team_btn"):
-            pretty = (new_team or "").strip()
-            if not pretty:
-                st.warning("Anna joukkueelle nimi.")
-            else:
-                existing = list_teams()
-                if any(pretty.lower() == t.lower() for t in existing):
-                    st.info("Joukkue on jo olemassa. Valitse se alta.")
-                else:
-                    initialize_team_folder(pretty)
-                    st.success(f"Team '{pretty}' created.")
-                    teams_after = list_teams()
-                    st.session_state["pe_team_select"] = _resolve_team_selection(pretty, teams_after)
-                    st.rerun()
+    new_name = st.text_input("Create Team", placeholder="e.g. ATLÉTICO NACIONAL")
+    if st.button("➕ Create Team", type="primary", use_container_width=True, disabled=not bool(new_name.strip())):
+        ok, info = add_team(new_name)
+        if ok:
+            st.success(f"Team '{new_name}' created at {info}")
+            st.session_state["player_editor__selected_team"] = new_name.strip()
+            st.rerun()
+        else:
+            st.error(info)
 
     teams = list_teams()
-    # Normalisoi olemassa oleva arvo ennen selectboxin piirtämistä
-    st.session_state["pe_team_select"] = _resolve_team_selection(st.session_state.get("pe_team_select"), teams)
-
-    selected_label = st.selectbox(
-        "Select Team",
-        ["— Select team —"] + teams,
-        key="pe_team_select"
-    )
-    selected_team = "" if selected_label == "— Select team —" else selected_label
-    if not selected_team:
+    if not teams:
+        st.info("No teams yet. Create one above.")
         return
+    selected_team = st.selectbox("Team", teams, key="player_editor__selected_team")
 
     _render_team_editor_flow(selected_team, preselected_name=None)
 
