@@ -48,9 +48,9 @@ def test_load_master_creates_file(tmp_path, monkeypatch):
 def test_save_master_persists_data(tmp_path, monkeypatch):
     du = setup_data_utils(tmp_path, monkeypatch)
     team = "My Team"
-    df_new = pd.DataFrame([{ "PlayerID": 1, "Name": "Alice" }])
+    uuid_val = "123e4567e89b12d3a456426614174000"
+    df_new = pd.DataFrame([{ "PlayerID": uuid_val, "Name": "Alice" }])
     du.save_master(df_new, team)
     df_loaded = du.load_master(team)
-    assert df_loaded.loc[0, "PlayerID"] == 1
+    assert df_loaded.loc[0, "PlayerID"] == uuid_val
     assert df_loaded.loc[0, "Name"] == "Alice"
-    assert str(df_loaded["PlayerID"].dtype) == "Int64"
