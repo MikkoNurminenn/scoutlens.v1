@@ -14,7 +14,7 @@ from storage import Storage
 storage = Storage()
 
 # --- projektin apurit ---
-from app_paths import file_path, DATA_DIR
+from app_paths import DATA_DIR, PLAYERS_FP, SHORTLISTS_FP, PLAYER_PHOTOS_DIR
 from data_utils import (
     list_teams, load_master, save_master,
     load_seasonal_stats, save_seasonal_stats, BASE_DIR,
@@ -25,8 +25,6 @@ from data_utils import (
 # Polut
 # -------------------------------------------------------
 # Huom: PLAYERS_FP ei ole enää välttämätön storagen kanssa, mutta pidetään polut yhtenäisinä
-PLAYERS_FP    = file_path("players.json")
-SHORTLISTS_FP = file_path("shortlists.json")
 
 # -------------------------------------------------------
 # Yleiset apurit
@@ -233,11 +231,10 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     return storage.remove_by_ids([str(x) for x in ids])
 
 def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) -> Path:
-    photos_dir = DATA_DIR / "player_photos"
-    photos_dir.mkdir(parents=True, exist_ok=True)
+    PLAYER_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
     ext = Path(filename).suffix.lower() or ".png"
     safe_name = Path(filename).stem.replace(" ", "-")
-    out = photos_dir / f"{safe_name}-{player_id[:6]}{ext}"
+    out = PLAYER_PHOTOS_DIR / f"{safe_name}-{player_id[:6]}{ext}"
     out.write_bytes(content)
     storage.set_photo_path(player_id, str(out))
     return out
