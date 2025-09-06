@@ -46,11 +46,25 @@ except Exception:
 # ===================== Utils & IO =====================
 
 def _safe_str(v: Any) -> str:
+    """Return a string representation of ``v`` or an empty string."""
+
     return "" if v is None else str(v)
 
 @st.cache_data(show_spinner=False)
 def _load_json(fp: Path, default, cache_buster: int = 0):
-    """Cached JSON loader with a manual cache-buster."""
+    """Load JSON data from ``fp`` with caching.
+
+    The cache can be invalidated by adjusting ``cache_buster``.
+
+    Args:
+        fp: Path to the JSON file.
+        default: Value to return if loading fails.
+        cache_buster: Manual version flag to bust Streamlit cache.
+
+    Returns:
+        Parsed JSON content or ``default`` if the file is missing or malformed.
+    """
+
     try:
         p = Path(fp)
         if p.exists():
@@ -60,12 +74,26 @@ def _load_json(fp: Path, default, cache_buster: int = 0):
     return default
 
 def _save_json(fp: Path, data: Any) -> None:
+    """Persist ``data`` as JSON to ``fp``.
+
+    Args:
+        fp: Target file path.
+        data: Serializable object to write.
+    """
+
     try:
         Path(fp).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
 
 def _load_shortlist() -> set:
+    """Return shortlist player IDs from disk.
+
+    Returns:
+        A ``set`` of player identifiers. If the file cannot be read,
+        an empty set is returned.
+    """
+
     try:
         if SHORTLIST_FP.exists():
             return set(json.loads(SHORTLIST_FP.read_text(encoding="utf-8")))
@@ -74,9 +102,13 @@ def _load_shortlist() -> set:
     return set()
 
 def _save_shortlist(s: set) -> None:
+    """Persist the shortlist ``s`` to disk."""
+
     _save_json(SHORTLIST_FP, sorted(list(s)))
 
 def _norm_team(p: Dict[str, Any]) -> str:
+    """Extract a normalised team name from a player record."""
+
     return (
         p.get("team_name")
         or p.get("Team")
@@ -87,9 +119,20 @@ def _norm_team(p: Dict[str, Any]) -> str:
     ).strip()
 
 def _norm_name(p: Dict[str, Any]) -> str:
+    """Return a player's name from record ``p``."""
+
     return (p.get("name") or p.get("Name") or "").strip()
 
 def _parse_birthdate_to_age(v: Any) -> Optional[int]:
+    """Convert a date-like value to an age in years.
+
+    Args:
+        v: A ``date``, ``datetime`` or string representation of a birth date.
+
+    Returns:
+        Player age in years if parsing succeeds, otherwise ``None``.
+    """
+
     if not v:
         return None
     try:
@@ -111,6 +154,8 @@ def _parse_birthdate_to_age(v: Any) -> Optional[int]:
         return None
 
 def _derive_age(p: Dict[str, Any]) -> Optional[int]:
+    """Best-effort derivation of a player's age from record ``p``."""
+
     for k in ("BirthDate", "birthdate", "Birthdate", "DOB", "date_of_birth", "YOB", "BirthYear", "birthyear"):
         if k in p and p[k]:
             age = _parse_birthdate_to_age(p[k])
@@ -124,7 +169,15 @@ def _derive_age(p: Dict[str, Any]) -> Optional[int]:
     return None
 
 def _guess_position(text: str) -> str:
-    """Tiny heuristic to guess a position from free text."""
+    """Guess a player's position from free-form ``text``.
+
+    Args:
+        text: Description potentially containing position keywords.
+
+    Returns:
+        Standardised position abbreviation or an empty string if unknown.
+    """
+
     t = (text or "").lower()
     if any(k in t for k in ["gk", "keeper", "goal"]): return "GK"
     if any(k in t for k in ["left back", "lb", "lwb"]): return "LB"
@@ -141,6 +194,8 @@ def _guess_position(text: str) -> str:
 # ===================== Data shaping =====================
 
 def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, Any]]:
+    """Gather normalised player rows for ``team`` from storage."""
+
     team = (team or "").strip()
     players = _load_json(PLAYERS_FP, [], cache_buster)
     out: List[Dict[str, Any]] = []
@@ -159,11 +214,15 @@ def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, An
     return out
 
 def _teams_from_players_json(cache_buster: int) -> List[str]:
+    """Return a sorted list of unique team names from players data."""
+
     players = _load_json(PLAYERS_FP, [], cache_buster)
     teams = sorted({_norm_team(p) for p in players if _norm_team(p)})
     return teams
 
 def _rows_to_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
+    """Convert a list of player dicts into a normalised DataFrame."""
+
     if not rows:
         return pd.DataFrame(columns=["id", "name", "team_name"])
 
@@ -228,6 +287,8 @@ def _rows_to_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
 # ===================== UI =====================
 
 def show_team_view():
+    """Render the Team View page within Streamlit."""
+
     st.header("🏟️ Team View")
     st.caption(f"Data folder → `{DATA_DIR}`")
 
@@ -441,6 +502,8 @@ def show_team_view():
 
     # --------- Render list/table ----------
     def _shortlist_toggle(pid: str):
+        """Add or remove ``pid`` from the shortlist."""
+
         if not pid:
             return
         s = st.session_state[STATE_SHORTLIST_KEY]
@@ -451,6 +514,8 @@ def show_team_view():
         _save_shortlist(s)
 
     def _fmt_num(v):
+        """Format numeric values for compact display."""
+
         try:
             f = float(v)
             return str(int(f)) if f.is_integer() else f"{f:.1f}"
