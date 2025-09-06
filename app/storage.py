@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import os
 import platform
+from app.storage import IS_CLOUD, load_json, save_json
 
 def _default_base_dir() -> Path:
     # Windows: %APPDATA%\ScoutLens ; Muut: ~/.scoutlens tai ./data Cloudissa
