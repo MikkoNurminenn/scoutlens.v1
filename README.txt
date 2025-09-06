@@ -9,3 +9,10 @@ PLAYER AGE-MINUTES TOOL
 Make sure Python and Streamlit are installed.
 If needed, install Streamlit with:
     pip install streamlit
+
+### Supabase Sync
+
+Set `SUPABASE_URL` and `SUPABASE_KEY` environment variables to enable
+optional Supabase storage. Functions in `app/sync_utils.py` and
+`app/teams_store.py` will then read and write data to your Supabase tables.
+

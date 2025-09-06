@@ -8,63 +8,102 @@
 # - Fast table fallback, optional position guessing
 
 from __future__ import annotations
+
 import json
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, date
 
 import pandas as pd
 import streamlit as st
 
 from app_paths import file_path, DATA_DIR
-from storage import load_json, save_json
+
+# storage on vapaaehtoinen: käytä jos löytyy, muuten fallback
+try:
+    from storage import load_json as _storage_load_json, save_json as _storage_save_json  # type: ignore
+    _HAS_STORAGE = True
+except Exception:
+    _storage_load_json = None
+    _storage_save_json = None
+    _HAS_STORAGE = False
+
+# External (optional) teams source
+try:
+    from data_utils import list_teams  # type: ignore
+except Exception:
+    list_teams = None  # fallback players.jsonista
 
 # -------------------- CONFIG / STATE KEYS --------------------
-STATE_TEAM_KEY        = "team_view__selected_team"
-STATE_SHORTLIST_KEY   = "team_view__shortlist_ids"
-STATE_SAVED_VIEWS_KEY = "team_view__saved_views"
-STATE_VISIBLE_COLS_KEY= "team_view__visible_cols"
-STATE_Q_KEY           = "team_view__q"
-STATE_POS_KEY         = "team_view__pos"
-STATE_FOOT_KEY        = "team_view__foot"
-STATE_CLUB_KEY        = "team_view__club"
-STATE_AGE_KEY         = "team_view__age"
-STATE_CACHE_BUSTER    = "team_view__cache_buster"
+STATE_TEAM_KEY         = "team_view__selected_team"
+STATE_SHORTLIST_KEY    = "team_view__shortlist_ids"
+STATE_SAVED_VIEWS_KEY  = "team_view__saved_views"
+STATE_VISIBLE_COLS_KEY = "team_view__visible_cols"
+STATE_Q_KEY            = "team_view__q"
+STATE_POS_KEY          = "team_view__pos"
+STATE_FOOT_KEY         = "team_view__foot"
+STATE_CLUB_KEY         = "team_view__club"
+STATE_AGE_KEY          = "team_view__age"
+STATE_CACHE_BUSTER     = "team_view__cache_buster"
 
 # Threshold for switching cards -> table
 CARD_THRESHOLD = 80
 
 # Data files
 PLAYERS_FP   = file_path("players.json")
-SHORTLIST_FP = file_path("shortlist.json")
-
-# External (optional) teams source
-try:
-    from data_utils import list_teams
-except Exception:
-    list_teams = None  # fallback players.jsonista
+SHORTLIST_FP = file_path("shortlist.json")  # huom: yksikkömuoto
 
 # ===================== Utils & IO =====================
 
 def _safe_str(v: Any) -> str:
     return "" if v is None else str(v)
 
-@st.cache_data(show_spinner=False)
-def _load_json(fp: Path, default, cache_buster: int = 0):
-    """Cached JSON loader with a manual cache-buster."""
-    return load_json(fp, default)
-
-def _save_json(fp: Path, data: Any) -> None:
+def _load_json_fallback(fp: Path, default: Any) -> Any:
     try:
-        save_json(fp, data)
+        if Path(fp).exists():
+            return json.loads(Path(fp).read_text(encoding="utf-8"))
     except Exception:
         pass
+    return default
 
-def _load_shortlist() -> set:
-    data = load_json(SHORTLIST_FP, [])
-    return set(data) if isinstance(data, list) else set()
+def _save_json_fallback(fp: Path, data: Any) -> None:
+    try:
+        p = Path(fp)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        # viimeinen yritys ilman indentiä
+        Path(fp).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
-def _save_shortlist(s: set) -> None:
+def _load_json(fp: Path, default: Any) -> Any:
+    if _HAS_STORAGE and _storage_load_json is not None:
+        try:
+            return _storage_load_json(fp, default)
+        except Exception:
+            return _load_json_fallback(fp, default)
+    return _load_json_fallback(fp, default)
+
+def _save_json(fp: Path, data: Any) -> None:
+    if _HAS_STORAGE and _storage_save_json is not None:
+        try:
+            _storage_save_json(fp, data)
+            return
+        except Exception:
+            _save_json_fallback(fp, data)
+            return
+    _save_json_fallback(fp, data)
+
+@st.cache_data(show_spinner=False)
+def _cached_load(fp: Path, default: Any, cache_buster: int) -> Any:
+    # cache-buster mukana, jotta Reload-nappi toimii
+    _ = cache_buster  # käytetään vain cache-keynä
+    return _load_json(fp, default)
+
+def _load_shortlist() -> set[str]:
+    data = _load_json(SHORTLIST_FP, [])
+    return set(map(str, data)) if isinstance(data, list) else set()
+
+def _save_shortlist(s: set[str]) -> None:
     _save_json(SHORTLIST_FP, sorted(list(s)))
 
 def _norm_team(p: Dict[str, Any]) -> str:
@@ -85,11 +124,11 @@ def _parse_birthdate_to_age(v: Any) -> Optional[int]:
         return None
     try:
         if isinstance(v, (datetime, date)):
-            b = v
+            b = v if isinstance(v, date) else v.date()
         else:
             s = str(v).strip()
             if len(s) == 4 and s.isdigit():
-                b = date(int(s), 7, 1)                  # YYYY
+                b = date(int(s), 7, 1)  # YYYY
             elif "-" in s:
                 b = datetime.strptime(s[:10], "%Y-%m-%d").date()  # YYYY-MM-DD
             elif "/" in s:
@@ -115,7 +154,6 @@ def _derive_age(p: Dict[str, Any]) -> Optional[int]:
     return None
 
 def _guess_position(text: str) -> str:
-    """Tiny heuristic to guess a position from free text."""
     t = (text or "").lower()
     if any(k in t for k in ["gk", "keeper", "goal"]): return "GK"
     if any(k in t for k in ["left back", "lb", "lwb"]): return "LB"
@@ -133,7 +171,7 @@ def _guess_position(text: str) -> str:
 
 def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, Any]]:
     team = (team or "").strip()
-    players = _load_json(PLAYERS_FP, [], cache_buster)
+    players = _cached_load(PLAYERS_FP, [], cache_buster)
     out: List[Dict[str, Any]] = []
     for p in players:
         if _norm_team(p) == team:
@@ -150,7 +188,7 @@ def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, An
     return out
 
 def _teams_from_players_json(cache_buster: int) -> List[str]:
-    players = _load_json(PLAYERS_FP, [], cache_buster)
+    players = _cached_load(PLAYERS_FP, [], cache_buster)
     teams = sorted({_norm_team(p) for p in players if _norm_team(p)})
     return teams
 
@@ -173,26 +211,21 @@ def _rows_to_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
                 break
         if "team_name" not in df.columns:
             df["team_name"] = ""
-
     if "CurrentClub" not in df.columns:
         df["CurrentClub"] = df["team_name"]
 
-    # Unify Position
+    # Position
     if "Position" not in df.columns:
         for c in ["Position", "position", "Role", "role", "Pos", "pos"]:
             if c in df.columns:
                 df.rename(columns={c: "Position"}, inplace=True)
                 break
     if "Position" not in df.columns:
-        src = None
-        for c in ["role","Role","Notes","notes","profile","Profile","description","Desc"]:
-            if c in df.columns:
-                src = c
-                break
+        src = next((c for c in ["role", "Role", "Notes", "notes", "profile", "Profile", "description", "Desc"] if c in df.columns), None)
         if src:
             df["Position"] = df[src].astype(str).map(_guess_position)
 
-    # Unify Foot
+    # Foot
     if "Foot" not in df.columns:
         for c in ["Foot", "PreferredFoot", "foot", "preferred_foot"]:
             if c in df.columns:
@@ -210,7 +243,6 @@ def _rows_to_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
             except Exception:
                 pass
 
-    # Ensure id is string
     if "id" in df.columns:
         df["id"] = df["id"].astype(str)
 
@@ -232,7 +264,7 @@ def show_team_view():
 
     cache_buster = st.session_state.get(STATE_CACHE_BUSTER, 0)
 
-    # Migration from old key (yksisuuntainen kopio vain jos ei ole asetettu)
+    # Migraatio vanhasta key:stä
     if "selected_team" in st.session_state and STATE_TEAM_KEY not in st.session_state:
         st.session_state[STATE_TEAM_KEY] = st.session_state["selected_team"]
 
@@ -246,13 +278,11 @@ def show_team_view():
             teams = []
     if not teams:
         teams = _teams_from_players_json(cache_buster)
-
     if not teams:
         st.info("No teams available. Add players first.")
         return
 
     selected_idx = teams.index(preselected) if preselected in teams else 0
-    # ⚠️ Uniikki key tälle näkymälle – EI "selected_team" (se on sivupalkissa)
     team = st.selectbox("Select Team", teams, index=selected_idx, key=STATE_TEAM_KEY)
 
     # Load players for team
@@ -260,11 +290,10 @@ def show_team_view():
     if not rows:
         st.info(f"No players found for team {team}.")
         return
-
     df = _rows_to_df(rows)
 
     # --------- Quick stats ----------
-    st.subheader(f"Players — {team}  ")
+    st.subheader(f"Players — {team}")
     with st.container():
         left, mid, right = st.columns(3)
         ages_series = pd.to_numeric(df["Age"], errors="coerce").dropna()
@@ -278,7 +307,7 @@ def show_team_view():
             top_pos = ", ".join([f"{k} {v}" for k, v in pos_counts.head(2).items()]) if len(pos_counts) else "–"
             st.metric("Top positions", top_pos)
 
-    # Small distribution chart (optional)
+    # Optional mini chart
     if "Position" in df.columns and df["Position"].notna().any():
         st.caption("Position distribution")
         st.bar_chart(df["Position"].fillna("—").astype(str).value_counts())
@@ -295,7 +324,6 @@ def show_team_view():
             foot_vals = sorted([v for v in df.get("Foot", pd.Series(dtype=object)).dropna().astype(str).unique() if v])
             foot_sel = st.multiselect("Foot", foot_vals, default=st.session_state.get(STATE_FOOT_KEY, []), key=STATE_FOOT_KEY)
         with c4:
-            # Robust age filter (slider only when min<max)
             age_min, age_max = None, None
             if "Age" in df.columns:
                 ages = pd.to_numeric(df["Age"], errors="coerce").dropna()
@@ -304,11 +332,9 @@ def show_team_view():
                     amin_c = max(14, amin); amax_c = min(45, amax)
                     if amin_c >= amax_c:
                         st.caption(f"Age range: {amin_c} only")
-                        # poista mahdollinen vanha slider-arvo
                         st.session_state.pop(STATE_AGE_KEY, None)
                     else:
                         default_age = st.session_state.get(STATE_AGE_KEY, (amin_c, amax_c))
-                        # clamp default to current bounds
                         d0 = max(amin_c, min(default_age[0], amax_c))
                         d1 = max(amin_c, min(default_age[1], amax_c))
                         if d0 > d1: d0, d1 = d1, d0
@@ -339,9 +365,10 @@ def show_team_view():
             chips.append(f"🎂 {lo}-{hi}")
     if club_sel: chips.append("🏟️ " + "/".join(club_sel))
     if chips:
-        st.caption("Active filters: " + "   •   ".join(chips))
+        chips_html = " ".join(f"<span class='sl-chip'>{c}</span>" for c in chips)
+        st.markdown(chips_html, unsafe_allow_html=True)
 
-    # --------- Advanced: sort + visible columns + starters + shortlist toggle ----------
+    # --------- Advanced ----------
     with st.expander("Advanced", expanded=False):
         cA, cB, cC = st.columns([1.3, 1.2, 1.5])
         with cA:
@@ -349,11 +376,7 @@ def show_team_view():
             sort_by = st.selectbox("Sort by (numeric)", numeric_candidates, index=0 if numeric_candidates else None)
             sort_desc = st.toggle("Sort descending", value=True)
         with cB:
-            starters_flag = None
-            for k in ("Starter", "starter", "IsStarter", "is_starter", "XI"):
-                if k in df.columns:
-                    starters_flag = k
-                    break
+            starters_flag = next((k for k in ("Starter", "starter", "IsStarter", "is_starter", "XI") if k in df.columns), None)
             only_starters = st.checkbox("Only starters", value=False, disabled=starters_flag is None)
         with cC:
             all_cols = list(df.columns)
@@ -381,7 +404,6 @@ def show_team_view():
         df_show = df_show[df_show.get("CurrentClub", pd.Series(dtype=object)).astype(str).isin(club_sel)]
     if 'starters_flag' in locals() and starters_flag and only_starters:
         df_show = df_show[df_show[starters_flag] == True]  # noqa: E712
-    # Sorting
     if sort_by:
         df_show = df_show.sort_values(by=sort_by, ascending=not sort_desc, kind="mergesort")
 
@@ -390,13 +412,12 @@ def show_team_view():
     # Preferred + rating-like columns
     preferred_cols = ["id", "name", "Position", "Age", "Foot", "team_name", "CurrentClub"]
     rating_like = [c for c in df_show.columns if c not in preferred_cols and pd.api.types.is_numeric_dtype(df_show[c])]
-    # User visible columns take precedence if defined
     if st.session_state.get(STATE_VISIBLE_COLS_KEY):
         preferred_cols = [c for c in st.session_state[STATE_VISIBLE_COLS_KEY] if c in df_show.columns]
     else:
         preferred_cols = [c for c in preferred_cols if c in df_show.columns] + rating_like[:6]
 
-    # --------- Saved Views (store & apply) ----------
+    # --------- Saved Views ----------
     st.divider()
     st.caption("Saved Views")
     st.session_state.setdefault(STATE_SAVED_VIEWS_KEY, {})
@@ -435,10 +456,8 @@ def show_team_view():
         if not pid:
             return
         s = st.session_state[STATE_SHORTLIST_KEY]
-        if pid in s:
-            s.remove(pid)
-        else:
-            s.add(pid)
+        if pid in s: s.remove(pid)
+        else: s.add(pid)
         _save_shortlist(s)
 
     def _fmt_num(v):
@@ -454,7 +473,6 @@ def show_team_view():
         st.info("No matches with current filters.")
     elif use_cards and "id" in df_show.columns:
         st.write("Click ☆ to add to shortlist.")
-        # Choose top-3 numeric columns for quick glance
         top_numeric = [c for c in rating_like if c in df_show.columns][:3]
         for _, r in df_show.reset_index(drop=True).iterrows():
             with st.container(border=True):
@@ -475,7 +493,6 @@ def show_team_view():
                     if top_numeric:
                         kv = " • ".join(f"{c}: {_fmt_num(r[c])}" for c in top_numeric if pd.notna(r.get(c)))
                         if kv: st.caption(kv)
-                    # Action buttons (PREPARE ONLY — no navigation)
                     pid = str(r.get("id",""))
                     bb1, bb2 = st.columns(2)
                     with bb1:
@@ -488,9 +505,10 @@ def show_team_view():
                             st.success("✅ Scout Match Reporter prepared. Open it from the sidebar.")
             st.divider()
     else:
-        # Fast table view
         show_cols = preferred_cols if preferred_cols else list(df_show.columns)
+        st.markdown("<div class='sl-table'>", unsafe_allow_html=True)
         st.dataframe(df_show[show_cols].reset_index(drop=True), use_container_width=True, height=520)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # --------- Export ----------
     st.markdown("### Export")
@@ -501,13 +519,13 @@ def show_team_view():
     json_bytes = df_export.to_json(orient="records", force_ascii=False, indent=2).encode("utf-8")
     st.download_button("⬇️ Download JSON", json_bytes, file_name=f"{team.replace(' ', '_')}_players.json", mime="application/json")
 
-    # Export shortlist (for current team rows if id present)
     if "id" in df.columns and st.session_state[STATE_SHORTLIST_KEY]:
         ids = list(st.session_state[STATE_SHORTLIST_KEY])
         df_short = df[df["id"].astype(str).isin(ids)]
         if len(df_short):
             csv_s = df_short.to_csv(index=False).encode("utf-8")
             st.download_button("⬇️ Download Shortlist CSV", csv_s, file_name=f"{team.replace(' ','_')}_shortlist.csv", mime="text/csv")
+
 
 # Suora ajo
 if __name__ == "__main__":

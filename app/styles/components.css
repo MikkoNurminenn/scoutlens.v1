@@ -1,0 +1,101 @@
+/* Cards & KPI */
+.sl-kpi { text-align:left; }
+.sl-kpi .label { font-size: var(--fs-14); color: var(--fg-muted); }
+.sl-kpi .value { font-size: var(--fs-28); font-weight:700; }
+
+/* Buttons */
+.stButton>button, .sl-btn {
+  background: var(--accent-1);
+  color: var(--fg-strong);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-14);
+  transition: background .2s ease, box-shadow .2s ease, transform .2s ease;
+  cursor: pointer;
+}
+.stButton>button:hover, .sl-btn:hover {
+  background: linear-gradient(90deg,var(--accent-1),var(--accent-2));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
+}
+.stButton>button:focus, .sl-btn:focus {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset:2px;
+}
+.stButton>button:disabled {
+  opacity:0.5;
+  cursor:not-allowed;
+  transform:none;
+  box-shadow:none;
+}
+
+/* Anchor buttons */
+.sl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  text-decoration: none;
+}
+
+/* Quick action container */
+.sl-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Chips */
+.sl-chip {
+  display:inline-block;
+  padding:2px 10px;
+  border-radius:9999px;
+  background:color-mix(in srgb, var(--accent-1) 20%, transparent);
+  border:1px solid var(--accent-1);
+  font-size:var(--fs-12);
+  margin-right:var(--space-2);
+}
+
+/* Table wrapper */
+.sl-table .stDataFrame, .sl-table .stTable {
+  border:1px solid var(--divider);
+  border-radius:var(--radius-md);
+  overflow:hidden;
+}
+.sl-table thead tr { position:sticky; top:0; background:var(--bg-card); }
+.sl-table tbody tr:nth-child(even){ background:rgba(255,255,255,0.02); }
+.sl-table tbody tr:hover{ background:color-mix(in srgb, var(--accent-1) 10%, transparent); }
+
+/* Badge link */
+.sl-badge-link {
+  display:inline-block;
+  padding:2px 12px;
+  border-radius:9999px;
+  background:var(--bg-card);
+  border:1px solid var(--accent-1);
+  color:var(--accent-1);
+  text-decoration:none;
+  font-size:var(--fs-12);
+  transition:background .2s ease;
+}
+.sl-badge-link:hover {
+  background:color-mix(in srgb, var(--accent-1) 20%, transparent);
+}
+
+/* Inputs */
+.stTextInput>div>div>input,
+.stSelectbox>div>div>select,
+.stNumberInput>div>div>input,
+.stDateInput>div>div>input {
+  background:var(--bg-card);
+  border-radius:var(--radius-sm);
+  border:1px solid var(--divider);
+  color:var(--fg-strong);
+}
+.stTextInput>div>div>input:focus,
+.stSelectbox>div>div>select:focus,
+.stNumberInput>div>div>input:focus,
+.stDateInput>div>div>input:focus {
+  border-color:var(--accent-1);
+  box-shadow:0 0 0 1px var(--accent-1);
+}

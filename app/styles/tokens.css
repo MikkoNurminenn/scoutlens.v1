@@ -1,0 +1,41 @@
+:root {
+  /* Colors */
+  --bg-page: #0b0f1a;
+  --bg-card: #0f172a;
+  --accent-1: #6366f1;
+  --accent-2: #7c3aed;
+  --fg-strong: #e5e7eb;
+  --fg-muted: #9aa3b2;
+  --accent-cyan: #22d3ee;
+  --warning: #f97316;
+  --error: #ef4444;
+  --divider: rgba(255,255,255,0.08);
+
+  /* Typography */
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --fs-12: 0.75rem;
+  --fs-14: 0.875rem;
+  --fs-16: 1rem;
+  --fs-20: 1.25rem;
+  --fs-28: 1.75rem;
+  --lh-tight: 1.4;
+  --lh-relaxed: 1.6;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Radius */
+  --radius-lg: 16px;
+  --radius-md: 14px;
+  --radius-sm: 6px;
+
+  /* Shadows */
+  --shadow-card: 0 4px 16px rgba(0,0,0,0.4);
+  --shadow-hover: 0 6px 20px rgba(0,0,0,0.6);
+}

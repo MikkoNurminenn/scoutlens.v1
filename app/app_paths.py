@@ -20,14 +20,23 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 def file_path(name: str) -> Path:
     return DATA_DIR / name
 
+# Predefined file paths and directories
+PLAYERS_FP = file_path("players.json")
+MATCHES_FP = file_path("matches.json")
+SCOUT_REPORTS_FP = file_path("scout_reports.json")
+SHORTLISTS_FP = file_path("shortlists.json")
+NOTES_FP = file_path("notes.json")
+
+PLAYER_PHOTOS_DIR = DATA_DIR / "player_photos"
+PLAYER_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+
 # Luo oletustiedostot jos puuttuu (turvallinen ajaa aina)
-for fname, default in [
-    ("players.json", []),
-    ("matches.json", []),
-    ("scout_reports.json", []),
-    ("shortlists.json", {}),
-    ("notes.json", [])
+for fp, default in [
+    (PLAYERS_FP, []),
+    (MATCHES_FP, []),
+    (SCOUT_REPORTS_FP, []),
+    (SHORTLISTS_FP, {}),
+    (NOTES_FP, [])
 ]:
-    fp = file_path(fname)
     if not fp.exists():
         fp.write_text(json.dumps(default), encoding="utf-8")

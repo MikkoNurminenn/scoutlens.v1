@@ -14,19 +14,17 @@ from storage import Storage, load_json, save_json
 storage = Storage()
 
 # --- projektin apurit ---
-from app_paths import file_path, DATA_DIR
+from app_paths import DATA_DIR, PLAYERS_FP, SHORTLISTS_FP, PLAYER_PHOTOS_DIR
 from data_utils import (
-    list_teams, load_master, save_master,
+    load_master, save_master,
     load_seasonal_stats, save_seasonal_stats, BASE_DIR,
-    initialize_team_folder
 )
+from teams_store import add_team, list_teams
 
 # -------------------------------------------------------
 # Polut
 # -------------------------------------------------------
 # Huom: PLAYERS_FP ei ole enää välttämätön storagen kanssa, mutta pidetään polut yhtenäisinä
-PLAYERS_FP    = file_path("players.json")
-SHORTLISTS_FP = file_path("shortlists.json")
 
 # -------------------------------------------------------
 # Yleiset apurit
@@ -83,16 +81,16 @@ def _clamp_date(d: date, lo: date, hi: date) -> date:
         return lo
 
 # ---------- NaT-safe päivämäärät ----------
-def _to_date(x) -> date:
-    """Palauttaa aina python date-olion. Kestää str, date/datetime, pd.Timestamp, np.datetime64, pd.NaT."""
-    # None → tänään
+def _to_date(x) -> Optional[date]:
+    """Palauttaa python date-olion tai None. Kestää str, date/datetime,
+    pd.Timestamp, np.datetime64, pd.NaT."""
     if x is None:
-        return date.today()
+        return None
 
     # Pandas: NaT / NA / NaN
     try:
         if pd.isna(x):  # True myös pd.NaT:lle
-            return date.today()
+            return None
     except Exception:
         pass
 
@@ -100,7 +98,7 @@ def _to_date(x) -> date:
     try:
         if isinstance(x, pd.Timestamp):
             if pd.isna(x):
-                return date.today()
+                return None
             return x.to_pydatetime().date()
     except Exception:
         pass
@@ -110,7 +108,7 @@ def _to_date(x) -> date:
         import numpy as np  # noqa
         if isinstance(x, np.datetime64):
             dt = pd.to_datetime(x, errors="coerce")
-            return dt.date() if pd.notna(dt) else date.today()
+            return dt.date() if pd.notna(dt) else None
     except Exception:
         pass
 
@@ -123,9 +121,9 @@ def _to_date(x) -> date:
     # String tms.
     s = _as_str(x)
     if not s:
-        return date.today()
+        return None
     dt = pd.to_datetime(s, errors="coerce")
-    return (dt.date() if pd.notna(dt) else date.today())
+    return dt.date() if pd.notna(dt) else None
 
 def _as_date_str(x) -> str:
     """Palauttaa YYYY-MM-DD tai tyhjän."""
@@ -145,12 +143,14 @@ def _as_date_str(x) -> str:
     dt = pd.to_datetime(s, errors="coerce")
     return dt.date().isoformat() if pd.notna(dt) else ""
 
-def _date_input(label: str, value, key: str) -> date:
-    """Streamlit date_input kovalla varmistuksella ja selkeillä rajoilla (1900 → tänään)."""
-    safe_raw = _to_date(value)
-    safe = _clamp_date(safe_raw, BIRTHDATE_MIN, BIRTHDATE_MAX)
+def _date_input(label: str, value, key: str) -> Optional[date]:
+    """Streamlit date_input kovalla varmistuksella ja selkeillä rajoilla (1900 → tänään).
+    Palauttaa None jos arvo puuttuu."""
+    raw = _to_date(value)
+    missing = raw is None
+    safe = _clamp_date(raw or BIRTHDATE_MIN, BIRTHDATE_MIN, BIRTHDATE_MAX)
     try:
-        return st.date_input(
+        picked = st.date_input(
             label,
             value=safe,
             min_value=BIRTHDATE_MIN,
@@ -160,14 +160,14 @@ def _date_input(label: str, value, key: str) -> date:
             help="Select birth date (1900 → today)"
         )
     except TypeError:
-        # vanhemmat Streamlit-versiot ilman format-paramia
-        return st.date_input(
+        picked = st.date_input(
             label,
             value=safe,
             min_value=BIRTHDATE_MIN,
             max_value=BIRTHDATE_MAX,
             key=key
         )
+    return None if (missing and picked == BIRTHDATE_MIN) else picked
 
 def _next_free_id(existing_ids):
     existing = set(int(x) for x in existing_ids if pd.notna(x))
@@ -193,29 +193,6 @@ def _valid_tm_url(url: str) -> bool:
     return bool(TM_RX.match(url.strip()))
 
 # -------------------------------------------------------
-# Selectbox-suoja joukkuevalinnalle
-# -------------------------------------------------------
-TEAM_PLACEHOLDER = "— Select team —"
-
-def _safe_team_name_ui(name: str) -> str:
-    return (name or "").strip().replace("  ", " ").replace(" ", "_").upper()
-
-def _resolve_team_selection(value, teams: List[str]) -> str:
-    if not value:
-        return TEAM_PLACEHOLDER
-    if value in teams:
-        return value
-    val_safe = _safe_team_name_ui(str(value))
-    for t in teams:
-        if t == value:
-            return t
-        if _safe_team_name_ui(t) == str(value):
-            return t
-        if _safe_team_name_ui(t) == val_safe:
-            return t
-    return TEAM_PLACEHOLDER
-
-# -------------------------------------------------------
 # Storage-ohjatut apurit
 # -------------------------------------------------------
 def upsert_player_storage(player: dict) -> str:
@@ -225,11 +202,10 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     return storage.remove_by_ids([str(x) for x in ids])
 
 def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) -> Path:
-    photos_dir = DATA_DIR / "player_photos"
-    photos_dir.mkdir(parents=True, exist_ok=True)
+    PLAYER_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
     ext = Path(filename).suffix.lower() or ".png"
     safe_name = Path(filename).stem.replace(" ", "-")
-    out = photos_dir / f"{safe_name}-{player_id[:6]}{ext}"
+    out = PLAYER_PHOTOS_DIR / f"{safe_name}-{player_id[:6]}{ext}"
     out.write_bytes(content)
     storage.set_photo_path(player_id, str(out))
     return out
@@ -343,35 +319,21 @@ def show_player_editor():
         return _render_shortlist_flow()
 
     # --- TEAM FLOW ---
-    with st.expander("🆕 Create Team", expanded=False):
-        new_team = st.text_input("Team name", key="pe_new_team_name", placeholder="Club Atlético Example")
-        if st.button("Create team", key="pe_create_team_btn"):
-            pretty = (new_team or "").strip()
-            if not pretty:
-                st.warning("Anna joukkueelle nimi.")
-            else:
-                existing = list_teams()
-                if any(pretty.lower() == t.lower() for t in existing):
-                    st.info("Joukkue on jo olemassa. Valitse se alta.")
-                else:
-                    initialize_team_folder(pretty)
-                    st.success(f"Team '{pretty}' created.")
-                    teams_after = list_teams()
-                    st.session_state["pe_team_select"] = _resolve_team_selection(pretty, teams_after)
-                    st.rerun()
+    new_name = st.text_input("Create Team", placeholder="e.g. ATLÉTICO NACIONAL")
+    if st.button("➕ Create Team", type="primary", use_container_width=True, disabled=not bool(new_name.strip())):
+        ok, info = add_team(new_name)
+        if ok:
+            st.success(f"Team '{new_name}' created at {info}")
+            st.session_state["player_editor__selected_team"] = new_name.strip()
+            st.rerun()
+        else:
+            st.error(info)
 
     teams = list_teams()
-    # Normalisoi olemassa oleva arvo ennen selectboxin piirtämistä
-    st.session_state["pe_team_select"] = _resolve_team_selection(st.session_state.get("pe_team_select"), teams)
-
-    selected_label = st.selectbox(
-        "Select Team",
-        ["— Select team —"] + teams,
-        key="pe_team_select"
-    )
-    selected_team = "" if selected_label == "— Select team —" else selected_label
-    if not selected_team:
+    if not teams:
+        st.info("No teams yet. Create one above.")
         return
+    selected_team = st.selectbox("Team", teams, key="player_editor__selected_team")
 
     _render_team_editor_flow(selected_team, preselected_name=None)
 
@@ -537,6 +499,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
     # ✏️ Basic Info
     with tabs[0]:
         st.markdown(f"### Editing Player: {selected_name}")
+        st.markdown("<div class='sl-card'>", unsafe_allow_html=True)
 
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -613,6 +576,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 pid_out = upsert_player_storage(player_data)
                 st.success(f"✅ Saved (id={pid_out})")
 
+        st.markdown("</div>", unsafe_allow_html=True)
     # 🔗 Links
     with tabs[1]:
         st.subheader("🔗 Links")
@@ -624,10 +588,10 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             tm_url = ""
         st.write("Transfermarkt:", tm_url or "—")
         if tm_url:
-            try:
-                st.link_button("Open Transfermarkt", tm_url, help="Avaa pelaajan Transfermarkt-sivu")
-            except Exception:
-                st.markdown(f"[Open Transfermarkt]({tm_url})")
+            st.markdown(
+                f"<a href='{tm_url}' class='sl-badge-link' target='_blank'>Open Transfermarkt</a>",
+                unsafe_allow_html=True,
+            )
 
     # 🖼️ Photo & Tags
     with tabs[2]:
