@@ -10,6 +10,12 @@ import streamlit as st
 # Tallennusadapteri (local JSON ↔ Supabase kv)
 from storage import IS_CLOUD, load_json, save_json
 
+try:
+    import app.storage as _stg
+    import streamlit as st
+    st.write("Using storage module:", getattr(_stg, "__file__", "?"))
+except Exception as e:
+    st.write("storage import failed:", repr(e))
 # ---------------- "Tiedostonimet" (avaimet kv:ssä) ----------------
 PLAYERS_FN    = "players.json"
 REPORTS_FN    = "scout_reports.json"
