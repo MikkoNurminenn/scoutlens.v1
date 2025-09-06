@@ -91,16 +91,16 @@ def _clamp_date(d: date, lo: date, hi: date) -> date:
         return lo
 
 # ---------- NaT-safe päivämäärät ----------
-def _to_date(x) -> date:
-    """Palauttaa aina python date-olion. Kestää str, date/datetime, pd.Timestamp, np.datetime64, pd.NaT."""
-    # None → tänään
+def _to_date(x) -> Optional[date]:
+    """Palauttaa python date-olion tai None. Kestää str, date/datetime,
+    pd.Timestamp, np.datetime64, pd.NaT."""
     if x is None:
-        return date.today()
+        return None
 
     # Pandas: NaT / NA / NaN
     try:
         if pd.isna(x):  # True myös pd.NaT:lle
-            return date.today()
+            return None
     except Exception:
         pass
 
@@ -108,7 +108,7 @@ def _to_date(x) -> date:
     try:
         if isinstance(x, pd.Timestamp):
             if pd.isna(x):
-                return date.today()
+                return None
             return x.to_pydatetime().date()
     except Exception:
         pass
@@ -118,7 +118,7 @@ def _to_date(x) -> date:
         import numpy as np  # noqa
         if isinstance(x, np.datetime64):
             dt = pd.to_datetime(x, errors="coerce")
-            return dt.date() if pd.notna(dt) else date.today()
+            return dt.date() if pd.notna(dt) else None
     except Exception:
         pass
 
@@ -131,9 +131,9 @@ def _to_date(x) -> date:
     # String tms.
     s = _as_str(x)
     if not s:
-        return date.today()
+        return None
     dt = pd.to_datetime(s, errors="coerce")
-    return (dt.date() if pd.notna(dt) else date.today())
+    return dt.date() if pd.notna(dt) else None
 
 def _as_date_str(x) -> str:
     """Palauttaa YYYY-MM-DD tai tyhjän."""
@@ -153,12 +153,14 @@ def _as_date_str(x) -> str:
     dt = pd.to_datetime(s, errors="coerce")
     return dt.date().isoformat() if pd.notna(dt) else ""
 
-def _date_input(label: str, value, key: str) -> date:
-    """Streamlit date_input kovalla varmistuksella ja selkeillä rajoilla (1900 → tänään)."""
-    safe_raw = _to_date(value)
-    safe = _clamp_date(safe_raw, BIRTHDATE_MIN, BIRTHDATE_MAX)
+def _date_input(label: str, value, key: str) -> Optional[date]:
+    """Streamlit date_input kovalla varmistuksella ja selkeillä rajoilla (1900 → tänään).
+    Palauttaa None jos arvo puuttuu."""
+    raw = _to_date(value)
+    missing = raw is None
+    safe = _clamp_date(raw or BIRTHDATE_MIN, BIRTHDATE_MIN, BIRTHDATE_MAX)
     try:
-        return st.date_input(
+        picked = st.date_input(
             label,
             value=safe,
             min_value=BIRTHDATE_MIN,
@@ -168,14 +170,14 @@ def _date_input(label: str, value, key: str) -> date:
             help="Select birth date (1900 → today)"
         )
     except TypeError:
-        # vanhemmat Streamlit-versiot ilman format-paramia
-        return st.date_input(
+        picked = st.date_input(
             label,
             value=safe,
             min_value=BIRTHDATE_MIN,
             max_value=BIRTHDATE_MAX,
             key=key
         )
+    return None if (missing and picked == BIRTHDATE_MIN) else picked
 
 def _next_free_id(existing_ids):
     existing = set(int(x) for x in existing_ids if pd.notna(x))
