@@ -9,6 +9,9 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
+from storage import Storage
+storage = Storage()
+
 # --- projektin apurit ---
 from app_paths import file_path, DATA_DIR
 from data_utils import (
