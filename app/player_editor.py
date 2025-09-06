@@ -1,6 +1,6 @@
-# player_editor.py — Optimized Player Editor (Create Team + safe team select + NaT-safe dates + Storage backend)
+"""Player editor backed by Supabase."""
 from __future__ import annotations
-import json, math, re
+import math, re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
@@ -9,22 +9,21 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
-# --- Supabase client ---
 from supabase_client import get_client
-
-# --- projektin apurit ---
-from app_paths import DATA_DIR, PLAYERS_FP, SHORTLISTS_FP, PLAYER_PHOTOS_DIR
-from data_utils import (
-    load_master, save_master,
-    load_seasonal_stats, save_seasonal_stats, BASE_DIR,
-)
+from data_utils import load_master, save_master, load_seasonal_stats, save_seasonal_stats
 from data_utils_players import clear_players_cache
 from teams_store import add_team, list_teams
+from shortlists import (
+    _load_shortlists as _db_load_shortlists,
+    _save_shortlists as _db_save_shortlists,
+)
+
+# Local directory for player photos
+PLAYER_PHOTOS_DIR = Path("player_photos")
 
 # -------------------------------------------------------
 # Polut
 # -------------------------------------------------------
-# Huom: PLAYERS_FP ei ole enää välttämätön storagen kanssa, mutta pidetään polut yhtenäisinä
 
 # -------------------------------------------------------
 # Yleiset apurit
@@ -35,17 +34,6 @@ DEFAULT_COLUMNS = [
 ]
 
 TM_RX = re.compile(r"^https?://(www\.)?transfermarkt\.[^/\s]+/.*", re.IGNORECASE)
-
-def _load_json(fp: Path, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
-
-def _save_json(fp: Path, data):
-    fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def _normalize_nationality(val) -> str:
     if val is None:
@@ -233,25 +221,16 @@ def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) 
     return out
 
 # -------------------------------------------------------
-# Shortlist apurit (säilytetään JSONissa toistaiseksi)
+# Shortlist helpers backed by Supabase
 # -------------------------------------------------------
 def _load_shortlists() -> Dict[str, List[Any]]:
-    raw = _load_json(SHORTLISTS_FP, {})
-    if isinstance(raw, dict) and "lists" in raw and isinstance(raw["lists"], list):
-        out: Dict[str, List[Any]] = {}
-        for lst in raw["lists"]:
-            name = lst.get("name") or lst.get("title") or "default"
-            items = lst.get("items") or lst.get("players") or []
-            out[name] = items if isinstance(items, list) else []
-        return out
-    if isinstance(raw, dict):
-        return {k: (v if isinstance(v, list) else []) for k, v in raw.items()}
-    if isinstance(raw, list):
-        return {"default": raw}
-    return {}
+    """Fetch all shortlists from Supabase."""
+    return _db_load_shortlists()
+
 
 def _save_shortlists(data: Dict[str, List[Any]]):
-    _save_json(SHORTLISTS_FP, data)
+    """Persist shortlist data to Supabase."""
+    _db_save_shortlists(data)
 
 def _players_index_by_id() -> Dict[str, Dict[str, Any]]:
     client = get_client()
@@ -330,7 +309,7 @@ def _remove_from_shortlist(shortlists: Dict[str, List[Any]], list_name: str, pid
 # -------------------------------------------------------
 def show_player_editor():
     st.header("💼 Player Editor")
-    st.caption(f"Data folder → {DATA_DIR}")
+    st.caption("Data stored in Supabase")
 
     # segmented_control jos löytyy, muuten radio
     seg = getattr(st, "segmented_control", None)

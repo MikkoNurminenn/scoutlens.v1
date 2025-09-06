@@ -10,6 +10,9 @@ import pandas as pd
 from schema import MASTER_FIELDS, COMMON_FIELDS
 from supabase_client import get_client
 
+# Compatibility placeholder for modules that still expect a BASE_DIR
+BASE_DIR = Path(".")
+
 # Public re-exports
 MASTER_COLUMNS = MASTER_FIELDS
 DEFAULT_PLAYER_COLUMNS = COMMON_FIELDS.copy()
