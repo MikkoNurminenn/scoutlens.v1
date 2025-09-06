@@ -187,14 +187,14 @@ def show_home():
         )
 
     # ---- Cloud Sync (Supabase)
-    bucket = st.secrets.get("SUPABASE_BUCKET", "scoutlens")
     st.subheader("Cloud Sync (Supabase)")
     col1, col2 = st.columns(2)
 
     with col1:
         if st.button("Backup → Supabase"):
             for name in FILES:
-                ok, msg = push_json(bucket, name, file_path(name))
+                table = Path(name).stem
+                ok, msg = push_json(table, file_path(name))
                 if ok:
                     st.write("✅ " + msg)
                 else:
@@ -203,7 +203,8 @@ def show_home():
     with col2:
         if st.button("Restore ← Supabase"):
             for name in FILES:
-                ok, msg = pull_json(bucket, name, file_path(name))
+                table = Path(name).stem
+                ok, msg = pull_json(table, file_path(name))
                 if ok:
                     st.write("✅ " + msg)
                 else:
