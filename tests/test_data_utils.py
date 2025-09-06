@@ -1,82 +1,139 @@
 import sys
 from pathlib import Path
 import importlib
+import uuid
 import pandas as pd
 
-# Ensure application modules can be imported as top-level modules
+# Varmista että "app" löytyy import-polusta (säädä tarvittaessa)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
 
-def setup_data_utils(tmp_path, monkeypatch):
-    """Return ``data_utils`` configured to use an in-memory Supabase mock."""
-    monkeypatch.setenv("SCOUTLENS_APPDATA", str(tmp_path))
+# ---------------- In-memory Supabase mock ----------------
+class FakeTable:
+    def __init__(self, name, db):
+        self.name = name
+        self.db = db
+        self._data = db.setdefault(name, [])
+        self._filters = []
+        self._order = None
 
-    import app_paths
-    importlib.reload(app_paths)
+    def select(self, *args, **kwargs):
+        self._filters = []
+        self._order = None
+        return self
 
-    # Mock cloud storage using an in-memory dictionary
-    store: dict[str, object] = {}
+    def eq(self, column, value):
+        self._filters.append(("eq", column, value))
+        return self
 
-    import storage
-    importlib.reload(storage)
-    monkeypatch.setattr(storage, "IS_CLOUD", True, raising=False)
+    def in_(self, column, values):
+        self._filters.append(("in", column, set(values)))
+        return self
 
-    def fake_load_json(name_or_fp, default):
-        key = Path(name_or_fp).name if name_or_fp else ""
-        return store.get(key, default)
+    def order(self, column, desc=False):
+        self._order = (column, bool(desc))
+        return self
 
-    def fake_save_json(name_or_fp, data):
-        key = Path(name_or_fp).name if name_or_fp else ""
-        store[key] = data
+    def upsert(self, data):
+        items = data if isinstance(data, list) else [data]
+        pk = "id"
+        # players/matches voivat tulla ilman id:tä → generoi
+        for item in items:
+            if pk not in item or not item[pk]:
+                item[pk] = uuid.uuid4().hex
+            # team_name filttereille: varmistetaan että avain on olemassa jos taulu players/matches
+            # (ei pakollinen tässä mockissa, mutta ei haittaa)
+            found = False
+            for i, row in enumerate(self._data):
+                if row.get(pk) == item[pk]:
+                    self._data[i] = {**row, **item}
+                    found = True
+                    break
+            if not found:
+                self._data.append(dict(item))
+        return self
 
-    monkeypatch.setattr(storage, "load_json", fake_load_json, raising=False)
-    monkeypatch.setattr(storage, "save_json", fake_save_json, raising=False)
+    def insert(self, data):
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            if "id" not in item or not item["id"]:
+                item["id"] = uuid.uuid4().hex
+            self._data.append(dict(item))
+        return self
 
-    # Prevent real Supabase connections
+    def delete(self):
+        # delete ketjuttuu .in_():ssa; varsinainen poisto tehdään execute:ssa
+        return self
+
+    def execute(self):
+        # Suodata
+        data = list(self._data)
+        for op, col, val in self._filters:
+            if op == "eq":
+                data = [r for r in data if r.get(col) == val]
+            elif op == "in":
+                data = [r for r in data if r.get(col) in val]
+        # Järjestys
+        if self._order:
+            col, desc = self._order
+            data.sort(key=lambda r: r.get(col), reverse=desc)
+        return type("Res", (), {"data": data})()
+
+
+class FakeClient:
+    def __init__(self, db):
+        self.db = db
+
+    def table(self, name):
+        return FakeTable(name, self.db)
+
+
+# ---------------- Test setup helper ----------------
+def setup_data_utils(monkeypatch):
+    """
+    Palauttaa (data_utils, db) siten, että data_utils käyttää in-memory Supabase-mockia.
+    """
+    db = {"teams": [], "players": [], "matches": [], "scout_reports": [], "shortlists": []}
+    fake_client = FakeClient(db)
+
     import supabase_client
     importlib.reload(supabase_client)
-    monkeypatch.setattr(supabase_client, "get_client", lambda: object())
+    monkeypatch.setattr(supabase_client, "get_client", lambda: fake_client)
 
     import data_utils
     importlib.reload(data_utils)
-    return data_utils
+    return data_utils, db
 
 
-def test_list_teams(tmp_path, monkeypatch):
-    du = setup_data_utils(tmp_path, monkeypatch)
+# ---------------- Tests ----------------
+def test_list_teams(monkeypatch):
+    du, db = setup_data_utils(monkeypatch)
     assert du.list_teams() == []
 
-    import storage
-
-    storage.save_json(
-        "players.json",
-        [
-            {"team_name": "Team A"},
-            {"team_name": "Team B"},
-            {"team_name": "TEAM_C"},
-        ],
-    )
+    # lisää joukkueita teams-tauluun
+    db["teams"].extend([{"id": "t1", "name": "Team A"}, {"id": "t2", "name": "Team B"}])
 
     teams = du.list_teams()
-    assert "Team B" in teams
-    assert "TEAM_B" not in teams
-    assert set(teams) == {"Team A", "Team B", "TEAM_C"}
+    assert set(teams) == {"Team A", "Team B"}
 
 
-def test_load_master_empty_when_missing(tmp_path, monkeypatch):
-    du = setup_data_utils(tmp_path, monkeypatch)
+def test_load_master_empty_when_missing(monkeypatch):
+    du, db = setup_data_utils(monkeypatch)
     team = "My Team"
     df = du.load_master(team)
     assert list(df.columns) == du.MASTER_COLUMNS
     assert df.empty
 
 
-def test_save_master_persists_data(tmp_path, monkeypatch):
-    du = setup_data_utils(tmp_path, monkeypatch)
+def test_save_master_persists_data(monkeypatch):
+    du, db = setup_data_utils(monkeypatch)
     team = "My Team"
-    uuid_val = "123e4567e89b12d3a456426614174000"
-    df_new = pd.DataFrame([{ "PlayerID": uuid_val, "Name": "Alice" }])
+    uuid_val = "123e4567e89b12d3a456426614174000"  # 32-merkkiä, sama formaatti kuin uuid.hex
+
+    df_new = pd.DataFrame([{"PlayerID": uuid_val, "Name": "Alice"}])
     du.save_master(df_new, team)
+
     df_loaded = du.load_master(team)
+    assert not df_loaded.empty
     assert df_loaded.loc[0, "PlayerID"] == uuid_val
     assert df_loaded.loc[0, "Name"] == "Alice"

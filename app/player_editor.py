@@ -1,6 +1,6 @@
-# player_editor.py — Optimized Player Editor (Create Team + safe team select + NaT-safe dates + Storage backend)
+"""Player editor backed by Supabase (clean)."""
 from __future__ import annotations
-import json, math, re
+import math, re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
@@ -9,29 +9,22 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
-# --- storage (Supabase jos secrets, muuten JSON) ---
-from storage import Storage
-storage = Storage()
-
-# --- projektin apurit ---
-from app_paths import DATA_DIR, PLAYERS_FP, SHORTLISTS_FP, PLAYER_PHOTOS_DIR
+# --- Supabase & data helpers ---
+from supabase_client import get_client
 from data_utils import (
     load_master, save_master,
-    load_seasonal_stats, save_seasonal_stats, BASE_DIR,
-    parse_date, _ser_date,
+    load_seasonal_stats, save_seasonal_stats,
+    parse_date, _ser_date
+)
+from data_utils_players_json import clear_players_cache  # armollinen no-op jos ei tee mitään
+from teams_store import add_team, list_teams
+from shortlists import (
+    _load_shortlists as _db_load_shortlists,
+    _save_shortlists as _db_save_shortlists,
 )
 
-# clear_players_cache: tee armollinen fallback, koska tiedoston nimi on vaihdellut
-try:
-    from data_utils_players import clear_players_cache  # oletus-nimi
-except Exception:
-    try:
-        from data_utils_players_json import clear_players_cache  # joissain repo-versioissa tämä
-    except Exception:
-        def clear_players_cache():
-            return None
-
-from teams_store import add_team, list_teams
+# Local directory for player photos
+PLAYER_PHOTOS_DIR = Path("player_photos")
 
 # -------------------------------------------------------
 # Yleiset apurit
@@ -42,17 +35,6 @@ DEFAULT_COLUMNS = [
 ]
 
 TM_RX = re.compile(r"^https?://(www\.)?transfermarkt\.[^/\s]+/.*", re.IGNORECASE)
-
-def _load_json(fp: Path, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
-
-def _save_json(fp: Path, data):
-    fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def _normalize_nationality(val) -> str:
     if val is None:
@@ -96,21 +78,16 @@ def _clamp_date(d: date, lo: date, hi: date) -> date:
         return lo
 
 # ---------- NaT-safe päivämäärät ----------
-
 def _to_date(x) -> Optional[date]:
     """Palauttaa python date-olion tai None. Kestää str, date/datetime,
     pd.Timestamp, np.datetime64, pd.NaT."""
     if x is None:
         return None
-
-    # Pandas: NaT / NA / NaN
     try:
-        if pd.isna(x):  # True myös pd.NaT:lle
+        if pd.isna(x):
             return None
     except Exception:
         pass
-
-    # Pandas Timestamp
     try:
         if isinstance(x, pd.Timestamp):
             if pd.isna(x):
@@ -118,8 +95,6 @@ def _to_date(x) -> Optional[date]:
             return x.to_pydatetime().date()
     except Exception:
         pass
-
-    # Numpy datetime64
     try:
         import numpy as np  # noqa
         if isinstance(x, np.datetime64):
@@ -127,14 +102,10 @@ def _to_date(x) -> Optional[date]:
             return dt.date() if pd.notna(dt) else None
     except Exception:
         pass
-
-    # Python datetime/date
     if isinstance(x, datetime):
         return x.date()
     if isinstance(x, date):
         return x
-
-    # String tms.
     s = _as_str(x)
     if not s:
         return None
@@ -142,8 +113,7 @@ def _to_date(x) -> Optional[date]:
     return dt.date() if pd.notna(dt) else None
 
 def _date_input(label: str, value, key: str) -> Optional[date]:
-    """Streamlit date_input kovalla varmistuksella ja selkeillä rajoilla (1900 → tänään).
-    Palauttaa None jos arvo puuttuu."""
+    """Streamlit date_input kovalla varmistuksella ja rajoilla (1900 → tänään)."""
     raw = _to_date(value)
     missing = raw is None
     safe = _clamp_date(raw or BIRTHDATE_MIN, BIRTHDATE_MIN, BIRTHDATE_MAX)
@@ -193,14 +163,25 @@ def _valid_tm_url(url: str) -> bool:
     return bool(TM_RX.match(url.strip()))
 
 # -------------------------------------------------------
-# Storage-ohjatut apurit
+# Storage-ohjatut apurit (Supabase)
 # -------------------------------------------------------
-
 def upsert_player_storage(player: dict) -> str:
-    return storage.upsert_player(player)
+    client = get_client()
+    if not client:
+        return ""
+    pid = str(player.get("id") or "").strip()
+    if not pid:
+        pid = uuid4().hex
+        player["id"] = pid
+    client.table("players").upsert(player).execute()
+    return pid
 
 def remove_from_players_storage_by_ids(ids: List[str]) -> int:
-    return storage.remove_by_ids([str(x) for x in ids])
+    client = get_client()
+    if not client:
+        return 0
+    client.table("players").delete().in_("id", [str(i) for i in ids]).execute()
+    return len(ids)
 
 def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) -> Path:
     PLAYER_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
@@ -208,35 +189,27 @@ def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) 
     safe_name = Path(filename).stem.replace(" ", "-")
     out = PLAYER_PHOTOS_DIR / f"{safe_name}-{player_id[:6]}{ext}"
     out.write_bytes(content)
-    storage.set_photo_path(player_id, str(out))
+    client = get_client()
+    if client:
+        client.table("players").update({"photo_path": str(out)}).eq("id", player_id).execute()
     return out
 
 # -------------------------------------------------------
-# Shortlist apurit (säilytetään JSONissa toistaiseksi)
+# Shortlist helpers backed by Supabase
 # -------------------------------------------------------
-
 def _load_shortlists() -> Dict[str, List[Any]]:
-    raw = _load_json(SHORTLISTS_FP, {})
-    if isinstance(raw, dict) and "lists" in raw and isinstance(raw["lists"], list):
-        out: Dict[str, List[Any]] = {}
-        for lst in raw["lists"]:
-            name = lst.get("name") or lst.get("title") or "default"
-            items = lst.get("items") or lst.get("players") or []
-            out[name] = items if isinstance(items, list) else []
-        return out
-    if isinstance(raw, dict):
-        return {k: (v if isinstance(v, list) else []) for k, v in raw.items()}
-    if isinstance(raw, list):
-        return {"default": raw}
-    return {}
+    return _db_load_shortlists()
 
 def _save_shortlists(data: Dict[str, List[Any]]):
-    _save_json(SHORTLISTS_FP, data)
+    _db_save_shortlists(data)
 
 def _players_index_by_id() -> Dict[str, Dict[str, Any]]:
-    players = storage.list_players()
-    out = {}
-    for p in players:
+    client = get_client()
+    out: Dict[str, Dict[str, Any]] = {}
+    if not client:
+        return out
+    res = client.table("players").select("*").execute()
+    for p in res.data or []:
         pid = str(p.get("id") or "")
         if pid:
             out[pid] = p
@@ -270,7 +243,7 @@ def _resolve_shortlist_items(items: List[Any]) -> List[Dict[str, Any]]:
     # dedup
     seen = set(); deduped = []
     for r in out:
-        key = r["id"] or (r["name"], r["team_name"]) 
+        key = r["id"] or (r["name"], r["team_name"])
         if key in seen:
             continue
         seen.add(key); deduped.append(r)
@@ -305,12 +278,11 @@ def _remove_from_shortlist(shortlists: Dict[str, List[Any]], list_name: str, pid
 # -------------------------------------------------------
 # UI — päätoiminto
 # -------------------------------------------------------
-
 def show_player_editor():
     st.header("💼 Player Editor")
-    st.caption(f"Data folder → {DATA_DIR}")
+    st.caption("Data stored in Supabase")
 
-    # segmented_control jos löytyy, muuten radio
+    # Source valinta
     seg = getattr(st, "segmented_control", None)
     if callable(seg):
         source = st.segmented_control("Source", options=["Team", "Shortlist"], key="pe_source")
@@ -342,7 +314,6 @@ def show_player_editor():
 # -------------------------------------------------------
 # Shortlist-selailu ja ohjaus editoriin
 # -------------------------------------------------------
-
 def _render_shortlist_flow():
     shortlists = _load_shortlists()
     if not shortlists:
@@ -395,11 +366,9 @@ def _render_shortlist_flow():
 # -------------------------------------------------------
 # Tiimi-editorin varsinainen virta
 # -------------------------------------------------------
-
 def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]):
     df_master = load_master(selected_team)
 
-    # jos tyhjä, älä poistu vaan luo UI ekaa riviä varten
     empty_state = (df_master is None or df_master.empty)
     if empty_state:
         st.warning("No player data for the selected team. Create the first row below.")
@@ -407,7 +376,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
 
     df_master = _ensure_min_columns(df_master)
 
-    # ---------- Lisää ensimmäinen rivi, jos rosteri on tyhjä ----------
+    # Lisää ensimmäinen rivi, jos rosteri on tyhjä
     if empty_state:
         if st.button("➕ Create first player row", key=f"pe_first_row__{selected_team}"):
             new_id = _new_player_id()
@@ -419,7 +388,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             st.success("First player row created.")
             st.rerun()
 
-    # ---------- Full table editor ----------
+    # Full table editor
     with st.expander("🧩 Full table editor (whole roster)", expanded=False):
         edit_cols = [c for c in DEFAULT_COLUMNS if c in df_master.columns]
         table_edit = st.data_editor(
@@ -449,7 +418,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             st.cache_data.clear()
             st.success("Table saved.")
 
-    # ---------- Lisää uusi rivi aina näkyvissä ----------
+    # Lisää uusi rivi -osio
     with st.expander("➕ Add New Player", expanded=False):
         if st.button("Add row", key=f"pe_add_row__{selected_team}"):
             new_id = _new_player_id()
@@ -462,7 +431,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             st.rerun()
         st.caption("Vinkki: käytä yläpuolen 'Full table editor' -osiota massamuokkaukseen.")
 
-    # ---------- Haku + yhden rivin editori ----------
+    # Haku + yhden rivin editori
     st.subheader("🔍 Find Player (single-row editor)")
     c_s1, c_s2 = st.columns([3, 1])
     with c_s1:
@@ -493,7 +462,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
     row = selected_row_df.iloc[0].to_dict()
     pid_str = _as_str(row.get("PlayerID")) or _new_player_id()
 
-    # ---------- Välilehdet ----------
+    # Tabs
     tabs = st.tabs(["✏️ Basic Info", "🔗 Links", "🖼️ Photo & Tags", "📅 Season Stats", "⭐ Shortlist", "🗑️ Actions"])
 
     # ✏️ Basic Info
@@ -505,30 +474,30 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         with c1:
             st.text_input("PlayerID", value=pid_str, disabled=True)
         with c2:
-            name_val = st.text_input("Name", value=_as_str(row.get("Name","")), key=f"pe_name__{selected_team}_{pid_str}")
+            name_val = st.text_input("Name", value=_as_str(row.get("Name","")), key=f"{selected_team}_{pid_str}_name")
         with c3:
             st.text_input("Team (master file)", value=str(selected_team), disabled=True)
 
         c4, c5, c6 = st.columns(3)
         with c4:
-            dob_date = _date_input("DateOfBirth", value=row.get("DateOfBirth"), key=f"pe_dob__{selected_team}_{pid_str}")
+            dob_date = _date_input("DateOfBirth", value=row.get("DateOfBirth"), key=f"{selected_team}_{pid_str}_dob")
         with c5:
-            nat_val = st.text_input("Nationality (A, B)", value=_normalize_nationality(_as_str(row.get("Nationality",""))), key=f"pe_nat__{selected_team}_{pid_str}")
+            nat_val = st.text_input("Nationality (A, B)", value=_normalize_nationality(_as_str(row.get("Nationality",""))), key=f"{selected_team}_{pid_str}_nat")
         with c6:
-            pos_val = st.text_input("Position", value=_as_str(row.get("Position","")), key=f"pe_pos__{selected_team}_{pid_str}")
+            pos_val = st.text_input("Position", value=_as_str(row.get("Position","")), key=f"{selected_team}_{pid_str}_pos")
 
         c7, c8, c9 = st.columns(3)
         pref_options = ["", "Right", "Left", "Both"]
         current_pref = _as_str(row.get("PreferredFoot",""))
         pref_index   = pref_options.index(current_pref) if current_pref in pref_options else 0
         with c7:
-            pref_foot = st.selectbox("PreferredFoot", pref_options, index=pref_index, key=f"pe_pref__{selected_team}_{pid_str}")
+            pref_foot = st.selectbox("PreferredFoot", pref_options, index=pref_index, key=f"{selected_team}_{pid_str}_pref")
         with c8:
-            club_num = st.number_input("ClubNumber", min_value=0, max_value=999, value=_as_int(row.get("ClubNumber"), 0), key=f"pe_clubnum__{selected_team}_{pid_str}")
+            club_num = st.number_input("ClubNumber", min_value=0, max_value=999, value=_as_int(row.get("ClubNumber"), 0), key=f"{selected_team}_{pid_str}_clubnum")
         with c9:
-            scout_rating = st.number_input("ScoutRating (0–100)", min_value=0, max_value=100, value=_as_int(row.get("ScoutRating"), 0), key=f"pe_rating__{selected_team}_{pid_str}")
+            scout_rating = st.number_input("ScoutRating (0–100)", min_value=0, max_value=100, value=_as_int(row.get("ScoutRating"), 0), key=f"{selected_team}_{pid_str}_rating")
 
-        tm_url_val = st.text_input("Transfermarkt URL", value=_as_str(row.get("TransfermarktURL","")), placeholder="https://www.transfermarkt.com/...", key=f"pe_tmurl__{selected_team}_{pid_str}")
+        tm_url_val = st.text_input("Transfermarkt URL", value=_as_str(row.get("TransfermarktURL","")), placeholder="https://www.transfermarkt.com/...", key=f"{selected_team}_{pid_str}_tmurl")
         if tm_url_val and not _valid_tm_url(tm_url_val):
             st.warning("URL ei näytä Transfermarkt-osoitteelta.")
 
@@ -539,7 +508,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         if problems:
             st.info(" | ".join(problems))
 
-        if st.button("💾 Save Basic Info", key=f"pe_save_basic__{selected_team}_{pid_str}"):
+        if st.button("💾 Save Basic Info", key=f"{selected_team}_{pid_str}_save_basic"):
             idxs = df_master[df_master["PlayerID"] == pid_str].index
             if not idxs.empty:
                 idx = idxs[0]
@@ -559,13 +528,13 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 st.error("Could not locate row to update.")
 
         if st.session_state.get("pe_last_saved_pid") == pid_str:
-            if st.button("Create match report for this player", key=f"pe_nav_report__{pid_str}"):
+            if st.button("Create match report for this player", key=f"{pid_str}_nav_report"):
                 st.session_state["nav_page"] = "Scout Match Report"
                 st.rerun()
 
         st.markdown("---")
         st.markdown("### 📄 Save THIS player to storage")
-        if st.button("⬇️ Save THIS player", key=f"pe_push_this__{selected_team}_{pid_str}"):
+        if st.button("⬇️ Save THIS player", key=f"{selected_team}_{pid_str}_push_this"):
             player_data = {
                 "id": pid_str,
                 "name": _as_str(name_val),
@@ -606,20 +575,22 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
     # 🖼️ Photo & Tags
     with tabs[2]:
         st.subheader("🖼️ Photo & Tags")
-        up = st.file_uploader("Upload player photo (PNG/JPG)", type=["png","jpg","jpeg"], key=f"pe_photo__{selected_team}_{pid_str}")
+        up = st.file_uploader("Upload player photo (PNG/JPG)", type=["png","jpg","jpeg"], key=f"{selected_team}_{pid_str}_photo")
         if up is not None:
             out = _save_photo_and_link_storage(pid_str, up.name, up.read())
             st.success(f"Photo saved: {out}")
 
         tags_key = f"tags_{pid_str}"
         current_tags = st.session_state.get(tags_key, "")
-        tag_str = st.text_input("Tags (comma-separated)", value=current_tags, key=f"pe_tags__{selected_team}_{pid_str}")
+        tag_str = st.text_input("Tags (comma-separated)", value=current_tags, key=f"{selected_team}_{pid_str}_tags")
         st.session_state[tags_key] = tag_str
         st.caption("Vinkki: muutama iskevä tagi (esim. 'Press-resistance, Pace, Leader').")
 
-        if st.button("💾 Save tags", key=f"pe_save_tags__{selected_team}_{pid_str}"):
+        if st.button("💾 Save tags", key=f"{selected_team}_{pid_str}_save_tags"):
             tags = [t.strip() for t in tag_str.split(",") if t.strip()]
-            storage.set_tags(pid_str, tags)
+            client = get_client()
+            if client:
+                client.table("players").update({"tags": tags}).eq("id", pid_str).execute()
             st.success("Tags saved.")
 
     # 📅 Season Stats
@@ -636,7 +607,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                     break
 
             if not name_col:
-                st.warning("Cannot edit: no 'Name' column in seasonal_stats.csv.")
+                st.warning("Cannot edit: no 'Name' column in seasonal stats.")
             else:
                 player_stats = stats_df[stats_df[name_col] == selected_name]
                 if player_stats.empty:
@@ -650,9 +621,9 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                         df_new,
                         num_rows="fixed",
                         use_container_width=True,
-                        key=f"pe_stats_new__{selected_team}_{pid_str}"
+                        key=f"{selected_team}_{pid_str}_stats_new"
                     )
-                    if st.button("💾 Create Season Stats", key=f"pe_stats_create__{selected_team}_{pid_str}"):
+                    if st.button("💾 Create Season Stats", key=f"{selected_team}_{pid_str}_stats_create"):
                         merged = pd.concat([stats_df, edited_stats], ignore_index=True)
                         save_seasonal_stats(merged, selected_team)
                         st.success("Season stats created.")
@@ -661,9 +632,9 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                         player_stats,
                         num_rows="fixed",
                         use_container_width=True,
-                        key=f"pe_stats_edit__{selected_team}_{pid_str}"
+                        key=f"{selected_team}_{pid_str}_stats_edit"
                     )
-                    if st.button("💾 Save Season Stats", key=f"pe_stats_save__{selected_team}_{pid_str}"):
+                    if st.button("💾 Save Season Stats", key=f"{selected_team}_{pid_str}_stats_save"):
                         mask = stats_df[name_col] == selected_name
                         stats_df.loc[mask, :] = edited_stats.values
                         save_seasonal_stats(stats_df, selected_team)
@@ -680,7 +651,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             for sl_name in sorted(shortlists.keys()):
                 items = shortlists.get(sl_name, [])
                 on_list, _ = _is_member(items, pid_str, current_name, _as_str(selected_team))
-                new_val = st.checkbox(sl_name, value=on_list, key=f"pe_sl_mem__{sl_name}_{selected_team}_{pid_str}")
+                new_val = st.checkbox(sl_name, value=on_list, key=f"{sl_name}_{selected_team}_{pid_str}_mem")
                 if new_val != on_list:
                     if new_val:
                         _add_to_shortlist(shortlists, sl_name, pid_str, current_name, _as_str(selected_team))
@@ -694,7 +665,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         st.subheader("🗑️ Actions")
         a1, a2, a3 = st.columns(3)
         with a1:
-            if st.button("Duplicate row", key=f"pe_dup__{selected_team}_{pid_str}"):
+            if st.button("Duplicate row", key=f"{selected_team}_{pid_str}_dup"):
                 copy = df_master[df_master["PlayerID"]==pid_str].iloc[0].copy()
                 copy["PlayerID"] = _new_player_id()
                 copy["Name"] = f"{copy.get('Name','')} (copy)"
@@ -703,8 +674,8 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 st.cache_data.clear()
                 st.success("Row duplicated.")
         with a2:
-            new_team = st.selectbox("Move to team", options=[""] + list_teams(), index=0, key=f"pe_move_team__{selected_team}_{pid_str}")
-            if new_team and st.button("Move now", key=f"pe_move_now__{selected_team}_{pid_str}"):
+            new_team = st.selectbox("Move to team", options=[""] + list_teams(), index=0, key=f"{selected_team}_{pid_str}_move_team")
+            if new_team and st.button("Move now", key=f"{selected_team}_{pid_str}_move_now"):
                 if new_team == selected_team:
                     st.warning("Same team selected.")
                 else:
@@ -727,8 +698,8 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                         st.success(f"Player moved to {new_team}.")
         with a3:
             st.warning("Type DELETE to confirm deletion from master file", icon="⚠️")
-            conf = st.text_input("Confirmation", key=f"pe_del_conf__{selected_team}_{pid_str}", placeholder="DELETE")
-            if st.button("Delete row from master", key=f"pe_del_row__{selected_team}_{pid_str}", disabled=(conf != "DELETE")):
+            conf = st.text_input("Confirmation", key=f"{selected_team}_{pid_str}_del_conf", placeholder="DELETE")
+            if st.button("Delete row from master", key=f"{selected_team}_{pid_str}_del_row", disabled=(conf != "DELETE")):
                 df_master = df_master[df_master["PlayerID"] != pid_str]
                 save_master(df_master, selected_team)
                 st.cache_data.clear()
@@ -737,19 +708,19 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         st.markdown("---")
         st.subheader("Remove from storage")
         st.caption("Siivoa taustavarastoa sotkematta master-tiedostoa.")
-        conf2 = st.text_input("Type REMOVE to confirm", key=f"pe_del_json_conf__{selected_team}_{pid_str}", placeholder="REMOVE")
-        if st.button("Remove by PlayerID", key=f"pe_del_json_byid__{selected_team}_{pid_str}", disabled=(conf2 != "REMOVE")):
+        conf2 = st.text_input("Type REMOVE to confirm", key=f"{selected_team}_{pid_str}_del_store_conf", placeholder="REMOVE")
+        if st.button("Remove by PlayerID", key=f"{selected_team}_{pid_str}_del_store_byid", disabled=(conf2 != "REMOVE")):
             n = remove_from_players_storage_by_ids([str(pid_str)])
             if n:
                 clear_players_cache()
             st.success(f"Removed {n} record(s) by id.")
 
-        # (name, team) -poisto: etsitään id:t storagesta ja poistetaan ne
-        if st.button("Remove by (name, team) pair", key=f"pe_del_json_bykey__{selected_team}_{pid_str}", disabled=(conf2 != "REMOVE")):
-            nm = selected_name.strip()
-            tm = _as_str(selected_team)
+        if st.button("Remove by (name, team) pair", key=f"{selected_team}_{pid_str}_del_store_bykey", disabled=(conf2 != "REMOVE")):
+            nm = selected_name.strip(); tm = _as_str(selected_team)
             ids = []
-            for p in storage.list_players():
+            client = get_client()
+            players = (client.table("players").select("*").execute().data if client else [])
+            for p in players or []:
                 if (p.get("name","").strip() == nm) and (p.get("team_name","").strip() == tm):
                     ids.append(str(p.get("id")))
             if ids:

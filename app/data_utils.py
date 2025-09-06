@@ -1,51 +1,36 @@
-# data_utils.py — unified data helpers for ScoutLens (cloud-ready)
+# data_utils.py — Supabase-backed helpers (clean)
 from __future__ import annotations
-import json
+
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
 from datetime import date, datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from schema import MASTER_FIELDS, COMMON_FIELDS, OUTFIELD_FIELDS, GK_FIELDS
-from app_paths import DATA_DIR, file_path
+from schema import MASTER_FIELDS, COMMON_FIELDS
+from supabase_client import get_client
 
-# >>> Cloud/local storage adapter <<<
-# - IS_CLOUD kertoo ollaanko pilvessä (Supabase kv) vai paikallisesti.
-# - load_json/save_json tekevät automaattisesti oikean tallennuksen.
-from storage import IS_CLOUD, load_json, save_json
+# Yhteensopivuus: jotkin moduulit odottavat BASE_DIR -muuttujaa
+BASE_DIR = Path(".")
 
-# -----------------------------------------------------------------------------
-# Directories & paths (local mode only)
-# -----------------------------------------------------------------------------
-BASE_DIR: Path = DATA_DIR / "teams"
-BASE_DIR.mkdir(parents=True, exist_ok=True)
-
-# Optional shared JSON stores
-# HUOM: Cloud-moodissa luetaan/tallennetaan vain tiedostonimen mukaan (fp.name)
-PLAYERS_FP: Path = file_path("players.json")
-SHORTLIST_PATH: Path = file_path("shortlists.json")  # keep plural
-
-# Public re-exports (useful for other modules)
+# Julkiset re-exportit
 MASTER_COLUMNS = MASTER_FIELDS
 DEFAULT_PLAYER_COLUMNS = COMMON_FIELDS.copy()
 DEFAULT_STATS_COLUMNS = ["PlayerID", "Season", "Goals", "Assists", "MinutesPlayed"]
 
-# -----------------------------------------------------------------------------
-# Utils
-# -----------------------------------------------------------------------------
-def _safe_team_name(name: str) -> str:
-    return (name or "").strip().replace("  ", " ").replace(" ", "_").upper()
 
-def _ensure_parent(p: Path) -> None:
-    p.parent.mkdir(parents=True, exist_ok=True)
-
-def parse_date(s: Optional[str]) -> Optional[date]:
-    """Muuntaa päivämäärämerkkijonon ``date``-objektiksi.
-
-    Hyväksyy yleisiä formaatteja (``YYYY-MM-DD``, ``DD.MM.YYYY``, ``YYYY/MM/DD``).
-    Palauttaa ``None`` jos arvo puuttuu tai muunnos epäonnistuu.
-    """
+# ---------------------------------------------------------------------------
+# Päivämääräapureita
+# ---------------------------------------------------------------------------
+def parse_date(s: Optional[str | date | datetime]) -> Optional[date]:
+    """Muunna erilaiset merkkijonot/objektit turvallisesti date-objektiksi."""
+    if s is None or s == "" or (isinstance(s, float) and pd.isna(s)):
+        return None
+    if isinstance(s, date) and not isinstance(s, datetime):
+        return s
+    if isinstance(s, datetime):
+        return s.date()
+    s = str(s).strip()
     if not s:
         return None
     for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y/%m/%d"):
@@ -53,110 +38,54 @@ def parse_date(s: Optional[str]) -> Optional[date]:
             return datetime.strptime(s, fmt).date()
         except Exception:
             continue
+    # viimeinen oljenkorsi: pandas parseri
+    try:
+        dt = pd.to_datetime(s, errors="coerce")
+        if pd.isna(dt):
+            return None
+        if isinstance(dt, pd.Timestamp):
+            return dt.date()
+    except Exception:
+        pass
     return None
 
 
-def _ser_date(d: Optional[date]) -> Optional[str]:
-    """Serialize ``date`` to ``YYYY-MM-DD`` string (or ``None``)."""
+def _ser_date(d: Optional[date | datetime]) -> Optional[str]:
+    """Serialisoi date/datetime → 'YYYY-MM-DD' merkkijono (tai None)."""
     if d is None:
         return None
+    if isinstance(d, datetime):
+        d = d.date()
     return d.strftime("%Y-%m-%d")
 
-def _read_json_local(fp: Path, default: Any):
-    try:
-        if fp.exists():
-            txt = fp.read_text(encoding="utf-8").strip()
-            if txt:
-                return json.loads(txt)
-    except Exception:
-        pass
-    return default
 
-def _read_json(fp: Path, default: Any):
-    """Cloudissa luetaan kv:stä (fp.name avaimena), lokaalisti levyltä."""
-    if IS_CLOUD:
-        return load_json(fp.name, default)
-    return _read_json_local(fp, default)
-
-def _write_json(fp: Path, obj) -> None:
-    """Cloudissa tallennus kv:hen (fp.name avaimena), lokaalisti levyyn."""
-    if IS_CLOUD:
-        save_json(fp.name, obj)
-        return
-    _ensure_parent(fp)
-    fp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
-
-def get_team_paths(team_name: str, base_dir: Path = BASE_DIR) -> Dict[str, Path]:
-    safe = _safe_team_name(team_name)
-    root = base_dir / safe
-    return {
-        "folder": root,
-        "master": root / "player_master.csv",
-        "players": root / "players.csv",            # legacy
-        "seasonal_stats": root / "seasonal_stats.csv",
-    }
-
-def list_teams() -> List[str]:
-    """
-    Union of teams found as subfolders under BASE_DIR (local mode)
-    and teams seen in players.json (works in both modes).
-    When both exist, prefer the pretty name from players.json.
-    """
-    # Folder names (cloudissa ei listata levyä)
-    folder_names: set[str] = set()
-    if not IS_CLOUD:
-        folder_names = {p.name for p in BASE_DIR.iterdir() if p.is_dir()}
-
-    # Team names from players.json (pretty names)
-    pj_names: set[str] = set()
-    try:
-        players = _read_json(PLAYERS_FP, [])
-        def _norm_team(p: dict) -> str:
-            return (
-                p.get("team_name")
-                or p.get("Team")
-                or p.get("team")
-                or p.get("current_club")
-                or p.get("CurrentClub")
-                or ""
-            ).strip()
-        pj_names = {t for t in (_norm_team(p) for p in players) if t}
-    except Exception:
-        pj_names = set()
-
-    # Map safe->pretty
-    safe_map = { _safe_team_name(t): t for t in pj_names }
-
-    union: set[str] = set()
-    for f in folder_names:
-        union.add(safe_map.get(f, f))
-    union.update(pj_names)
-
-    return sorted(t for t in union if t)
-
-# -----------------------------------------------------------------------------
-# DataFrame hygiene / JSON serialisointi
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# DataFrame-kohdistus ja turvallinen sarjoitus
+# ---------------------------------------------------------------------------
 def _coerce_master(df: pd.DataFrame) -> pd.DataFrame:
+    """Varmista MASTER_COLUMNS, PlayerID stringiksi, DateOfBirth → date-objekti."""
     if df is None or df.empty:
         return pd.DataFrame(columns=MASTER_COLUMNS)
 
-    # Ensure all master columns exist
+    # Lisää puuttuvat sarakkeet tyhjinä
     for col in MASTER_COLUMNS:
         if col not in df.columns:
             df[col] = pd.Series(dtype="object")
 
-    # PlayerID: always string UUID
+    # PlayerID aina string (UUID) — ei Int64
     if "PlayerID" in df.columns:
         df["PlayerID"] = df["PlayerID"].astype(str).fillna("")
 
-    # DateOfBirth -> YYYY-MM-DD string (safe)
+    # DateOfBirth DataFrameen python date-objektina (ei NaT) → toimii st.date_inputissa
     if "DateOfBirth" in df.columns:
-        df["DateOfBirth"] = df["DateOfBirth"].apply(lambda x: _ser_date(parse_date(str(x))))
+        df["DateOfBirth"] = df["DateOfBirth"].apply(parse_date)
 
-    # Stable column order
-    df = df[[c for c in MASTER_COLUMNS if c in df.columns] + [c for c in df.columns if c not in MASTER_COLUMNS]]
+    # Pidä stabiili sarakejärjestys
+    ordered = [c for c in MASTER_COLUMNS if c in df.columns]
+    rest = [c for c in df.columns if c not in ordered]
+    df = df[ordered + rest]
     return df
+
 
 def _coerce_seasonal(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
@@ -164,78 +93,84 @@ def _coerce_seasonal(df: pd.DataFrame) -> pd.DataFrame:
     for col in DEFAULT_STATS_COLUMNS:
         if col not in df.columns:
             df[col] = pd.Series(dtype="object")
-    # Types
+
+    # PlayerID string
     if "PlayerID" in df.columns:
         df["PlayerID"] = df["PlayerID"].astype(str).fillna("")
+
+    # Season string
     if "Season" in df.columns:
         df["Season"] = df["Season"].astype(str)
+
+    # MinutesPlayed numero (Int64) mutta NaN→0
     if "MinutesPlayed" in df.columns:
-        df["MinutesPlayed"] = pd.to_numeric(df["MinutesPlayed"], errors="coerce").fillna(0).astype("Int64")
+        df["MinutesPlayed"] = (
+            pd.to_numeric(df["MinutesPlayed"], errors="coerce").fillna(0).astype("Int64")
+        )
     return df
 
+
 def _records_json_safe(df: pd.DataFrame) -> List[dict]:
-    """Muuttaa DataFramen listaksi dict-objekteja JSONia varten (päivämäärät -> ISO)."""
+    """Muunna DataFrame listaksi dict-olioita: date/datetime → ISO-stringiksi."""
     tmp = df.copy()
     for col in tmp.columns:
-        # datetime64 -> string
         if pd.api.types.is_datetime64_any_dtype(tmp[col]):
+            # pandas datetime → string
             tmp[col] = tmp[col].astype(str)
         else:
-            # date-objektit -> ISO using _ser_date
+            # date/datetime objektit → ISO
+            def _conv(x):
+                if isinstance(x, (date, datetime)):
+                    return _ser_date(x)
+                return x
             try:
-                tmp[col] = tmp[col].apply(
-                    lambda x: _ser_date(x if isinstance(x, date) else x.date()) if isinstance(x, (date, datetime)) else x
-                )
+                tmp[col] = tmp[col].apply(_conv)
             except Exception:
                 pass
     return tmp.to_dict(orient="records")
 
-# -----------------------------------------------------------------------------
-# Master table (per-team player table)
-# -----------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Supabase-toiminnot
+# ---------------------------------------------------------------------------
+def list_teams() -> List[str]:
+    client = get_client()
+    if not client:
+        return []
+    res = client.table("teams").select("name").execute()
+    return sorted(r.get("name") for r in (res.data or []) if r.get("name"))
+
+
 def load_master(team: str) -> pd.DataFrame:
-    safe = _safe_team_name(team)
-
-    if IS_CLOUD:
-        data = load_json(f"teams/{safe}/player_master.json", default=[])
-        df = pd.DataFrame(data)
-        return _coerce_master(df)
-
-    # Local (CSV)
-    paths = get_team_paths(team)
-    paths["folder"].mkdir(parents=True, exist_ok=True)
-    p = paths["master"]
-    if p.exists():
-        try:
-            df = pd.read_csv(p)
-        except Exception:
-            df = pd.DataFrame(columns=MASTER_COLUMNS)
-    else:
-        df = pd.DataFrame(columns=MASTER_COLUMNS)
-        _ensure_parent(p); df.to_csv(p, index=False)
+    client = get_client()
+    if not client:
+        return pd.DataFrame(columns=MASTER_COLUMNS)
+    res = client.table("players").select("*").eq("team_name", team).execute()
+    df = pd.DataFrame(res.data or [])
     return _coerce_master(df)
 
+
 def save_master(df: pd.DataFrame, team: str) -> None:
-    safe = _safe_team_name(team)
-
-    if IS_CLOUD:
-        save_json(f"teams/{safe}/player_master.json", _records_json_safe(_coerce_master(df)))
+    client = get_client()
+    if not client:
         return
+    data = _records_json_safe(_coerce_master(df))
+    for row in data:
+        row["team_name"] = team
+    client.table("players").upsert(data).execute()
 
-    p = get_team_paths(team)["master"]
-    _ensure_parent(p)
-    _coerce_master(df).to_csv(p, index=False)
 
-# Backwards-compat: some modules call load_players/save_players meaning master
+# Aliasit
 def load_players(team: str) -> pd.DataFrame:
     return load_master(team)
+
 
 def save_players(df: pd.DataFrame, team: str) -> None:
     save_master(df, team)
 
 
 def list_players_by_team(team: str) -> List[Dict[str, Any]]:
-    """Return list of player dicts for a team (id/name/team_name serialized)."""
+    """Palauta tiimin pelaajat dict-listana (id/name/team_name mukaan)."""
     df = load_master(team)
     if df is None or df.empty:
         return []
@@ -246,99 +181,66 @@ def list_players_by_team(team: str) -> List[Dict[str, Any]]:
         r["team_name"] = team
     return recs
 
-# -----------------------------------------------------------------------------
-# Seasonal stats per team
-# -----------------------------------------------------------------------------
+
+# Seasonal stats (voit säätää taulun nimen/kolumnit oman skeeman mukaan)
 def load_seasonal_stats(team: str) -> pd.DataFrame:
-    safe = _safe_team_name(team)
-
-    if IS_CLOUD:
-        data = load_json(f"teams/{safe}/seasonal_stats.json", default=[])
-        df = pd.DataFrame(data)
-        return _coerce_seasonal(df)
-
-    # Local (CSV)
-    p = get_team_paths(team)["seasonal_stats"]
-    if p.exists():
-        try:
-            df = pd.read_csv(p)
-        except Exception:
-            df = pd.DataFrame(columns=DEFAULT_STATS_COLUMNS)
-    else:
-        df = pd.DataFrame(columns=DEFAULT_STATS_COLUMNS)
-        _ensure_parent(p); df.to_csv(p, index=False)
+    client = get_client()
+    if not client:
+        return pd.DataFrame(columns=DEFAULT_STATS_COLUMNS)
+    res = client.table("matches").select("*").eq("team_name", team).execute()
+    df = pd.DataFrame(res.data or [])
     return _coerce_seasonal(df)
 
+
 def save_seasonal_stats(df: pd.DataFrame, team: str) -> None:
-    safe = _safe_team_name(team)
-
-    if IS_CLOUD:
-        save_json(f"teams/{safe}/seasonal_stats.json", _records_json_safe(_coerce_seasonal(df)))
+    client = get_client()
+    if not client:
         return
+    data = _records_json_safe(_coerce_seasonal(df))
+    for row in data:
+        row["team_name"] = team
+    client.table("matches").upsert(data).execute()
 
-    p = get_team_paths(team)["seasonal_stats"]
-    _ensure_parent(p)
-    _coerce_seasonal(df).to_csv(p, index=False)
 
-# -----------------------------------------------------------------------------
-# Folder bootstrap & helpers
-# -----------------------------------------------------------------------------
-def initialize_team_folder(team_name: str, stat_columns: Optional[List[str]] = None, base_dir: Path = BASE_DIR) -> Path:
-    """
-    Local: luo kansiot + tyhjät CSV:t.
-    Cloud: alustaa tyhjät JSON-rivit kv:hen (ei levyä). Palauttaa "virtuaalipolun".
-    """
-    if IS_CLOUD:
-        safe = _safe_team_name(team_name)
-        # Luo tyhjät rakenteet kv:hen jos puuttuu
-        if load_json(f"teams/{safe}/player_master.json", default=None) is None:
-            save_json(f"teams/{safe}/player_master.json", _records_json_safe(pd.DataFrame(columns=MASTER_COLUMNS)))
-        if load_json(f"teams/{safe}/seasonal_stats.json", default=None) is None:
-            cols = stat_columns or DEFAULT_STATS_COLUMNS
-            save_json(f"teams/{safe}/seasonal_stats.json", _records_json_safe(pd.DataFrame(columns=cols)))
-        # Palautetaan symbolinen polku samaan formaattiin kuin lokaalisti
-        return (base_dir / safe)
+def initialize_team_folder(team_name: str, stat_columns: Optional[List[str]] = None, base_dir: Path | None = None) -> Path:
+    """Supabase-versiossa varmistetaan tiimin olemassaolo ja palautetaan symbolinen polku."""
+    client = get_client()
+    if client:
+        client.table("teams").upsert({"name": team_name}).execute()
+    return Path(team_name)  # symbolinen (yhteensopivuus muun koodin kanssa)
 
-    # Local
-    paths = get_team_paths(team_name, base_dir)
-    paths["folder"].mkdir(parents=True, exist_ok=True)
-    # players.csv (legacy)
-    if not paths["players"].exists():
-        pd.DataFrame(columns=DEFAULT_PLAYER_COLUMNS).to_csv(paths["players"], index=False)
-    # seasonal_stats.csv
-    if not paths["seasonal_stats"].exists():
-        cols = stat_columns or DEFAULT_STATS_COLUMNS
-        pd.DataFrame(columns=cols).to_csv(paths["seasonal_stats"], index=False)
-    # player_master.csv
-    if not paths["master"].exists():
-        pd.DataFrame(columns=MASTER_COLUMNS).to_csv(paths["master"], index=False)
-    return paths["folder"]
 
 def ensure_team_exists(team_name: str) -> bool:
-    """Create the team folder structure if it does not already exist.
-    Returns True when a new folder was created.
-    """
-    if IS_CLOUD:
-        safe = _safe_team_name(team_name)
-        had_master = load_json(f"teams/{safe}/player_master.json", default=None) is not None
-        had_stats  = load_json(f"teams/{safe}/seasonal_stats.json", default=None) is not None
-        if had_master and had_stats:
-            return False
-        initialize_team_folder(team_name)
-        return True
-
-    # Local
-    p = get_team_paths(team_name)["folder"]
-    if p.exists():
+    """True jos luotiin, False jos oli jo olemassa."""
+    client = get_client()
+    if not client:
         return False
-    initialize_team_folder(team_name)
+    res = client.table("teams").select("name").eq("name", team_name).execute()
+    if res.data:
+        return False
+    client.table("teams").insert({"name": team_name}).execute()
     return True
 
+
 def validate_player_input(name: str, df: pd.DataFrame) -> Tuple[bool, str]:
-    """Minimal validation helper for Player Editor."""
     nm = (name or "").strip()
     if not nm:
         return False, "Name cannot be empty."
     if "Name" in df.columns and nm in df["Name"].astype(str).tolist():
         return False, "Player name already exists."
     return True, ""
+
+
+# ---------------------------------------------------------------------------
+# Yhteensopivuus: polkujen "generointi" (ei käytä enää tiedostoja)
+# ---------------------------------------------------------------------------
+def get_team_paths(team_name: str, base_dir: Path | None = None) -> Dict[str, Path]:
+    """Palauta symboliset polut jotta legacy-koodi ei hajoa."""
+    base = Path(base_dir) if base_dir else Path(".")
+    root = base / team_name
+    return {
+        "folder": root,
+        "master": root / "player_master.csv",
+        "players": root / "players.csv",
+        "seasonal_stats": root / "seasonal_stats.csv",
+    }

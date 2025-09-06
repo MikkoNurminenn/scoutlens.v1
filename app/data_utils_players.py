@@ -1,25 +1,12 @@
-"""Utility helpers for accessing players stored in ``players.json``.
-
-This module acts as the single source of truth for player data used by
-both the Player Editor and the Scout Match Reporter. Reading the master
-player list is cached via ``st.cache_data`` so that Streamlit apps don't
-need to restart to pick up new players. Whenever the list is modified,
-``clear_players_cache`` should be called to invalidate the cache.
-"""
+"""Utility helpers for accessing players stored in the Supabase ``players`` table."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import List, Tuple
 
 import streamlit as st
 
-from storage import load_json, save_json, file_path
-
-# ---------------------------------------------------------------------------
-# Locations
-# ---------------------------------------------------------------------------
-PLAYERS_FP: Path = file_path("players.json")
+from supabase_client import get_client
 
 
 # ---------------------------------------------------------------------------
@@ -27,64 +14,50 @@ PLAYERS_FP: Path = file_path("players.json")
 # ---------------------------------------------------------------------------
 @st.cache_data
 def load_master() -> List[dict]:
-    """Return all players from ``players.json``.
+    """Return all players from the ``players`` table.
 
-    Each player is normalised to a dictionary containing at least the
-    keys ``id`` (string), ``name`` (string), ``team_name`` (string) and
-    ``position`` (string). Players missing a name are filtered out so they
-    won't appear in any dropdowns.
+    Each player is normalised to a dictionary containing the keys
+    ``id``, ``name``, ``team_name`` and ``position``. Players with a
+    missing name or id are skipped.
     """
 
-    raw = load_json(PLAYERS_FP, [])
-    if not isinstance(raw, list):
-        raw = []
+    client = get_client()
+    if not client:
+        return []
+    res = client.table("players").select("id,name,team_name,position").execute()
+    raw = res.data or []
+
     players: List[dict] = []
     for p in raw:
-        name = (p.get("name") or p.get("Name") or "").strip()
-        if not name:
+        name = (p.get("name") or "").strip()
+        pid = str(p.get("id") or "").strip()
+        if not name or not pid:
             continue
-        team = (
-            p.get("team_name")
-            or p.get("Team")
-            or p.get("team")
-            or ""
-        ).strip()
-        pos = (p.get("position") or p.get("Position") or "").strip()
-        pid = str(p.get("id") or p.get("PlayerID") or "").strip()
-        if not pid:
-            continue
-        players.append(
-            {
-                "id": pid,
-                "name": name,
-                "team_name": team,
-                "position": pos,
-            }
-        )
+        team = (p.get("team_name") or "").strip()
+        pos = (p.get("position") or "").strip()
+        players.append({"id": pid, "name": name, "team_name": team, "position": pos})
     return players
 
 
 def save_master(data: List[dict]) -> None:
-    """Persist ``data`` to ``players.json``."""
+    """Persist ``data`` to the ``players`` table."""
 
-    save_json(PLAYERS_FP, data)
+    client = get_client()
+    if client:
+        client.table("players").upsert(data).execute()
 
 
 # ---------------------------------------------------------------------------
 # Query helpers
 # ---------------------------------------------------------------------------
 def list_teams() -> List[str]:
-    """Return sorted list of unique team names found in ``players.json``."""
+    """Return sorted list of unique team names found in the players table."""
 
     return sorted({p["team_name"] for p in load_master() if p["team_name"]})
 
 
 def list_players_by_team(team_name: str) -> List[Tuple[str, str]]:
-    """Return ``[(id, label), ...]`` for players of ``team_name``.
-
-    ``label`` is formatted as ``"Name (Position) — Team"``. Players with a
-    missing name are skipped.
-    """
+    """Return ``[(id, label), ...]`` for players of ``team_name``."""
 
     norm = (team_name or "").strip().lower()
     opts: List[Tuple[str, str]] = []
@@ -92,9 +65,11 @@ def list_players_by_team(team_name: str) -> List[Tuple[str, str]]:
         team = p["team_name"].strip().lower()
         if team != norm:
             continue
-        label = f"{p['name']} ({p['position']}) — {p['team_name']}" if p[
-            "position"
-        ] else f"{p['name']} — {p['team_name']}"
+        label = (
+            f"{p['name']} ({p['position']}) — {p['team_name']}"
+            if p["position"]
+            else f"{p['name']} — {p['team_name']}"
+        )
         opts.append((p["id"], label))
     return opts
 

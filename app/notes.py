@@ -1,36 +1,32 @@
 # app/notes.py — Notes (read/write/search/tags/export)
 from __future__ import annotations
-import json, os, tempfile, uuid
+import uuid
 from datetime import datetime, date
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
-from app_paths import file_path, DATA_DIR
 
-NOTES_FP = file_path("notes.json")
+from supabase_client import get_client
 
 # ---------- IO ----------
 @st.cache_data(show_spinner=False)
-def _load_json(fp: Path, default):
-    try:
-        if fp.exists():
-            return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return default
+def _load_notes() -> List[Dict[str, Any]]:
+    client = get_client()
+    if not client:
+        return []
+    res = client.table("notes").select("*").execute()
+    data = res.data or []
+    return data if isinstance(data, list) else []
 
-def _save_json_atomic(fp: Path, data: Any) -> None:
-    try:
-        payload = json.dumps(data, ensure_ascii=False, indent=2)
-        fp.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile("w", delete=False, dir=str(fp.parent), encoding="utf-8") as tmp:
-            tmp.write(payload)
-            tmp_path = tmp.name
-        os.replace(tmp_path, fp)
-    except Exception as e:
-        st.error(f"Could not write notes.json: {e}")
+
+def _save_notes(data: List[Dict[str, Any]]) -> None:
+    client = get_client()
+    if not client:
+        return
+    client.table("notes").delete().neq("id", None).execute()
+    if data:
+        client.table("notes").insert(data).execute()
 
 # ---------- Utils ----------
 def _now_iso() -> str:
@@ -60,12 +56,9 @@ def _fmt_ts(s: Optional[str]) -> str:
 # ---------- Main ----------
 def show_notes():
     st.header("🗒️ Notes")
-    st.caption(f"Data folder → `{DATA_DIR}`")
 
     # Load
-    notes = _load_json(NOTES_FP, [])
-    if not isinstance(notes, list):
-        notes = []
+    notes = _load_notes()
 
     # --- Add note ---
     st.subheader("Add a note")
@@ -89,7 +82,7 @@ def show_notes():
             if t:
                 item = {"id": uuid.uuid4().hex, "created_at": _now_iso(), "text": t, "tags": tags}
                 notes.append(item)
-                _save_json_atomic(NOTES_FP, notes)
+                _save_notes(notes)
                 st.cache_data.clear()
                 st.success("Saved.")
                 st.rerun()
@@ -179,7 +172,7 @@ def show_notes():
         confirm = st.text_input("Confirmation", key="notes__confirm", placeholder="DELETE")
         if st.button(f"🗑️ Delete selected ({len(picks)})", disabled=(len(picks)==0 or confirm!="DELETE"), key="notes__bulk_del"):
             kept = [n for n in notes if n.get("id") not in set(picks)]
-            _save_json_atomic(NOTES_FP, kept)
+            _save_notes(kept)
             st.cache_data.clear()
             st.success(f"Deleted {len(picks)} note(s).")
             st.rerun()
@@ -202,7 +195,7 @@ def show_notes():
                 with top[2]:
                     if st.button("🗑️ Delete", key=f"notes__del_{n['id']}"):
                         kept = [m for m in notes if m.get("id") != n["id"]]
-                        _save_json_atomic(NOTES_FP, kept)
+                        _save_notes(kept)
                         st.cache_data.clear()
                         st.success("Deleted.")
                         st.rerun()
@@ -221,7 +214,7 @@ def show_notes():
                         updated = []
                         for m in notes:
                             updated.append(n if m.get("id")==n["id"] else m)
-                        _save_json_atomic(NOTES_FP, updated)
+                        _save_notes(updated)
                         st.cache_data.clear()
                         st.success("Updated.")
                         st.rerun()
