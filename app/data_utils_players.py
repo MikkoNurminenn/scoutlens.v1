@@ -79,3 +79,7 @@ def clear_players_cache() -> None:
 
     load_master.clear()  # type: ignore[attr-defined]
 
+
+def clear_players_cache():
+    """No-op shim. Exists so imports don't explode even if caching isn't used."""
+    return None
