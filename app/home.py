@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import io
 import json
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
+import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
 from supabase_client import get_client
@@ -20,14 +23,55 @@ def _safe_len(x) -> int:
         return 0
 
 
-def _match_dt(m: Dict[str, Any]) -> Optional[datetime]:
-    dt_iso = m.get("kickoff_at")
-    if not dt_iso:
-        return None
+def _get_app_tz() -> ZoneInfo:
+    tz_name = (
+        st.session_state.get("scoutlens_tz")
+        or os.environ.get("SCOUTLENS_TZ")
+        or "America/Bogota"
+    )
     try:
-        return datetime.fromisoformat(str(dt_iso).replace("Z", "+00:00"))
+        return ZoneInfo(tz_name)
     except Exception:
+        return ZoneInfo("UTC")
+
+
+APP_TZ = _get_app_tz()
+
+
+def _ensure_aware(dt: datetime | None, default_tz: ZoneInfo) -> datetime | None:
+    if dt is None:
         return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=default_tz)
+    return dt
+
+
+def _parse_kickoff(match: dict, default_tz: ZoneInfo) -> datetime | None:
+    # 1) kickoff_at ISO8601, with or without tz
+    val = match.get("kickoff_at")
+    if isinstance(val, str) and val.strip():
+        try:
+            dt = datetime.fromisoformat(val.strip().replace("Z", "+00:00"))
+            return _ensure_aware(dt, default_tz)
+        except Exception:
+            pass
+
+    # 2) separate date + time (+ optional tz)
+    d, t = match.get("date"), match.get("time")
+    if d and t:
+        try:
+            dt = datetime.fromisoformat(f"{d}T{t}")
+            tz_name = match.get("tz")
+            if tz_name:
+                try:
+                    return _ensure_aware(dt, ZoneInfo(tz_name))
+                except Exception:
+                    return _ensure_aware(dt, default_tz)
+            return _ensure_aware(dt, default_tz)
+        except Exception:
+            pass
+
+    return None
 
 
 def _postgrest_error_box(e: APIError):
@@ -210,10 +254,39 @@ def show_home():
 
     # Upcoming matches (next 10)
     st.markdown("#### 📅 Upcoming matches")
-    now = datetime.now()
-    matches_with_dt = [(m, _match_dt(m)) for m in matches]
-    upcoming = [m for m, dtv in matches_with_dt if dtv and dtv >= now]
-    upcoming.sort(key=_match_dt)
+    matches_with_dt: list[tuple[dict, datetime | None]] = [
+        (m, _parse_kickoff(m, APP_TZ)) for m in matches
+    ]
+
+    now = datetime.now(APP_TZ)
+
+    upcoming = [
+        m
+        for (m, dtv) in matches_with_dt
+        if (dtv is not None and dtv.astimezone(APP_TZ) >= now)
+    ]
+    upcoming.sort(
+        key=lambda m: (
+            _parse_kickoff(m, APP_TZ)
+            or datetime.max.replace(tzinfo=APP_TZ)
+        )
+    )
+
+    if st.checkbox("Debug datetimes", value=False, key="home__dbg_dt"):
+        rows = []
+        for m, dtv in matches_with_dt:
+            rows.append(
+                {
+                    "match": f"{m.get('home_team','?')} vs {m.get('away_team','?')}",
+                    "raw_kickoff": m.get("kickoff_at")
+                    or f"{m.get('date')} {m.get('time')}",
+                    "parsed": str(dtv),
+                    "tzinfo": str(getattr(dtv, 'tzinfo', None)),
+                }
+            )
+        st.dataframe(pd.DataFrame(rows))
+        st.write("now:", now, "tz:", now.tzinfo)
+
     latam_tz = st.session_state.get("latam_tz", "America/Bogota")
     user_tz = st.session_state.get("user_tz", "Europe/Helsinki")
 
