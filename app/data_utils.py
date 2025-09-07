@@ -13,9 +13,9 @@ import numpy as np
 import pandas as pd
 
 from postgrest.exceptions import APIError
-from schema import MASTER_FIELDS, COMMON_FIELDS
-from supabase_client import get_client
-from utils.supa import first_row
+from app.schema import MASTER_FIELDS, COMMON_FIELDS
+from app.supabase_client import get_client
+from app.utils.supa import first_row
 
 # Yhteensopivuus: jotkin moduulit odottavat BASE_DIR -muuttujaa
 BASE_DIR = Path(".")

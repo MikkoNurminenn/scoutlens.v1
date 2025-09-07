@@ -9,8 +9,8 @@ from pathlib import Path
 import streamlit as st
 import pandas as pd  # NEW
 
-from app_paths import file_path, DATA_DIR
-from data_utils import (  # NEW
+from app.app_paths import file_path, DATA_DIR
+from app.data_utils import (
     load_master, save_master
 )
 

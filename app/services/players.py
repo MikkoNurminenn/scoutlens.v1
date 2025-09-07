@@ -1,8 +1,8 @@
+from __future__ import annotations
 from typing import Dict, Any
 
 from postgrest.exceptions import APIError
-from supabase_client import get_client
-from utils.supa import first_row
+from app.utils.supa import get_client, first_row
 
 
 def insert_player(payload: Dict[str, Any]) -> Dict[str, Any]:

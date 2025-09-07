@@ -12,15 +12,15 @@ import streamlit as st
 import traceback
 
 # --- Supabase & data helpers ---
-from supabase_client import get_client
-from data_utils import (
+from app.supabase_client import get_client
+from app.data_utils import (
     load_master, save_master,
     load_seasonal_stats, save_seasonal_stats,
     parse_date, _ser_date
 )
-from data_utils_players_json import clear_players_cache  # armollinen no-op jos ei tee mitään
-from teams_store import add_team, list_teams
-from shortlists import (
+from app.data_utils_players_json import clear_players_cache  # armollinen no-op jos ei tee mitään
+from app.teams_store import add_team, list_teams
+from app.shortlists import (
     _load_shortlists as _db_load_shortlists,
     _save_shortlists as _db_save_shortlists,
 )

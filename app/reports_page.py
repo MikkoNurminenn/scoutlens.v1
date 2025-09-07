@@ -24,9 +24,9 @@ import streamlit as st
 from postgrest.exceptions import APIError
 import traceback
 
-from supabase_client import get_client
-from db_tables import PLAYERS, REPORTS
-from services.players import insert_player
+from app.supabase_client import get_client
+from app.db_tables import PLAYERS, REPORTS
+from app.services.players import insert_player
 
 # ---------------------------------------------------------------------------
 # Helpers

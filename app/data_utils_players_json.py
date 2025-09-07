@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import List, Tuple, Dict
 
 import streamlit as st
-from supabase_client import get_client
+from app.supabase_client import get_client
 
 
 # ---------------------------------------------------------------------------

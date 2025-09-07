@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 from pathlib import Path
-from data_utils import BASE_DIR, list_teams, load_master
+from app.data_utils import BASE_DIR, list_teams, load_master
 
 # Attempt mplsoccer import
 try:

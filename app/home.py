@@ -7,13 +7,14 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
+import os
 
 import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
-from supabase_client import get_client
-from time_utils import to_tz
-from db_tables import PLAYERS, SCOUT_REPORTS, NOTES, MATCHES
+from app.supabase_client import get_client
+from app.time_utils import to_tz
+from app.db_tables import PLAYERS, SCOUT_REPORTS, NOTES, MATCHES
 
 
 # ---------------- Utilities ----------------

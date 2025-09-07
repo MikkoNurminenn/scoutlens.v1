@@ -11,8 +11,8 @@ import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
 
-from supabase_client import get_client
-from db_tables import REPORTS
+from app.supabase_client import get_client
+from app.db_tables import REPORTS
 
 
 def _fetch_export_rows():

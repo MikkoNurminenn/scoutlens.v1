@@ -3,13 +3,13 @@ import pandas as pd
 import json
 from pathlib import Path
 from uuid import uuid4
-from storage import load_json, save_json
+from app.storage import load_json, save_json
 
-from app_paths import file_path, DATA_DIR
+from app.app_paths import file_path, DATA_DIR
 
 # yritetään käyttää list_teams(), mutta ei ole pakollinen
 try:
-    from data_utils import list_teams
+    from app.data_utils import list_teams
 except Exception:
     list_teams = None  # fallback players.jsonista
 
