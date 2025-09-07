@@ -42,6 +42,26 @@ CANON_MAP = {
 CANON_ORDER = ["id","name","team_name","position","date_of_birth","preferred_foot","club_number","scout_rating","transfermarkt_url","created_at"]
 
 
+def _to_iso_date(v):
+    try:
+        if pd.isna(v):
+            return None
+    except Exception:
+        pass
+    try:
+        return pd.to_datetime(v).date().isoformat()
+    except Exception:
+        return None
+
+
+def _save_master_sanitized(df: pd.DataFrame, team: str) -> None:
+    if "date_of_birth" in df.columns:
+        df["date_of_birth"] = df["date_of_birth"].map(_to_iso_date)
+    if "DateOfBirth" in df.columns:
+        df["DateOfBirth"] = df["DateOfBirth"].map(_to_iso_date)
+    save_master(df, team)
+
+
 def _is_blank_or_na(x) -> bool:
     if x is None:
         return True
@@ -451,7 +471,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             new_row = {col: "" for col in df_master.columns}
             new_row.update({"PlayerID": new_id, "Name": "New Player"})
             df_master = safe_append_row(df_master, new_row)
-            save_master(df_master, selected_team)
+            _save_master_sanitized(df_master, selected_team)
             st.cache_data.clear()
             st.success("First player row created.")
             st.rerun()
@@ -482,7 +502,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
 
             df_master = _ensure_player_id(df_master)
 
-            save_master(df_master, selected_team)
+            _save_master_sanitized(df_master, selected_team)
             st.cache_data.clear()
             st.success("Table saved.")
 
@@ -494,7 +514,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             new_row = {col: "" for col in df_master.columns}
             new_row.update({"PlayerID": new_id, "Name": "New Player"})
             df_master = safe_append_row(df_master, new_row)
-            save_master(df_master, selected_team)
+            _save_master_sanitized(df_master, selected_team)
             st.cache_data.clear()
             st.success("New player row added.")
             st.rerun()
@@ -589,7 +609,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 df_master.at[idx, "Position"]        = _as_str(pos_val)
                 df_master.at[idx, "ScoutRating"]     = _as_int(scout_rating, 0)
                 df_master.at[idx, "TransfermarktURL"]= _as_str(tm_url_val)
-                save_master(df_master, selected_team)
+                _save_master_sanitized(df_master, selected_team)
                 st.cache_data.clear()
                 st.success("Basic info saved.")
                 st.session_state["pe_last_saved_pid"] = pid_str
@@ -739,7 +759,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 copy["PlayerID"] = _new_player_id()
                 copy["Name"] = f"{copy.get('Name','')} (copy)"
                 df_master = safe_append_row(df_master, copy.to_dict())
-                save_master(df_master, selected_team)
+                _save_master_sanitized(df_master, selected_team)
                 st.cache_data.clear()
                 st.success("Row duplicated.")
         with a2:
@@ -751,7 +771,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                     src = df_master.copy()
                     row_to_move = src[src["PlayerID"] == pid_str]
                     src = src[src["PlayerID"] != pid_str]
-                    save_master(src, selected_team)
+                    _save_master_sanitized(src, selected_team)
                     st.cache_data.clear()
                     if not row_to_move.empty:
                         target_master = load_master(new_team)
@@ -762,7 +782,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                         row_to_move = row_to_move.copy()
                         row_to_move.loc[:, "PlayerID"] = new_pid
                         target_master = safe_append_row(target_master, row_to_move.iloc[0].to_dict())
-                        save_master(target_master, new_team)
+                        _save_master_sanitized(target_master, new_team)
                         st.cache_data.clear()
                         st.success(f"Player moved to {new_team}.")
         with a3:
@@ -770,7 +790,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             conf = st.text_input("Confirmation", key=f"{selected_team}_{pid_str}_del_conf", placeholder="DELETE")
             if st.button("Delete row from master", key=f"{selected_team}_{pid_str}_del_row", disabled=(conf != "DELETE")):
                 df_master = df_master[df_master["PlayerID"] != pid_str]
-                save_master(df_master, selected_team)
+                _save_master_sanitized(df_master, selected_team)
                 st.cache_data.clear()
                 st.success("Row deleted from master.")
 

@@ -1,6 +1,8 @@
 # data_utils.py — Supabase-backed helpers (clean)
 from __future__ import annotations
 
+from __future__ import annotations
+
 from pathlib import Path
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -9,6 +11,7 @@ import pandas as pd
 
 from schema import MASTER_FIELDS, COMMON_FIELDS
 from supabase_client import get_client
+from data_sanitize import clean_jsonable
 
 # Yhteensopivuus: jotkin moduulit odottavat BASE_DIR -muuttujaa
 BASE_DIR = Path(".")
@@ -17,6 +20,13 @@ BASE_DIR = Path(".")
 MASTER_COLUMNS = MASTER_FIELDS
 DEFAULT_PLAYER_COLUMNS = COMMON_FIELDS.copy()
 DEFAULT_STATS_COLUMNS = ["PlayerID", "Season", "Goals", "Assists", "MinutesPlayed"]
+
+# Columns that are persisted in the Supabase ``players`` table
+PLAYERS_COLUMNS = [
+    "id","external_id","team_id","team_name","name","nationality",
+    "date_of_birth","preferred_foot","club_number","position",
+    "scout_rating","transfermarkt_url","notes",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -111,23 +121,8 @@ def _coerce_seasonal(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _records_json_safe(df: pd.DataFrame) -> List[dict]:
-    """Muunna DataFrame listaksi dict-olioita: date/datetime → ISO-stringiksi."""
-    tmp = df.copy()
-    for col in tmp.columns:
-        if pd.api.types.is_datetime64_any_dtype(tmp[col]):
-            # pandas datetime → string
-            tmp[col] = tmp[col].astype(str)
-        else:
-            # date/datetime objektit → ISO
-            def _conv(x):
-                if isinstance(x, (date, datetime)):
-                    return _ser_date(x)
-                return x
-            try:
-                tmp[col] = tmp[col].apply(_conv)
-            except Exception:
-                pass
-    return tmp.to_dict(orient="records")
+    """Return a list of JSON-serializable dicts for the given DataFrame."""
+    return clean_jsonable(df) if df is not None else []
 
 
 # ---------------------------------------------------------------------------
@@ -137,36 +132,55 @@ def list_teams() -> List[str]:
     client = get_client()
     if not client:
         return []
-    res = client.table("teams").select("name").execute()
-    return sorted(r.get("name") for r in (res.data or []) if r.get("name"))
+    r = client.table("teams").select("name").order("name").execute()
+    return [row["name"] for row in (r.data or []) if row.get("name")]
+
+
+def load_players(team_name: str | None = None) -> pd.DataFrame:
+    client = get_client()
+    if not client:
+        return pd.DataFrame()
+    q = client.table("players").select("*")
+    if team_name:
+        q = q.eq("team_name", team_name)
+    res = q.execute()
+    return pd.DataFrame(res.data or [])
+
+
+def save_players(df: pd.DataFrame, team_name: str | None = None) -> None:
+    client = get_client()
+    if not client or df is None or df.empty:
+        return
+    if team_name and "team_name" not in df.columns:
+        df = df.assign(team_name=team_name)
+    cols = [c for c in PLAYERS_COLUMNS if c in df.columns]
+    records = clean_jsonable(df[cols])
+    BATCH = 500
+    table = client.table("players")
+    for i in range(0, len(records), BATCH):
+        chunk = records[i:i+BATCH]
+        if not chunk:
+            continue
+        try:
+            table.upsert(chunk, on_conflict="id").execute()
+        except TypeError:
+            table.upsert(chunk).execute()
 
 
 def load_master(team: str) -> pd.DataFrame:
-    client = get_client()
-    if not client:
-        return pd.DataFrame(columns=MASTER_COLUMNS)
-    res = client.table("players").select("*").eq("team_name", team).execute()
-    df = pd.DataFrame(res.data or [])
+    df = load_players(team)
+    if not df.empty:
+        df = df.rename(columns={"id": "PlayerID", "name": "Name"})
     return _coerce_master(df)
 
 
 def save_master(df: pd.DataFrame, team: str) -> None:
-    client = get_client()
-    if not client:
+    if df is None:
         return
-    data = _records_json_safe(_coerce_master(df))
-    for row in data:
-        row["team_name"] = team
-    client.table("players").upsert(data).execute()
-
-
-# Aliasit
-def load_players(team: str) -> pd.DataFrame:
-    return load_master(team)
-
-
-def save_players(df: pd.DataFrame, team: str) -> None:
-    save_master(df, team)
+    df = _coerce_master(df)
+    df = df.rename(columns={"PlayerID": "id", "Name": "name"})
+    df["team_name"] = team
+    save_players(df)
 
 
 def list_players_by_team(team: str) -> List[Dict[str, Any]]:

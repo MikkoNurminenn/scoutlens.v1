@@ -1,15 +1,15 @@
-from supabase import create_client, Client
+from typing import Optional
 import os
+import streamlit as st
+from supabase import create_client, Client
 
+_CACHE: Optional[Client] = None
 
 def get_client() -> Client:
-    try:
-        import streamlit as st
-        url = st.secrets.get("SUPABASE_URL", "") or os.getenv("SUPABASE_URL", "")
-        key = st.secrets.get("SUPABASE_ANON_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")
-    except Exception:
-        url = os.getenv("SUPABASE_URL", "")
-        key = os.getenv("SUPABASE_ANON_KEY", "")
-    if not url or not key:
-        raise RuntimeError("Supabase secrets missing")
-    return create_client(url, key)
+    global _CACHE
+    if _CACHE:
+        return _CACHE
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"].get("anon_key") or os.environ["SUPABASE_ANON_KEY"]
+    _CACHE = create_client(url, key)
+    return _CACHE
