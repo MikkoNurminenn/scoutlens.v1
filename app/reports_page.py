@@ -25,6 +25,7 @@ from postgrest.exceptions import APIError
 
 from supabase_client import get_client
 from db_tables import PLAYERS, REPORTS
+from data_utils import insert_player_quick
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -133,6 +134,55 @@ def show_reports_page() -> None:
     """Render the reports page."""
 
     st.markdown("## 📝 Reports")
+
+    with st.expander("➕ Add Player", expanded=False):
+        with st.form("reports__quick_add", clear_on_submit=False):
+            c1, c2 = st.columns(2)
+            with c1:
+                name = st.text_input("Name *", key="r_add_name")
+                position = st.text_input("Position", key="r_add_pos")
+                foot = st.selectbox(
+                    "Preferred foot", ["", "Left", "Right", "Both"], key="r_add_foot"
+                )
+                nationality = st.text_input("Nationality", key="r_add_nat")
+            with c2:
+                club = st.text_input("Current club", key="r_add_club")
+                dob = st.date_input(
+                    "Birth date", value=None, key="r_add_dob", format="YYYY-MM-DD"
+                )
+                tm = st.text_input("Transfermarkt URL", key="r_add_tm")
+            notes = st.text_area("Notes", key="r_add_notes", height=80)
+
+            b1, b2 = st.columns(2)
+            save = b1.form_submit_button("Save Player", use_container_width=True)
+            full = b2.form_submit_button("Open Full Editor", use_container_width=True)
+
+            if full:
+                st.session_state["current_page"] = "Player Editor"
+                st.session_state["player_editor__mode"] = "new"
+                st.rerun()
+
+            if save:
+                try:
+                    payload = {
+                        "name": name,
+                        "position": position,
+                        "preferred_foot": foot or None,
+                        "nationality": nationality,
+                        "current_club": club,
+                        "transfermarkt_url": tm,
+                        "notes": notes,
+                    }
+                    if isinstance(dob, date):
+                        payload["date_of_birth"] = dob.isoformat()
+                    row = insert_player_quick(payload)
+                    st.success(f"Player '{row.get('name')}' created.")
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("r_add_"):
+                            del st.session_state[k]
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
 
     players = _load_players()
     player_options = {p["name"]: p["id"] for p in players}
