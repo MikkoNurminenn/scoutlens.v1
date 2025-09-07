@@ -15,6 +15,7 @@ from supabase_client import get_client
 from data_utils import list_teams, list_players_by_team  # käyttää Supabasea
 from time_utils import to_tz
 from data_sanitize import clean_jsonable
+from db_tables import MATCHES, SCOUT_REPORTS, SHORTLISTS
 
 REQUIRED_COLS = [
     "id",
@@ -66,7 +67,7 @@ def list_shortlists() -> List[str]:
     client = get_client()
     if not client:
         return []
-    res = client.table("shortlists").select("name").execute()
+    res = client.table(SHORTLISTS).select("name").execute()
     names = [r.get("name") for r in (res.data or []) if r.get("name")]
     return sorted(set(names))
 
@@ -75,7 +76,7 @@ def get_shortlist_members(shortlist_name: str) -> List[str]:
     if not client:
         return []
     res = (
-        client.table("shortlists")
+        client.table(SHORTLISTS)
         .select("player_id")
         .eq("name", shortlist_name)
         .execute()
@@ -124,7 +125,7 @@ def list_matches() -> List[Dict[str, Any]]:
         return []
     try:
         res = (
-            client.table("matches")
+            client.table(MATCHES)
             .select("*")
             .order("kickoff_at", desc=True)
             .execute()
@@ -148,16 +149,35 @@ def insert_match(m: Dict[str, Any]) -> None:
         "kickoff_at": m["kickoff_at"],
         "notes": m.get("notes", ""),
     }
-    client.table("matches").insert(new_item).execute()
+    client.table(MATCHES).insert(new_item).execute()
+
+
+def _warn_api_error(e: APIError, ctx: str):
+    msg = getattr(e, "message", None)
+    if not msg and e.args and isinstance(e.args[0], dict):
+        msg = e.args[0].get("message")
+    st.warning(f"PostgREST error in {ctx}: {msg or str(e)}")
+
 
 def list_reports(match_id: str | None = None) -> List[Dict[str, Any]]:
     client = get_client()
     if not client:
         return []
-    q = client.table("reports").select("*").order("created_at", desc=True)
+    q = client.table(SCOUT_REPORTS).select("*")
     if match_id:
         q = q.eq("match_id", match_id)
-    reps = q.execute().data or []
+    try:
+        reps = (q.order("created_at", desc=True, nulls_last=True).execute().data) or []
+    except APIError:
+        try:
+            reps = (q.order("inserted_at", desc=True, nulls_last=True).execute().data) or []
+        except APIError as e2:
+            _warn_api_error(e2, "list_reports/order")
+            try:
+                reps = (q.execute().data) or []
+            except APIError as e3:
+                _warn_api_error(e3, "list_reports/select")
+                return []
     match_map = {m["id"]: m for m in list_matches()}
     out = []
     for r in reps:
@@ -165,9 +185,9 @@ def list_reports(match_id: str | None = None) -> List[Dict[str, Any]]:
         out.append(
             {
                 **r,
-                "home_team": m.get("home_team", "?"),
-                "away_team": m.get("away_team", "?"),
-                "kickoff_at": m.get("kickoff_at", ""),
+                "home_team": m.get("home_team"),
+                "away_team": m.get("away_team"),
+                "kickoff_at": m.get("kickoff_at"),
             }
         )
     return out
@@ -178,14 +198,23 @@ def save_report(records: List[Dict[str, Any]]) -> None:
     if not client or not records:
         return
     payload = clean_jsonable(records)
-    client.table("reports").upsert(payload, on_conflict="id").execute()
+    client.table(SCOUT_REPORTS).upsert(payload, on_conflict="id").execute()
 
 
 def delete_reports(ids: List[str]) -> None:
     client = get_client()
     if not client:
         return
-    client.table("reports").delete().in_("id", [str(i) for i in ids]).execute()
+    client.table(SCOUT_REPORTS).delete().in_("id", [str(i) for i in ids]).execute()
+
+
+def dbg_report_count():
+    client = get_client()
+    try:
+        n = client.table(SCOUT_REPORTS).select("id", count="exact").execute().count
+        st.caption(f"scout_reports count: {n}")
+    except APIError as e:
+        _warn_api_error(e, "dbg_report_count")
 
 # ---------------- UI helpers ----------------
 def _fmt_match(r: Dict[str, Any]) -> str:
