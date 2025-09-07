@@ -375,10 +375,14 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         df_master = pd.DataFrame(columns=DEFAULT_COLUMNS)
 
     df_master = _ensure_min_columns(df_master)
+    # Remove possible duplicate columns to avoid InvalidIndexError on concat
+    if df_master.columns.duplicated().any():
+        df_master = df_master.loc[:, ~df_master.columns.duplicated()]
 
     # Lisää ensimmäinen rivi, jos rosteri on tyhjä
     if empty_state:
         if st.button("➕ Create first player row", key=f"pe_first_row__{selected_team}"):
+            df_master = df_master.loc[:, ~df_master.columns.duplicated()]
             new_id = _new_player_id()
             new_row = {col: "" for col in df_master.columns}
             new_row.update({"PlayerID": new_id, "Name": "New Player"})
@@ -421,6 +425,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
     # Lisää uusi rivi -osio
     with st.expander("➕ Add New Player", expanded=False):
         if st.button("Add row", key=f"pe_add_row__{selected_team}"):
+            df_master = df_master.loc[:, ~df_master.columns.duplicated()]
             new_id = _new_player_id()
             new_row = {col: "" for col in df_master.columns}
             new_row.update({"PlayerID": new_id, "Name": "New Player"})

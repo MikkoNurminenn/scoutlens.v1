@@ -280,7 +280,7 @@ def show_team_view():
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("Players", len(df))
     with c2:
-        pos_counts = Counter((df.get("Position") or pd.Series(dtype=object)).fillna("—").astype(str))
+        pos_counts = Counter(df.get("Position", pd.Series(dtype=object)).fillna("—").astype(str))
         st.metric("Unique positions", len(pos_counts))
     with c3:
         avg = round(pd.to_numeric(df.get("scout_rating", pd.Series([None]*len(df))), errors="coerce").dropna().mean(), 1) if len(df) else 0

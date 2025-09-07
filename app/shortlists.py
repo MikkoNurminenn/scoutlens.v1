@@ -3,43 +3,85 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 import streamlit as st
+from postgrest.exceptions import APIError
 
 from supabase_client import get_client
+
+
+def _pgrest_debug(e: APIError, title: str = "🔧 Supabase PostgREST -virhe (debug)"):
+    """Show PostgREST error details in an expander instead of crashing."""
+    with st.expander(title, expanded=True):
+        st.code(
+            f"""code:    {getattr(e, 'code', None)}
+message: {getattr(e, 'message', str(e))}
+details: {getattr(e, 'details', None)}
+hint:    {getattr(e, 'hint', None)}""",
+            language="text",
+        )
 
 # ---------- IO ----------
 def _load_players() -> List[Dict[str, Any]]:
     client = get_client()
     if not client:
         return []
-    res = client.table("players").select("*").execute()
-    return res.data or []
+    try:
+        res = client.table("players").select("*").execute()
+        return res.data or []
+    except APIError as e:
+        _pgrest_debug(e)
+        return []
+    except Exception:
+        return []
 
 
 def _load_shortlists() -> Dict[str, List[str]]:
     client = get_client()
     if not client:
         return {}
-    res = client.table("shortlists").select("name,player_id").execute()
-    out: Dict[str, List[str]] = {}
-    for r in res.data or []:
-        name = r.get("name")
-        pid = r.get("player_id")
-        if name and pid is not None:
-            out.setdefault(name, []).append(str(pid))
-    return out
+    try:
+        res = client.table("shortlists").select("name,player_id").execute()
+        out: Dict[str, List[str]] = {}
+        for r in res.data or []:
+            name = (r.get("name") or "default").strip() or "default"
+            pid = r.get("player_id")
+            if pid is not None:
+                out.setdefault(name, []).append(str(pid))
+        return out
+    except APIError as e:
+        # Fallback: legacy schema without 'name'
+        _pgrest_debug(e, "ℹ️ Shortlists-taulu ilman name-saraketta? (debug)")
+        try:
+            res = client.table("shortlists").select("player_id").execute()
+            ids = [str(r.get("player_id")) for r in (res.data or []) if r.get("player_id")]
+            return {"default": ids} if ids else {}
+        except Exception:
+            return {}
+    except Exception:
+        return {}
 
 
 def _save_shortlists(data: Dict[str, List[str]]):
     client = get_client()
     if not client:
         return
-    client.table("shortlists").delete().neq("name", "").execute()
-    rows = []
-    for name, ids in data.items():
-        for pid in ids:
-            rows.append({"name": name, "player_id": str(pid)})
-    if rows:
-        client.table("shortlists").insert(rows).execute()
+    try:
+        client.table("shortlists").delete().neq("name", "").execute()
+        rows = []
+        for name, ids in data.items():
+            for pid in ids:
+                rows.append({"name": name, "player_id": str(pid)})
+        if rows:
+            client.table("shortlists").insert(rows).execute()
+    except APIError as e:
+        # Legacy schema without 'name'
+        _pgrest_debug(e, "ℹ️ Shortlists-taulu ilman name-saraketta? (debug)")
+        try:
+            client.table("shortlists").delete().neq("player_id", None).execute()
+            flat = [str(pid) for ids in data.values() for pid in ids]
+            if flat:
+                client.table("shortlists").insert([{ "player_id": pid } for pid in flat]).execute()
+        except Exception:
+            pass
 
 # ---------- helpers ----------
 def _player_name(p: Dict[str, Any]) -> str:

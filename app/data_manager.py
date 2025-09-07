@@ -92,7 +92,6 @@ def _clean_val(v):
 # ---------- UI ----------
 def show_data_manager():
     st.title("🛠️ ScoutLens Data Manager (JSON)")
-    st.caption(f"Data folder → {DATA_DIR}")
 
     # 1) Valitse joukkue
     team = st.session_state.get("selected_team")

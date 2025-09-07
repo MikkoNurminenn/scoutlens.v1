@@ -307,7 +307,6 @@ def _card(m: Dict[str, Any], tz: str):
 # -------------- Public entry --------------
 def show_calendar():
     st.header("📅 Matches — Calendar")
-    st.caption(f"Data folder → `{DATA_DIR}`")
 
     t1, t2, t3 = st.columns([0.3, 0.3, 0.4])
     with t1:
