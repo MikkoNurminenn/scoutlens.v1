@@ -13,6 +13,7 @@ import streamlit as st
 from postgrest.exceptions import APIError
 from supabase_client import get_client
 from time_utils import to_tz
+from db_tables import PLAYERS, SCOUT_REPORTS, NOTES, MATCHES
 
 
 # ---------------- Utilities ----------------
@@ -91,7 +92,7 @@ hint:    {getattr(e, 'hint', None)}""",
 def _load_players() -> List[Dict[str, Any]]:
     client = get_client()
     try:
-        res = client.table("players").select("*").execute()
+        res = client.table(PLAYERS).select("*").execute()
         return res.data or []
     except APIError as e:
         _postgrest_error_box(e)
@@ -106,7 +107,7 @@ def _load_players() -> List[Dict[str, Any]]:
 def _load_reports() -> List[Dict[str, Any]]:
     client = get_client()
     try:
-        res = client.table("scout_reports").select("*").execute()
+        res = client.table(SCOUT_REPORTS).select("*").execute()
         return res.data or []
     except APIError as e:
         _postgrest_error_box(e)
@@ -122,7 +123,7 @@ def _load_notes() -> List[Dict[str, Any]]:
     """Noutaa muistiinpanot uusin ensin. Käytetään kenttää 'ts' (ISO-string)."""
     client = get_client()
     try:
-        res = client.table("notes").select("*").order("ts", desc=True).execute()
+        res = client.table(NOTES).select("*").order("ts", desc=True).execute()
         return res.data or []
     except APIError as e:
         _postgrest_error_box(e)
@@ -140,7 +141,7 @@ def _append_note(text: str):
         return
     client = get_client()
     try:
-        client.table("notes").insert({
+        client.table(NOTES).insert({
             "ts": datetime.now().isoformat(timespec="seconds"),
             "text": txt,
         }).execute()
@@ -156,7 +157,7 @@ def _load_matches() -> List[Dict[str, Any]]:
     client = get_client()
     try:
         res = (
-            client.table("matches")
+            client.table(MATCHES)
             .select("*")
             .order("kickoff_at", desc=True)
             .execute()

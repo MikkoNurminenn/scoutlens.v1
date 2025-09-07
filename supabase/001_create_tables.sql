@@ -38,7 +38,7 @@ create table if not exists public.matches (
   created_at timestamptz default now()
 );
 
-create table if not exists public.reports (
+create table if not exists public.scout_reports (
   id uuid primary key default gen_random_uuid(),
   match_id uuid references public.matches(id) on delete cascade,
   player_id uuid references public.players(id) on delete set null,
