@@ -5,13 +5,15 @@ from __future__ import annotations
 
 from pathlib import Path
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
+import math
+import numpy as np
 import pandas as pd
 
 from schema import MASTER_FIELDS, COMMON_FIELDS
 from supabase_client import get_client
-from data_sanitize import clean_jsonable
 
 # Yhteensopivuus: jotkin moduulit odottavat BASE_DIR -muuttujaa
 BASE_DIR = Path(".")
@@ -27,6 +29,41 @@ PLAYERS_COLUMNS = [
     "date_of_birth","preferred_foot","club_number","position",
     "scout_rating","transfermarkt_url","notes",
 ]
+
+
+# ---------------------------------------------------------------------------
+# JSON sanitizing
+# ---------------------------------------------------------------------------
+def _to_json_safe(obj: Any) -> Any:
+    """Recursively convert obj to JSON-safe primitives for PostgREST."""
+    if obj is None or isinstance(obj, (bool, str, int)):
+        return obj
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, (np.generic,)):
+        return _to_json_safe(obj.item())
+    if isinstance(obj, (pd.Timestamp, datetime)):
+        if pd.isna(obj):
+            return None
+        return obj.isoformat()
+    if isinstance(obj, date):
+        return obj.isoformat()
+    if obj is pd.NaT or (isinstance(obj, float) and math.isnan(obj)):
+        return None
+    if isinstance(obj, Decimal):
+        f = float(obj)
+        return f if math.isfinite(f) else None
+    if isinstance(obj, dict):
+        return {k: _to_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_to_json_safe(v) for v in obj]
+    return str(obj)
+
+
+def _assert_json_serializable(records: List[Dict[str, Any]]) -> None:
+    import json
+    for idx, r in enumerate(records):
+        json.dumps(r, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +159,10 @@ def _coerce_seasonal(df: pd.DataFrame) -> pd.DataFrame:
 
 def _records_json_safe(df: pd.DataFrame) -> List[dict]:
     """Return a list of JSON-serializable dicts for the given DataFrame."""
-    return clean_jsonable(df) if df is not None else []
+    if df is None:
+        return []
+    recs = df.to_dict(orient="records")
+    return [_to_json_safe(r) for r in recs]
 
 
 # ---------------------------------------------------------------------------
@@ -147,18 +187,40 @@ def load_players(team_name: str | None = None) -> pd.DataFrame:
     return pd.DataFrame(res.data or [])
 
 
-def save_players(df: pd.DataFrame, team_name: str | None = None) -> None:
+def save_players(
+    df: pd.DataFrame,
+    team_name: str | None = None,
+    *,
+    batch_size: int = 500,
+    debug: bool = False,
+) -> None:
     client = get_client()
     if not client or df is None or df.empty:
         return
     if team_name and "team_name" not in df.columns:
         df = df.assign(team_name=team_name)
+    df = df.replace({np.nan: None})
     cols = [c for c in PLAYERS_COLUMNS if c in df.columns]
-    records = clean_jsonable(df[cols])
-    BATCH = 500
+    records_raw = df[cols].to_dict(orient="records")
+    records = [_to_json_safe(r) for r in records_raw]
+
+    if debug:
+        try:
+            _assert_json_serializable(records[:5])
+        except Exception as e:
+            first = records[:1] or [{}]
+            print(
+                "\U0001F534 JSON not safe at row 0",
+                "error:",
+                repr(e),
+                "record snippet:",
+                {k: first[0].get(k) for k in list(first[0])[:8]},
+            )
+            raise
+
     table = client.table("players")
-    for i in range(0, len(records), BATCH):
-        chunk = records[i:i+BATCH]
+    for i in range(0, len(records), batch_size):
+        chunk = records[i:i + batch_size]
         if not chunk:
             continue
         try:
@@ -174,13 +236,19 @@ def load_master(team: str) -> pd.DataFrame:
     return _coerce_master(df)
 
 
-def save_master(df: pd.DataFrame, team: str) -> None:
+def save_master(
+    df: pd.DataFrame,
+    team: str,
+    *,
+    batch_size: int = 500,
+    debug: bool = False,
+) -> None:
     if df is None:
         return
     df = _coerce_master(df)
     df = df.rename(columns={"PlayerID": "id", "Name": "name"})
     df["team_name"] = team
-    save_players(df)
+    save_players(df, batch_size=batch_size, debug=debug)
 
 
 def list_players_by_team(team: str) -> List[Dict[str, Any]]:

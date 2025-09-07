@@ -7,6 +7,7 @@ from uuid import uuid4
 from datetime import date, datetime
 
 import pandas as pd
+import numpy as np
 import streamlit as st
 
 # --- Supabase & data helpers ---
@@ -42,23 +43,41 @@ CANON_MAP = {
 CANON_ORDER = ["id","name","team_name","position","date_of_birth","preferred_foot","club_number","scout_rating","transfermarkt_url","created_at"]
 
 
-def _to_iso_date(v):
-    try:
-        if pd.isna(v):
-            return None
-    except Exception:
-        pass
-    try:
-        return pd.to_datetime(v).date().isoformat()
-    except Exception:
-        return None
-
-
 def _save_master_sanitized(df: pd.DataFrame, team: str) -> None:
-    if "date_of_birth" in df.columns:
-        df["date_of_birth"] = df["date_of_birth"].map(_to_iso_date)
-    if "DateOfBirth" in df.columns:
-        df["DateOfBirth"] = df["DateOfBirth"].map(_to_iso_date)
+    df = df.copy()
+
+    TEXT_COLS = (
+        "Name",
+        "Nationality",
+        "PreferredFoot",
+        "Position",
+        "TransfermarktURL",
+        "name",
+        "nationality",
+        "preferred_foot",
+        "position",
+        "transfermarkt_url",
+    )
+    for c in TEXT_COLS:
+        if c in df.columns:
+            df[c] = (
+                df[c]
+                .astype("string")
+                .str.strip()
+                .where(lambda s: s.ne(""), None)
+            )
+
+    DATE_COLS = ("DateOfBirth", "date_of_birth")
+    for c in DATE_COLS:
+        if c in df.columns:
+            df[c] = pd.to_datetime(df[c], errors="coerce").dt.tz_localize(None)
+
+    NUM_COLS = ("ScoutRating", "ClubNumber", "scout_rating", "club_number")
+    for c in NUM_COLS:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+            df[c] = df[c].where(np.isfinite(df[c]), None)
+
     save_master(df, team)
 
 
