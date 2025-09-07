@@ -26,27 +26,50 @@ from postgrest.exceptions import APIError
 from supabase_client import get_client
 from db_tables import PLAYERS, REPORTS
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _load_players() -> List[Dict[str, Any]]:
-    """Return all players ordered by name."""
+def _safe_query(
+    table_name: str, select: str = "*", order_by: str | None = None,
+    desc: bool = False, limit: int | None = None,
+):
     client = get_client()
+    q = client.table(table_name).select(select)
+    if order_by:
+        q = q.order(order_by, desc=desc)
+    if limit:
+        q = q.limit(limit)
     try:
-        res = (
-            client.table(PLAYERS)
-            .select("id,name,current_club")
-            .order("name")
-            .execute()
-        )
-        return res.data or []
+        return q.execute().data or []
     except APIError as e:
-        st.error("Failed to load players from Supabase.")
-        st.exception(e)
+        st.error(
+            f"Supabase APIError on {table_name}: {getattr(e, 'message', e)}"
+        )
         return []
+
+
+def _load_players() -> List[Dict[str, Any]]:
+    """Return normalized players."""
+    rows = _safe_query("players_v") or _safe_query(PLAYERS)
+    norm: List[Dict[str, Any]] = []
+    for r in rows:
+        norm.append(
+            {
+                "id": r.get("id"),
+                "name": r.get("name") or r.get("full_name") or r.get("player_name"),
+                "position": r.get("position") or r.get("pos"),
+                "nationality": r.get("nationality") or r.get("nation"),
+                "current_club": r.get("current_club")
+                or r.get("club")
+                or r.get("team")
+                or r.get("current_team"),
+                "preferred_foot": r.get("preferred_foot") or r.get("foot"),
+                "transfermarkt_url": r.get("transfermarkt_url") or r.get("tm_url"),
+            }
+        )
+    return norm
 
 
 def _insert_report(payload: Dict[str, Any]) -> bool:
@@ -56,30 +79,47 @@ def _insert_report(payload: Dict[str, Any]) -> bool:
         client.table(REPORTS).insert(payload).execute()
         return True
     except APIError as e:
-        st.error("Could not save report to Supabase.")
-        st.exception(e)
+        st.error(
+            f"Could not save report to Supabase: {getattr(e, 'message', e)}"
+        )
         return False
 
 
-def _list_reports(limit: int = 50) -> List[Dict[str, Any]]:
-    """Fetch latest reports joined with player name and club."""
-    client = get_client()
-    try:
-        res = (
-            client.table(REPORTS)
-            .select(
-                "id,report_date,competition,opponent,position_played,rating,"
-                "player:player_id(name,current_club)"
-            )
-            .order("report_date", desc=True)
-            .limit(limit)
-            .execute()
+def _list_reports(limit: int = 1000) -> List[Dict[str, Any]]:
+    """Fetch latest reports ordered by kickoff/creation time."""
+    rows = (
+        _safe_query("reports", order_by="kickoff_at", desc=True, limit=limit)
+        or _safe_query(
+            "scout_reports", order_by="kickoff_at", desc=True, limit=limit
         )
-        return res.data or []
-    except APIError as e:
-        st.error("Failed to load reports from Supabase.")
-        st.exception(e)
-        return []
+    )
+    if not rows:
+        rows = (
+            _safe_query("reports", order_by="created_at", desc=True, limit=limit)
+            or _safe_query(
+                "scout_reports", order_by="created_at", desc=True, limit=limit
+            )
+        )
+
+    norm: List[Dict[str, Any]] = []
+    for r in rows:
+        norm.append(
+            {
+                "id": r.get("id"),
+                "title": r.get("title") or r.get("report_title"),
+                "player_id": r.get("player_id"),
+                "player_name": r.get("player_name"),
+                "competition": r.get("competition"),
+                "opponent": r.get("opponent"),
+                "kickoff_at": r.get("kickoff_at") or r.get("match_datetime"),
+                "location": r.get("location"),
+                "ratings": r.get("ratings"),
+                "tags": r.get("tags"),
+                "notes": r.get("notes"),
+                "created_at": r.get("created_at"),
+            }
+        )
+    return norm
 
 
 # ---------------------------------------------------------------------------
