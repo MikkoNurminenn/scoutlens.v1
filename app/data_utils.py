@@ -15,6 +15,7 @@ import pandas as pd
 from postgrest.exceptions import APIError
 from schema import MASTER_FIELDS, COMMON_FIELDS
 from supabase_client import get_client
+from utils.supa import first_row
 
 # Yhteensopivuus: jotkin moduulit odottavat BASE_DIR -muuttujaa
 BASE_DIR = Path(".")
@@ -338,14 +339,10 @@ def insert_player_quick(data: Dict[str, Any]) -> Dict[str, Any]:
     payload["name"] = name
     sb = get_client()
     try:
-        res = (
-            sb.table("players")
-            .insert(payload, returning="representation")
-            .execute()
-        )
+        res = sb.table("players").insert(payload).execute()
     except APIError as e:
         raise e
-    return (res.data or [])[0] if res.data else {}
+    return first_row(res) or {}
 
 
 def validate_player_input(name: str, df: pd.DataFrame) -> Tuple[bool, str]:
