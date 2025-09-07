@@ -30,18 +30,20 @@ create table if not exists teams (
 
 create table if not exists matches (
     id uuid primary key default uuid_generate_v4(),
-    date date,
-    time text,
-    tz text,
-    home text,
-    away text,
-    competition text,
+    home_team text,
+    away_team text,
     location text,
-    city text,
-    targets text[],
+    competition text,
+    kickoff_at timestamptz not null,
     notes text,
     created_at timestamptz not null default now()
 );
+
+create index if not exists idx_matches_kickoff_at
+on public.matches (kickoff_at desc);
+
+alter table public.matches enable row level security;
+create policy "public read matches" on public.matches for select to anon, authenticated using (true);
 
 create table if not exists scout_reports (
     id uuid primary key default uuid_generate_v4(),

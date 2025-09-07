@@ -5,6 +5,7 @@ import json
 import uuid
 from datetime import date, datetime
 from typing import Any, Dict, List, Tuple, Optional
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
@@ -12,6 +13,7 @@ import plotly.express as px
 
 from supabase_client import get_client
 from data_utils import list_teams, list_players_by_team  # käyttää Supabasea
+from time_utils import to_tz
 
 # ---------------- Mini CSS helper ----------------
 def _inject_css_once(key: str, css_html: str):
@@ -74,23 +76,25 @@ def get_all_players() -> List[Dict[str, Any]]:
     return uniq
 
 # ---------------- Ottelut & raportit (Supabase) ----------------
+from postgrest.exceptions import APIError
+
+
 def list_matches() -> List[Dict[str, Any]]:
     client = get_client()
     if not client:
         return []
-    res = client.table("matches").select("*").order("datetime", desc=True).execute()
-    out = []
-    for m in res.data or []:
-        out.append(
-            {
-                "id": m.get("id") or uuid.uuid4().hex,
-                "home_team": m.get("home_team", ""),
-                "away_team": m.get("away_team", ""),
-                "datetime": m.get("datetime") or date.today().isoformat(),
-                "competition": m.get("competition", ""),
-            }
+    try:
+        res = (
+            client.table("matches")
+            .select("*")
+            .order("kickoff_at", desc=True)
+            .execute()
         )
-    return out
+        return res.data or []
+    except APIError as e:
+        st.error("Supabase SELECT epäonnistui. Varmista taulu, sarake 'kickoff_at' ja RLS.")
+        st.exception(e)
+        return []
 
 def insert_match(m: Dict[str, Any]) -> None:
     client = get_client()
@@ -100,8 +104,10 @@ def insert_match(m: Dict[str, Any]) -> None:
         "id": uuid.uuid4().hex,
         "home_team": m["home_team"],
         "away_team": m["away_team"],
-        "datetime": m["datetime"],
+        "location": m.get("location", ""),
         "competition": m.get("competition", ""),
+        "kickoff_at": m["kickoff_at"],
+        "notes": m.get("notes", ""),
     }
     client.table("matches").insert(new_item).execute()
 
@@ -109,17 +115,26 @@ def list_scout_reports() -> List[Dict[str, Any]]:
     client = get_client()
     if not client:
         return []
-    reps = client.table("scout_reports").select("*").order("created_at", desc=True).execute().data or []
+    reps = (
+        client.table("scout_reports")
+        .select("*")
+        .order("created_at", desc=True)
+        .execute()
+        .data
+        or []
+    )
     match_map = {m["id"]: m for m in list_matches()}
     out = []
     for r in reps:
         m = match_map.get(r.get("match_id"), {})
-        out.append({
-            **r,
-            "home_team": m.get("home_team", "?"),
-            "away_team": m.get("away_team", "?"),
-            "datetime": m.get("datetime", ""),
-        })
+        out.append(
+            {
+                **r,
+                "home_team": m.get("home_team", "?"),
+                "away_team": m.get("away_team", "?"),
+                "kickoff_at": m.get("kickoff_at", ""),
+            }
+        )
     return out
 
 def insert_scout_report(r: Dict[str, Any]) -> None:
@@ -137,8 +152,18 @@ def delete_scout_reports(ids: List[str]) -> None:
 
 # ---------------- UI helpers ----------------
 def _fmt_match(r: Dict[str, Any]) -> str:
-    dt = (r.get("datetime","") or "")[:10]
-    return f"{r.get('home_team','?')} vs {r.get('away_team','?')} ({dt})"
+    latam_tz = st.session_state.get("latam_tz", "America/Bogota")
+    user_tz = st.session_state.get("user_tz", "Europe/Helsinki")
+    ko = r.get("kickoff_at")
+    when = ""
+    if ko:
+        try:
+            dt_latam = to_tz(ko, latam_tz)
+            dt_user = to_tz(ko, user_tz)
+            when = f" {dt_latam:%Y-%m-%d %H:%M} ({latam_tz}) • {dt_user:%H:%M} ({user_tz})"
+        except Exception:
+            pass
+    return f"{r.get('home_team','?')} vs {r.get('away_team','?')}{when}"
 
 FOOT_OPTIONS = ["Right","Left","Both"]
 POSITION_OPTIONS = ["GK","RB","RWB","CB","LB","LWB","DM","CM","AM","RW","LW","ST","Other / free text"]
@@ -201,15 +226,31 @@ def show_scout_match_reporter():
         home = c1.text_input("Home Team", key="scout_reporter__home")
         away = c2.text_input("Away Team", key="scout_reporter__away")
         mdate = st.date_input("Match Date", date.today(), key="scout_reporter__mdate")
-        comp  = st.text_input("Competition (optional)", key="scout_reporter__comp")
+        mtime = st.time_input(
+            "Kickoff Time",
+            datetime.now().replace(hour=12, minute=0, second=0, microsecond=0).time(),
+            key="scout_reporter__mtime",
+        )
+        latam_tz = st.text_input(
+            "Kickoff timezone",
+            st.session_state.get("latam_tz", "America/Bogota"),
+            key="scout_reporter__tz",
+        )
+        comp = st.text_input("Competition (optional)", key="scout_reporter__comp")
+        loc = st.text_input("Location (optional)", key="scout_reporter__loc")
         if st.button("Add Match", key="scout_reporter__add_match_btn"):
             if home and away:
-                insert_match({
-                    "home_team": home.strip(),
-                    "away_team": away.strip(),
-                    "datetime": datetime.combine(mdate, datetime.min.time()).isoformat(),
-                    "competition": comp.strip(),
-                })
+                local_dt = datetime.combine(mdate, mtime).replace(tzinfo=ZoneInfo(latam_tz))
+                kickoff_at = local_dt.isoformat()
+                insert_match(
+                    {
+                        "home_team": home.strip(),
+                        "away_team": away.strip(),
+                        "location": loc.strip(),
+                        "competition": comp.strip(),
+                        "kickoff_at": kickoff_at,
+                    }
+                )
                 st.success(f"Match {home} vs {away} added.")
                 matches = list_matches()
             else:
@@ -435,9 +476,11 @@ def show_scout_match_reporter():
             return None
 
     df_all["player_name"] = df_all["player_id"].astype(str).map(name_map)
-    df_all["created_dt"]  = df_all["created_at"].apply(_parse_dt)
-    df_all["date"]        = df_all["datetime"].astype(str).str[:10]
-    df_all["match"]       = df_all.apply(lambda r: f"{r.get('home_team','?')} vs {r.get('away_team','?')}", axis=1)
+    df_all["created_dt"] = df_all["created_at"].apply(_parse_dt)
+    df_all["date"] = df_all["kickoff_at"].astype(str).str[:10]
+    df_all["match"] = df_all.apply(
+        lambda r: f"{r.get('home_team','?')} vs {r.get('away_team','?')}", axis=1
+    )
     df_all = df_all.sort_values("created_at", ascending=False)
 
     # Filters
