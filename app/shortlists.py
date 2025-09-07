@@ -41,23 +41,22 @@ def _load_shortlists() -> Dict[str, List[str]]:
     if not client:
         return {}
     try:
-        res = client.table("shortlists").select("name,player_id").execute()
+        res = (
+            client.table("shortlists")
+            .select("id,name,items:shortlist_items(player_id)")
+            .execute()
+        )
         out: Dict[str, List[str]] = {}
         for r in res.data or []:
-            name = (r.get("name") or "default").strip() or "default"
-            pid = r.get("player_id")
-            if pid is not None:
-                out.setdefault(name, []).append(str(pid))
+            name = (r.get("name") or "").strip()
+            if not name:
+                continue
+            items = r.get("items") or []
+            out[name] = [str(it.get("player_id")) for it in items if it.get("player_id")]
         return out
     except APIError as e:
-        # Fallback: legacy schema without 'name'
-        _pgrest_debug(e, "ℹ️ Shortlists-taulu ilman name-saraketta? (debug)")
-        try:
-            res = client.table("shortlists").select("player_id").execute()
-            ids = [str(r.get("player_id")) for r in (res.data or []) if r.get("player_id")]
-            return {"default": ids} if ids else {}
-        except Exception:
-            return {}
+        _pgrest_debug(e)
+        return {}
     except Exception:
         return {}
 
@@ -67,44 +66,42 @@ def _save_shortlists(data: Dict[str, List[str]]):
     if not client:
         return
     try:
-        # Tyhjennä ja kirjoita uudelleen (idempotentti tapa)
-        client.table("shortlists").delete().neq("name", "").execute()
-        rows = []
+        client.table("shortlist_items").delete().neq("id", "").execute()
+        client.table("shortlists").delete().neq("id", "").execute()
         for name, ids in data.items():
-            for pid in ids:
-                rows.append({"name": name, "player_id": str(pid)})
-        if rows:
-            client.table("shortlists").insert(rows).execute()
+            res = (
+                client.table("shortlists")
+                .insert({"name": name}, returning="representation")
+                .execute()
+            )
+            sl_id = (res.data or [{}])[0].get("id")
+            if sl_id and ids:
+                rows = [{"shortlist_id": sl_id, "player_id": pid} for pid in ids]
+                client.table("shortlist_items").insert(rows).execute()
     except APIError as e:
-        # Legacy schema ilman 'name'-saraketta
-        _pgrest_debug(e, "ℹ️ Shortlists-taulu ilman name-saraketta? (debug)")
-        try:
-            client.table("shortlists").delete().neq("player_id", None).execute()
-            flat = [str(pid) for ids in data.values() for pid in ids]
-            if flat:
-                client.table("shortlists").insert([{"player_id": pid} for pid in flat]).execute()
-        except Exception:
-            pass
+        _pgrest_debug(e)
+    except Exception:
+        pass
 
 
 # ---------- helpers ----------
 def _player_name(p: Dict[str, Any]) -> str:
     return str(p.get("name") or p.get("Name") or "").strip()
 
-def _player_team(p: Dict[str, Any]) -> str:
-    return str(p.get("team_name") or p.get("Team") or p.get("team") or p.get("current_club") or "").strip()
+def _player_club(p: Dict[str, Any]) -> str:
+    return str(p.get("current_club") or "").strip()
 
 def _player_pos(p: Dict[str, Any]) -> str:
     return str(p.get("position") or p.get("Preferred Position") or p.get("pos") or "").strip()
 
-def _export_rows(players: List[Dict[str, Any]], names: List[str]) -> List[Dict[str, str]]:
-    idx = {_player_name(p): p for p in players}
+def _export_rows(players: List[Dict[str, Any]], ids: List[str]) -> List[Dict[str, str]]:
+    idx = {str(p.get("id")): p for p in players}
     out = []
-    for n in names:
-        p = idx.get(n, {})
+    for pid in ids:
+        p = idx.get(str(pid), {})
         out.append({
-            "Name": n,
-            "Team": _player_team(p),
+            "Name": _player_name(p),
+            "Club": _player_club(p),
             "Position": _player_pos(p),
         })
     return out
@@ -157,15 +154,25 @@ def show_shortlists():
         st.markdown("#### Players in list")
         if sel in shortlists:
             # quick add
-            name_pool = sorted({_player_name(p) for p in players if _player_name(p)})
-            default_add = []
-            add = st.multiselect("Add players", options=name_pool, default=default_add, key=f"sl_add_multi_{sel}")
+            name_to_id = {
+                _player_name(p): str(p.get("id"))
+                for p in players
+                if _player_name(p) and p.get("id")
+            }
+            name_pool = sorted(name_to_id.keys())
+            add = st.multiselect(
+                "Add players",
+                options=name_pool,
+                default=[],
+                key=f"sl_add_multi_{sel}",
+            )
             cadd, cclear = st.columns([1, 1])
             if cadd.button("Add selected"):
                 added = 0
                 for n in add:
-                    if n and n not in shortlists[sel]:
-                        shortlists[sel].append(n)
+                    pid = name_to_id.get(n)
+                    if pid and pid not in shortlists[sel]:
+                        shortlists[sel].append(pid)
                         added += 1
                 if added:
                     _save_shortlists(shortlists)
@@ -180,12 +187,14 @@ def show_shortlists():
             st.divider()
 
             items = shortlists.get(sel, [])
+            players_by_id = {str(p.get("id")): p for p in players}
             if not items:
                 st.caption("List is empty.")
             else:
                 # tiny controls per row
-                for i, nm in enumerate(items):
+                for i, pid in enumerate(items):
                     rc1, rc2, rc3, rc4 = st.columns([6, 1, 1, 1])
+                    nm = _player_name(players_by_id.get(pid, {})) or pid
                     rc1.write(f"- **{nm}**")
                     if rc2.button("⬆️", key=f"up_{sel}_{i}", help="Move up") and i > 0:
                         items[i - 1], items[i] = items[i], items[i - 1]
@@ -202,7 +211,7 @@ def show_shortlists():
                 if rows:
                     import csv, io
                     buf = io.StringIO()
-                    w = csv.DictWriter(buf, fieldnames=["Name", "Team", "Position"])
+                    w = csv.DictWriter(buf, fieldnames=["Name", "Club", "Position"])
                     w.writeheader(); w.writerows(rows)
                     st.download_button(
                         "⬇️ Export CSV",
