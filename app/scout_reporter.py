@@ -14,6 +14,7 @@ import plotly.express as px
 from supabase_client import get_client
 from data_utils import list_teams, list_players_by_team  # käyttää Supabasea
 from time_utils import to_tz
+from data_sanitize import clean_jsonable
 
 REQUIRED_COLS = [
     "id",
@@ -149,18 +150,14 @@ def insert_match(m: Dict[str, Any]) -> None:
     }
     client.table("matches").insert(new_item).execute()
 
-def list_scout_reports() -> List[Dict[str, Any]]:
+def list_reports(match_id: str | None = None) -> List[Dict[str, Any]]:
     client = get_client()
     if not client:
         return []
-    reps = (
-        client.table("scout_reports")
-        .select("*")
-        .order("created_at", desc=True)
-        .execute()
-        .data
-        or []
-    )
+    q = client.table("reports").select("*").order("created_at", desc=True)
+    if match_id:
+        q = q.eq("match_id", match_id)
+    reps = q.execute().data or []
     match_map = {m["id"]: m for m in list_matches()}
     out = []
     for r in reps:
@@ -175,18 +172,20 @@ def list_scout_reports() -> List[Dict[str, Any]]:
         )
     return out
 
-def insert_scout_report(r: Dict[str, Any]) -> None:
-    client = get_client()
-    if not client:
-        return
-    payload = {"id": uuid.uuid4().hex, "created_at": datetime.now().isoformat(), **r}
-    client.table("scout_reports").insert(payload).execute()
 
-def delete_scout_reports(ids: List[str]) -> None:
+def save_report(records: List[Dict[str, Any]]) -> None:
+    client = get_client()
+    if not client or not records:
+        return
+    payload = clean_jsonable(records)
+    client.table("reports").upsert(payload, on_conflict="id").execute()
+
+
+def delete_reports(ids: List[str]) -> None:
     client = get_client()
     if not client:
         return
-    client.table("scout_reports").delete().in_("id", [str(i) for i in ids]).execute()
+    client.table("reports").delete().in_("id", [str(i) for i in ids]).execute()
 
 # ---------------- UI helpers ----------------
 def _fmt_match(r: Dict[str, Any]) -> str:
@@ -425,15 +424,19 @@ def show_scout_match_reporter():
     general = general_text
 
     if st.button("💾 Save Report", key="scout_reporter__save_report_btn"):
-        insert_scout_report({
-            "match_id": sel_match["id"],
-            "player_id": pid,
-            "competition": sel_match.get("competition",""),
-            "foot": foot,
-            "position": position_final,
-            "ratings": json.dumps(ratings, ensure_ascii=False),
-            "general_comment": general.strip()
-        })
+        save_report([
+            {
+                "id": uuid.uuid4().hex,
+                "created_at": datetime.now().isoformat(),
+                "match_id": sel_match["id"],
+                "player_id": pid,
+                "competition": sel_match.get("competition", ""),
+                "foot": foot,
+                "position": position_final,
+                "ratings": json.dumps(ratings, ensure_ascii=False),
+                "general_comment": general.strip(),
+            }
+        ])
         st.success(f"Report saved for {sel_player.get('name','?')}.")
 
     # FAST DELETE MODE toggle
@@ -447,7 +450,7 @@ def show_scout_match_reporter():
 
     # 4) Inspect Reports
     st.subheader("4️⃣ Inspect Reports")
-    reps = list_scout_reports()
+    reps = list_reports()
     if not reps:
         st.info("No reports yet.")
         return
@@ -616,7 +619,7 @@ def show_scout_match_reporter():
             key="scout_reporter__del_selected_btn"
         ):
             with st.spinner("Deleting selected..."):
-                delete_scout_reports(selected_ids)
+                delete_reports(selected_ids)
             st.success(f"Deleted {len(selected_ids)} report(s).")
             st.rerun()
     with cdel2:
@@ -626,7 +629,7 @@ def show_scout_match_reporter():
             key="scout_reporter__del_filtered_btn"
         ):
             with st.spinner("Deleting filtered..."):
-                delete_scout_reports(filtered_ids)
+                delete_reports(filtered_ids)
             st.success(f"Deleted {len(filtered_ids)} report(s).")
             st.rerun()
     with cdel3:
