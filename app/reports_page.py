@@ -153,14 +153,7 @@ def show_reports_page() -> None:
                 tm = st.text_input("Transfermarkt URL", key="r_add_tm")
             notes = st.text_area("Notes", key="r_add_notes", height=80)
 
-            b1, b2 = st.columns(2)
-            save = b1.form_submit_button("Save Player", use_container_width=True)
-            full = b2.form_submit_button("Open Full Editor", use_container_width=True)
-
-            if full:
-                st.session_state["current_page"] = "Player Editor"
-                st.session_state["player_editor__mode"] = "new"
-                st.rerun()
+            save = st.form_submit_button("Save Player", use_container_width=True)
 
             if save:
                 try:
