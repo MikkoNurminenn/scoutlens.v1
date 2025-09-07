@@ -1,19 +1,18 @@
+# app/supabase_client.py
 from supabase import create_client
 import streamlit as st
 
-_client = None
+def get_client(write: bool = False):
+    """
+    Luo Supabase client.
+    - write=False → käyttää anon_key (SELECT, read-only)
+    - write=True  → käyttää service_role_key (INSERT/UPDATE/DELETE)
+    """
+    url = st.secrets["supabase"]["url"]
 
-def get_client():
-    global _client
-    if _client is not None:
-        return _client
+    if write:
+        key = st.secrets["supabase"]["service_role_key"]
+    else:
+        key = st.secrets["supabase"]["anon_key"]
 
-    try:
-        url = st.secrets["supabase"]["url"]
-        anon_key = st.secrets["supabase"]["anon_key"]
-    except Exception:
-        st.error("Supabase secrets missing. Please add [supabase] block with url + anon_key in Secrets.")
-        st.stop()
-
-    _client = create_client(url, anon_key)
-    return _client
+    return create_client(url, key)
