@@ -3,26 +3,52 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 import streamlit as st
+from postgrest.exceptions import APIError
 
 from supabase_client import get_client
+
+# ---------- Debug helper ----------
+def _dbg(e: APIError, title="🔧 Supabase PostgREST -virhe"):
+    with st.expander(title, expanded=True):
+        st.code(
+            f"code: {getattr(e,'code',None)}\n"
+            f"message: {getattr(e,'message',str(e))}\n"
+            f"details: {getattr(e,'details',None)}\n"
+            f"hint: {getattr(e,'hint',None)}",
+            "text",
+        )
 
 # ---------- IO ----------
 def _load_players() -> List[Dict[str, Any]]:
     client = get_client()
     if not client:
         return []
-    res = client.table("players").select("*").execute()
-    return res.data or []
+    try:
+        res = client.table("players").select("*").execute()
+        return res.data or []
+    except APIError as e:
+        _dbg(e)
+        st.error("Players-haku epäonnistui")
+        return []
 
 
 def _load_shortlists() -> Dict[str, List[str]]:
     client = get_client()
     if not client:
         return {}
-    res = client.table("shortlists").select("name,player_id").execute()
+    try:
+        data = (client.table("shortlists").select("name,player_id,created_at").order("name").execute().data) or []
+    except APIError:
+        try:
+            legacy = client.table("shortlists").select("player_id").execute().data or []
+            data = [{"name": "Default", "player_id": r.get("player_id")} for r in legacy if r.get("player_id")]
+        except APIError as e2:
+            _dbg(e2)
+            st.error("Shortlistien haku epäonnistui")
+            return {}
     out: Dict[str, List[str]] = {}
-    for r in res.data or []:
-        name = r.get("name")
+    for r in data:
+        name = r.get("name") or "Default"
         pid = r.get("player_id")
         if name and pid is not None:
             out.setdefault(name, []).append(str(pid))
@@ -33,13 +59,17 @@ def _save_shortlists(data: Dict[str, List[str]]):
     client = get_client()
     if not client:
         return
-    client.table("shortlists").delete().neq("name", "").execute()
-    rows = []
-    for name, ids in data.items():
-        for pid in ids:
-            rows.append({"name": name, "player_id": str(pid)})
-    if rows:
-        client.table("shortlists").insert(rows).execute()
+    try:
+        client.table("shortlists").delete().neq("name", "").execute()
+        rows = []
+        for name, ids in data.items():
+            for pid in ids:
+                rows.append({"name": name, "player_id": str(pid)})
+        if rows:
+            client.table("shortlists").insert(rows).execute()
+    except APIError as e:
+        _dbg(e)
+        st.error("Shortlistien tallennus epäonnistui")
 
 # ---------- helpers ----------
 def _player_name(p: Dict[str, Any]) -> str:
