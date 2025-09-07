@@ -15,6 +15,44 @@ from supabase_client import get_client
 from data_utils import list_teams, list_players_by_team  # käyttää Supabasea
 from time_utils import to_tz
 
+REQUIRED_COLS = [
+    "id",
+    "created_at",
+    "home_team",
+    "away_team",
+    "competition",
+    "location",
+    "kickoff_at",
+    "notes",
+    "targets",
+    "scout",
+    "rating",
+]
+
+
+def ensure_columns(df: pd.DataFrame | None) -> pd.DataFrame:
+    """Ensure df has all REQUIRED_COLS with safe defaults and consistent order."""
+    if df is None or isinstance(df, list):
+        df = pd.DataFrame()
+    if df.empty:
+        return pd.DataFrame({c: [] for c in REQUIRED_COLS})
+    for col in REQUIRED_COLS:
+        if col not in df.columns:
+            df[col] = [] if col in ("targets",) else ""
+    return df[
+        [c for c in REQUIRED_COLS if c in df.columns]
+        + [c for c in df.columns if c not in REQUIRED_COLS]
+    ]
+
+
+def safe_unique(df: pd.DataFrame | None, col: str) -> list[str]:
+    """Return sorted unique non-empty string values for df[col]; [] if df/col missing."""
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty or col not in df.columns:
+        return []
+    s = df[col].dropna()
+    vals = {str(v).strip() for v in s if str(v).strip()}
+    return sorted(vals)
+
 # ---------------- Mini CSS helper ----------------
 def _inject_css_once(key: str, css_html: str):
     sskey = f"__css_injected__{key}"
@@ -467,7 +505,7 @@ def show_scout_match_reporter():
 
     # 5) Delete Reports — improved UX + pagination
     st.subheader("5️⃣ Delete Reports")
-    df_all = pd.DataFrame(reps)
+    df_all = ensure_columns(pd.DataFrame(reps))
 
     def _parse_dt(s):
         try:
@@ -475,22 +513,40 @@ def show_scout_match_reporter():
         except Exception:
             return None
 
-    df_all["player_name"] = df_all["player_id"].astype(str).map(name_map)
+    df_all["player_name"] = (
+        df_all.get("player_id", pd.Series(dtype=str)).astype(str).map(name_map)
+    )
     df_all["created_dt"] = df_all["created_at"].apply(_parse_dt)
     df_all["date"] = df_all["kickoff_at"].astype(str).str[:10]
     df_all["match"] = df_all.apply(
         lambda r: f"{r.get('home_team','?')} vs {r.get('away_team','?')}", axis=1
     )
     df_all = df_all.sort_values("created_at", ascending=False)
+    df_all = ensure_columns(df_all)
+
+    if df_all.empty:
+        st.info("No reports found.")
+        return
 
     # Filters
     f1, f2, f3 = st.columns([2, 2, 2])
     with f1:
-        text_query = st.text_input("Search (player, match, notes)", key="scout_reporter__filter_q")
+        text_query = st.text_input(
+            "Search (player, match, notes)",
+            key="scout_reporter__filter_q",
+        )
     with f2:
-        player_filter = st.multiselect("Player", sorted(df_all["player_name"].dropna().unique().tolist()), key="scout_reporter__filter_player")
+        player_filter = st.multiselect(
+            "Player",
+            safe_unique(df_all, "player_name"),
+            key="scout_reporter__filter_player",
+        )
     with f3:
-        competition_filter = st.multiselect("Competition", sorted([c for c in df_all["competition"].dropna().unique().tolist() if c]), key="scout_reporter__filter_comp")
+        competition_filter = st.multiselect(
+            "Competition",
+            safe_unique(df_all, "competition"),
+            key="scout_reporter__filter_comp",
+        )
 
     d1, d2 = st.columns(2)
     with d1:
