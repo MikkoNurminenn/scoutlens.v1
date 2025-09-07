@@ -19,6 +19,7 @@ from player_editor import show_player_editor
 from scout_reporter import show_scout_match_reporter
 from notes import show_notes  # varmista, että notes.py sisältää show_notes()
 from shortlists import show_shortlists  # ⭐ uusi sivu
+from login import login
 
 APP_TITLE   = "ScoutLens"
 APP_TAGLINE = "LATAM scouting toolkit"
@@ -38,6 +39,8 @@ def inject_css():
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 inject_css()
+
+login()
 
 # --------- Navigation setup ----------
 # Näkyvät sivut sivupalkissa:
