@@ -2,8 +2,6 @@
 from __future__ import annotations
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date
-from collections import Counter
-
 import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
@@ -25,18 +23,21 @@ STATE_CACHE_BUSTER     = "team_view__cache_buster"
 CARD_THRESHOLD = 80  # korttinäkymän raja
 
 # ========= Helpers =========
-def _pgrest_debug(e: APIError, title="🔧 Supabase PostgREST -virhe (debug)"):
+def _dbg(e: APIError, title="🔧 Supabase PostgREST -virhe"):
     with st.expander(title, expanded=True):
         st.code(
-            f"""code:    {getattr(e,'code',None)}
-message: {getattr(e,'message',str(e))}
-details: {getattr(e,'details',None)}
-hint:    {getattr(e,'hint',None)}""",
-            language="text",
+            f"code: {getattr(e,'code',None)}\n"
+            f"message: {getattr(e,'message',str(e))}\n"
+            f"details: {getattr(e,'details',None)}\n"
+            f"hint: {getattr(e,'hint',None)}",
+            "text",
         )
 
 def _safe_str(v: Any) -> str:
     return "" if v is None else str(v)
+
+def _col(df: pd.DataFrame, name: str, dtype="object") -> pd.Series:
+    return df[name] if name in df.columns else pd.Series(dtype=dtype)
 
 def _norm_team(p: Dict[str, Any]) -> str:
     return (
@@ -114,7 +115,7 @@ def _load_team_names(cache_buster: int) -> List[str]:
         pdata = sb.table("players").select("team_name").execute().data or []
         return sorted({ (p.get("team_name") or "").strip() for p in pdata if (p.get("team_name") or "").strip() })
     except APIError as e:
-        _pgrest_debug(e)
+        _dbg(e)
         return []
     except Exception:
         return []
@@ -126,7 +127,7 @@ def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, An
         res = sb.table("players").select("*").eq("team_name", team).execute()
         players = res.data or []
     except APIError as e:
-        _pgrest_debug(e)
+        _dbg(e)
         return []
     except Exception:
         return []
@@ -150,11 +151,17 @@ def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, An
 def _load_shortlist() -> set:
     sb = get_client()
     try:
-        res = sb.table("shortlists").select("player_id").execute()
-        return {str(r.get("player_id")) for r in (res.data or []) if r.get("player_id")}
+        res = (
+            sb.table("shortlists")
+            .select("player_id")
+            .eq("name", "Default")
+            .execute()
+        )
+        data = res.data or []
+        return {str(r["player_id"]) for r in data if r.get("player_id")}
     except APIError as e:
         # Taulu puuttuu → näytä ohje, mutta älä kaadu
-        _pgrest_debug(e, "ℹ️ Shortlist-taulu puuttuu? (debug)")
+        _dbg(e, "ℹ️ Shortlist-taulu puuttuu? (debug)")
         st.info("Shortlist on pois käytöstä, koska taulua `public.shortlists` ei löytynyt.")
         return set()
     except Exception:
@@ -163,13 +170,13 @@ def _load_shortlist() -> set:
 def _save_shortlist(s: set) -> None:
     sb = get_client()
     try:
-        # yksinkertainen “replace” strategia: tyhjennä ja lisää uudelleen
-        sb.table("shortlists").delete().neq("player_id", None).execute()
+        # yksinkertainen "replace" strategia: tyhjennä ja lisää uudelleen
+        sb.table("shortlists").delete().eq("name", "Default").execute()
         if s:
-            rows = [{"player_id": str(pid)} for pid in s]
+            rows = [{"name": "Default", "player_id": str(pid)} for pid in s]
             sb.table("shortlists").insert(rows).execute()
     except APIError as e:
-        _pgrest_debug(e, "ℹ️ Shortlist-talennus epäonnistui (debug)")
+        _dbg(e, "ℹ️ Shortlist-talennus epäonnistui (debug)")
         st.error("Shortlistin tallennus epäonnistui. Luo taulu `public.shortlists` (katso SQL-ohje alla).")
     except Exception:
         pass
@@ -280,16 +287,19 @@ def show_team_view():
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("Players", len(df))
     with c2:
-        pos_counts = Counter(df.get("Position", pd.Series(dtype=object)).fillna("—").astype(str))
+        pos_s = _col(df, "Position")
+        pos_counts = pos_s.fillna("—").astype(str).value_counts()
         st.metric("Unique positions", len(pos_counts))
     with c3:
-        avg = round(pd.to_numeric(df.get("scout_rating", pd.Series([None]*len(df))), errors="coerce").dropna().mean(), 1) if len(df) else 0
+        rating_s = pd.to_numeric(_col(df, "scout_rating"), errors="coerce")
+        avg = round(rating_s.dropna().mean(), 1) if len(df) else 0
         st.metric("Avg rating", avg if avg == avg else "–")  # NaN check
 
     # Pieni jakauma
-    if "Position" in df.columns and df["Position"].notna().any():
+    pos_chart_s = _col(df, "Position")
+    if pos_chart_s.notna().any():
         st.caption("Position distribution")
-        st.bar_chart(df["Position"].fillna("—").astype(str).value_counts())
+        st.bar_chart(pos_chart_s.fillna("—").astype(str).value_counts())
 
     # --------- Filters ----------
     with st.container():
@@ -297,10 +307,10 @@ def show_team_view():
         with c1:
             q = st.text_input("Search name", key=STATE_Q_KEY, placeholder="e.g. Díaz, González").strip()
         with c2:
-            pos_vals = sorted([v for v in df.get("Position", pd.Series(dtype=object)).dropna().astype(str).unique() if v])
+            pos_vals = sorted([v for v in _col(df, "Position").dropna().astype(str).unique() if v])
             pos_sel = st.multiselect("Position", pos_vals, default=st.session_state.get(STATE_POS_KEY, []), key=STATE_POS_KEY)
         with c3:
-            foot_vals = sorted([v for v in df.get("Foot", pd.Series(dtype=object)).dropna().astype(str).unique() if v])
+            foot_vals = sorted([v for v in _col(df, "Foot").dropna().astype(str).unique() if v])
             foot_sel = st.multiselect("Foot", foot_vals, default=st.session_state.get(STATE_FOOT_KEY, []), key=STATE_FOOT_KEY)
         with c4:
             age_min = age_max = None
@@ -321,7 +331,7 @@ def show_team_view():
                 else:
                     st.caption("No age data")
         with c5:
-            club_vals = sorted([v for v in df.get("CurrentClub", pd.Series(dtype=object)).dropna().astype(str).unique() if v])
+            club_vals = sorted([v for v in _col(df, "CurrentClub").dropna().astype(str).unique() if v])
             club_sel = st.multiselect("Current club", club_vals, default=st.session_state.get(STATE_CLUB_KEY, []), key=STATE_CLUB_KEY)
         with c6:
             if st.button("Reset", help="Clear all filters"):
@@ -378,14 +388,14 @@ def show_team_view():
     # --------- Apply filters ----------
     df_show = df.copy()
     if q: df_show = df_show[df_show["name"].astype(str).str.contains(q, case=False, na=False)]
-    if pos_sel: df_show = df_show[df_show.get("Position", pd.Series(dtype=object)).astype(str).isin(pos_sel)]
-    if foot_sel: df_show = df_show[df_show.get("Foot", pd.Series(dtype=object)).astype(str).isin(foot_sel)]
+    if pos_sel: df_show = df_show[_col(df_show, "Position").astype(str).isin(pos_sel)]
+    if foot_sel: df_show = df_show[_col(df_show, "Foot").astype(str).isin(foot_sel)]
     if (STATE_AGE_KEY in st.session_state) or (age_min is not None and age_max is not None):
         lo, hi = st.session_state.get(STATE_AGE_KEY, (age_min, age_max))
         if lo is not None and hi is not None and "Age" in df_show.columns:
             df_show = df_show[pd.to_numeric(df_show["Age"], errors="coerce").between(lo, hi, inclusive="both")]
     if club_sel:
-        df_show = df_show[df_show.get("CurrentClub", pd.Series(dtype=object)).astype(str).isin(club_sel)]
+        df_show = df_show[_col(df_show, "CurrentClub").astype(str).isin(club_sel)]
 
     st.markdown(f"**Results:** {len(df_show)} / {len(df)}  •  Columns: {len(df_show.columns)}")
 

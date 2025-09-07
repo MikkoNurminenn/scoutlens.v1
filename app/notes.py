@@ -7,8 +7,20 @@ from typing import Any, Dict, List, Optional
 import json
 import pandas as pd
 import streamlit as st
+import json
+from postgrest.exceptions import APIError
 
 from supabase_client import get_client
+
+def _dbg(e: APIError, title="🔧 Supabase PostgREST -virhe"):
+    with st.expander(title, expanded=True):
+        st.code(
+            f"code: {getattr(e,'code',None)}\n"
+            f"message: {getattr(e,'message',str(e))}\n"
+            f"details: {getattr(e,'details',None)}\n"
+            f"hint: {getattr(e,'hint',None)}",
+            "text",
+        )
 
 # ---------- IO ----------
 @st.cache_data(show_spinner=False)
@@ -16,18 +28,27 @@ def _load_notes() -> List[Dict[str, Any]]:
     client = get_client()
     if not client:
         return []
-    res = client.table("notes").select("*").execute()
-    data = res.data or []
-    return data if isinstance(data, list) else []
+    try:
+        res = client.table("notes").select("*").execute()
+        data = res.data or []
+        return data if isinstance(data, list) else []
+    except APIError as e:
+        _dbg(e)
+        st.error("Notes-haku epäonnistui")
+        return []
 
 
 def _save_notes(data: List[Dict[str, Any]]) -> None:
     client = get_client()
     if not client:
         return
-    client.table("notes").delete().neq("id", None).execute()
-    if data:
-        client.table("notes").insert(data).execute()
+    try:
+        client.table("notes").delete().neq("id", None).execute()
+        if data:
+            client.table("notes").insert(data).execute()
+    except APIError as e:
+        _dbg(e)
+        st.error("Notes-tallennus epäonnistui")
 
 # ---------- Utils ----------
 def _now_iso() -> str:

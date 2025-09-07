@@ -26,6 +26,56 @@ from shortlists import (
 # Local directory for player photos
 PLAYER_PHOTOS_DIR = Path("player_photos")
 
+# Canonical column mapping for safe merges
+CANON_MAP = {
+  "PlayerID":"id","player_id":"id","id":"id",
+  "Name":"name","name":"name",
+  "Team":"team_name","team":"team_name","current_club":"team_name","CurrentClub":"team_name","team_name":"team_name",
+  "Position":"position","position":"position","Pos":"position","pos":"position",
+  "DateOfBirth":"date_of_birth","DOB":"date_of_birth","BirthDate":"date_of_birth","birthdate":"date_of_birth","Birthdate":"date_of_birth",
+  "Foot":"preferred_foot","PreferredFoot":"preferred_foot","foot":"preferred_foot","preferred_foot":"preferred_foot",
+  "ClubNumber":"club_number","Number":"club_number","club_number":"club_number",
+  "ScoutRating":"scout_rating","rating":"scout_rating","Scout rating":"scout_rating","scout_rating":"scout_rating",
+  "TransfermarktURL":"transfermarkt_url","transfermarkt":"transfermarkt_url","transfermarkt_url":"transfermarkt_url",
+  "created_at":"created_at","CreatedAt":"created_at"
+}
+CANON_ORDER = ["id","name","team_name","position","date_of_birth","preferred_foot","club_number","scout_rating","transfermarkt_url","created_at"]
+
+
+def canonicalize_dict(d):
+    out={}
+    for k,v in (d or {}).items():
+        if k is None: continue
+        canon = CANON_MAP.get(k,k)
+        if canon not in out or out[canon] in (None,"",pd.NA):
+            out[canon]=v
+    return out
+
+
+def _coalesce_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty: return df
+    df = df.copy(); df.columns = [CANON_MAP.get(c,c) for c in df.columns]
+    dupes = pd.Index(df.columns)[pd.Index(df.columns).duplicated()].unique()
+    for col in dupes:
+        sub = df.loc[:, df.columns == col]
+        merged = sub.bfill(axis=1).iloc[:,0]
+        df = df.loc[:, df.columns != col]
+        df[col] = merged
+    df = df.loc[:, ~df.columns.duplicated()]
+    lead = [c for c in CANON_ORDER if c in df.columns]
+    rest = [c for c in df.columns if c not in lead]
+    return df[lead+rest]
+
+
+def safe_append_row(df_master: pd.DataFrame, new_row: dict) -> pd.DataFrame:
+    dfm = _coalesce_duplicate_columns(df_master if df_master is not None else pd.DataFrame())
+    row_canon = canonicalize_dict(new_row or {})
+    df_row = _coalesce_duplicate_columns(pd.DataFrame([row_canon]))
+    all_cols = list(dict.fromkeys(list(dfm.columns)+list(df_row.columns)))
+    dfm = dfm.reindex(columns=all_cols); df_row = df_row.reindex(columns=all_cols)
+    out = pd.concat([dfm, df_row], ignore_index=True)
+    return _coalesce_duplicate_columns(out)
+
 # -------------------------------------------------------
 # Yleiset apurit
 # -------------------------------------------------------
@@ -386,7 +436,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             new_id = _new_player_id()
             new_row = {col: "" for col in df_master.columns}
             new_row.update({"PlayerID": new_id, "Name": "New Player"})
-            df_master = pd.concat([df_master, pd.DataFrame([new_row])], ignore_index=True)
+            df_master = safe_append_row(df_master, new_row)
             save_master(df_master, selected_team)
             st.cache_data.clear()
             st.success("First player row created.")
@@ -429,7 +479,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             new_id = _new_player_id()
             new_row = {col: "" for col in df_master.columns}
             new_row.update({"PlayerID": new_id, "Name": "New Player"})
-            df_master = pd.concat([df_master, pd.DataFrame([new_row])], ignore_index=True)
+            df_master = safe_append_row(df_master, new_row)
             save_master(df_master, selected_team)
             st.cache_data.clear()
             st.success("New player row added.")
@@ -674,7 +724,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 copy = df_master[df_master["PlayerID"]==pid_str].iloc[0].copy()
                 copy["PlayerID"] = _new_player_id()
                 copy["Name"] = f"{copy.get('Name','')} (copy)"
-                df_master = pd.concat([df_master, pd.DataFrame([copy])], ignore_index=True)
+                df_master = safe_append_row(df_master, copy.to_dict())
                 save_master(df_master, selected_team)
                 st.cache_data.clear()
                 st.success("Row duplicated.")
@@ -697,7 +747,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                         new_pid = _new_player_id()
                         row_to_move = row_to_move.copy()
                         row_to_move.loc[:, "PlayerID"] = new_pid
-                        target_master = pd.concat([target_master, row_to_move], ignore_index=True)
+                        target_master = safe_append_row(target_master, row_to_move.iloc[0].to_dict())
                         save_master(target_master, new_team)
                         st.cache_data.clear()
                         st.success(f"Player moved to {new_team}.")
