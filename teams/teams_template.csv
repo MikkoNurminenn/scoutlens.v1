@@ -1,7 +1,0 @@
-Name,Age,Position,ContractStart,ContractEnd,Nationality,Loan,Minutes,Matches,TeamTAG,Birthdate,TransfermarktURL
-Mikko Nurminen,25.0,"CB, LB, RB",2015-04-24,2025-04-23,Finland,False,500,10,teams_template,2000-01-13,
-Santeri Volotinen,,GK,2025-04-23,2025-04-23,Finland,False,1000,15,teams_template,,
-Jake Nyman,,"RB, CB",2025-04-23,2025-04-23,,False,0,0,teams_template,,
-Tonnin Seteli,,LCB,2025-04-23,2025-04-23,,False,0,0,teams_template,,
-Valtteri Volotinen,,LB,2025-04-23,2025-04-23,,False,0,0,teams_template,,
-Jake Austria,,LW,2025-04-23,2025-04-23,,False,0,0,teams_template,,
