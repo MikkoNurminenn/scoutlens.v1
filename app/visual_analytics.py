@@ -67,7 +67,6 @@ def format_label(name: str) -> str:
 # ---------- päänäkymä ----------
 def show_visual_analytics():
     st.title("📊 Visual Analytics")
-    st.caption(f"Data folder → {DATA_DIR}")
     tag_style()
 
     view = st.selectbox("View", ["Team Analytics", "Player Analytics"])

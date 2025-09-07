@@ -232,7 +232,6 @@ BADGE_CSS = """
 # ---------------- Player Preview (Scouting) ----------------
 def show_player_preview():
     st.header("📸 Player Preview (Scouting)")
-    st.caption(f"Data folder → {DATA_DIR}")
     _inject_css_once("BADGE_CSS_player_preview", BADGE_CSS)
 
     # 1) tiimin valinta

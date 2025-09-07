@@ -7,16 +7,19 @@ from postgrest.exceptions import APIError
 
 from supabase_client import get_client
 
+
 # ---------- Debug helper ----------
-def _dbg(e: APIError, title="🔧 Supabase PostgREST -virhe"):
+def _pgrest_debug(e: APIError, title: str = "🔧 Supabase PostgREST -virhe (debug)"):
+    """Näytä PostgREST-virheen kentät expanderissa kaatamatta sovellusta."""
     with st.expander(title, expanded=True):
         st.code(
-            f"code: {getattr(e,'code',None)}\n"
-            f"message: {getattr(e,'message',str(e))}\n"
-            f"details: {getattr(e,'details',None)}\n"
-            f"hint: {getattr(e,'hint',None)}",
-            "text",
+            f"""code:    {getattr(e, 'code', None)}
+message: {getattr(e, 'message', str(e))}
+details: {getattr(e, 'details', None)}
+hint:    {getattr(e, 'hint', None)}""",
+            language="text",
         )
+
 
 # ---------- IO ----------
 def _load_players() -> List[Dict[str, Any]]:
@@ -27,8 +30,9 @@ def _load_players() -> List[Dict[str, Any]]:
         res = client.table("players").select("*").execute()
         return res.data or []
     except APIError as e:
-        _dbg(e)
-        st.error("Players-haku epäonnistui")
+        _pgrest_debug(e)
+        return []
+    except Exception:
         return []
 
 
@@ -37,22 +41,25 @@ def _load_shortlists() -> Dict[str, List[str]]:
     if not client:
         return {}
     try:
-        data = (client.table("shortlists").select("name,player_id,created_at").order("name").execute().data) or []
-    except APIError:
+        res = client.table("shortlists").select("name,player_id").execute()
+        out: Dict[str, List[str]] = {}
+        for r in res.data or []:
+            name = (r.get("name") or "default").strip() or "default"
+            pid = r.get("player_id")
+            if pid is not None:
+                out.setdefault(name, []).append(str(pid))
+        return out
+    except APIError as e:
+        # Fallback: legacy schema without 'name'
+        _pgrest_debug(e, "ℹ️ Shortlists-taulu ilman name-saraketta? (debug)")
         try:
-            legacy = client.table("shortlists").select("player_id").execute().data or []
-            data = [{"name": "Default", "player_id": r.get("player_id")} for r in legacy if r.get("player_id")]
-        except APIError as e2:
-            _dbg(e2)
-            st.error("Shortlistien haku epäonnistui")
+            res = client.table("shortlists").select("player_id").execute()
+            ids = [str(r.get("player_id")) for r in (res.data or []) if r.get("player_id")]
+            return {"default": ids} if ids else {}
+        except Exception:
             return {}
-    out: Dict[str, List[str]] = {}
-    for r in data:
-        name = r.get("name") or "Default"
-        pid = r.get("player_id")
-        if name and pid is not None:
-            out.setdefault(name, []).append(str(pid))
-    return out
+    except Exception:
+        return {}
 
 
 def _save_shortlists(data: Dict[str, List[str]]):
@@ -60,6 +67,7 @@ def _save_shortlists(data: Dict[str, List[str]]):
     if not client:
         return
     try:
+        # Tyhjennä ja kirjoita uudelleen (idempotentti tapa)
         client.table("shortlists").delete().neq("name", "").execute()
         rows = []
         for name, ids in data.items():
@@ -68,8 +76,16 @@ def _save_shortlists(data: Dict[str, List[str]]):
         if rows:
             client.table("shortlists").insert(rows).execute()
     except APIError as e:
-        _dbg(e)
-        st.error("Shortlistien tallennus epäonnistui")
+        # Legacy schema ilman 'name'-saraketta
+        _pgrest_debug(e, "ℹ️ Shortlists-taulu ilman name-saraketta? (debug)")
+        try:
+            client.table("shortlists").delete().neq("player_id", None).execute()
+            flat = [str(pid) for ids in data.values() for pid in ids]
+            if flat:
+                client.table("shortlists").insert([{"player_id": pid} for pid in flat]).execute()
+        except Exception:
+            pass
+
 
 # ---------- helpers ----------
 def _player_name(p: Dict[str, Any]) -> str:
@@ -82,7 +98,7 @@ def _player_pos(p: Dict[str, Any]) -> str:
     return str(p.get("position") or p.get("Preferred Position") or p.get("pos") or "").strip()
 
 def _export_rows(players: List[Dict[str, Any]], names: List[str]) -> List[Dict[str, str]]:
-    idx = { _player_name(p): p for p in players }
+    idx = {_player_name(p): p for p in players}
     out = []
     for n in names:
         p = idx.get(n, {})
@@ -93,6 +109,7 @@ def _export_rows(players: List[Dict[str, Any]], names: List[str]) -> List[Dict[s
         })
     return out
 
+
 # ---------- PAGE ----------
 def show_shortlists():
     st.markdown("## ⭐ Shortlists")
@@ -101,7 +118,7 @@ def show_shortlists():
     shortlists = _load_shortlists()
 
     # left: lists, right: contents
-    left, right = st.columns([1,2], gap="large")
+    left, right = st.columns([1, 2], gap="large")
 
     # ----- LEFT: lists -----
     with left:
@@ -112,7 +129,7 @@ def show_shortlists():
 
         sel = st.selectbox("Select", list_names or ["—"], index=0 if list_names else 0, key="sl_sel_page")
         new_nm = st.text_input("New list name", placeholder="e.g. U23 Forwards")
-        c1, c2 = st.columns([1,1])
+        c1, c2 = st.columns([1, 1])
         if c1.button("Create"):
             nn = new_nm.strip()
             if nn and nn not in shortlists:
@@ -140,10 +157,10 @@ def show_shortlists():
         st.markdown("#### Players in list")
         if sel in shortlists:
             # quick add
-            name_pool = sorted({ _player_name(p) for p in players if _player_name(p) })
+            name_pool = sorted({_player_name(p) for p in players if _player_name(p)})
             default_add = []
             add = st.multiselect("Add players", options=name_pool, default=default_add, key=f"sl_add_multi_{sel}")
-            cadd, cclear = st.columns([1,1])
+            cadd, cclear = st.columns([1, 1])
             if cadd.button("Add selected"):
                 added = 0
                 for n in add:
@@ -168,13 +185,13 @@ def show_shortlists():
             else:
                 # tiny controls per row
                 for i, nm in enumerate(items):
-                    rc1, rc2, rc3, rc4 = st.columns([6,1,1,1])
+                    rc1, rc2, rc3, rc4 = st.columns([6, 1, 1, 1])
                     rc1.write(f"- **{nm}**")
-                    if rc2.button("⬆️", key=f"up_{sel}_{i}", help="Move up") and i>0:
-                        items[i-1], items[i] = items[i], items[i-1]
+                    if rc2.button("⬆️", key=f"up_{sel}_{i}", help="Move up") and i > 0:
+                        items[i - 1], items[i] = items[i], items[i - 1]
                         _save_shortlists(shortlists); st.rerun()
-                    if rc3.button("⬇️", key=f"dn_{sel}_{i}", help="Move down") and i < len(items)-1:
-                        items[i+1], items[i] = items[i], items[i+1]
+                    if rc3.button("⬇️", key=f"dn_{sel}_{i}", help="Move down") and i < len(items) - 1:
+                        items[i + 1], items[i] = items[i], items[i + 1]
                         _save_shortlists(shortlists); st.rerun()
                     if rc4.button("Remove", key=f"rm_{sel}_{i}"):
                         items.pop(i); _save_shortlists(shortlists); st.rerun()
@@ -185,9 +202,13 @@ def show_shortlists():
                 if rows:
                     import csv, io
                     buf = io.StringIO()
-                    w = csv.DictWriter(buf, fieldnames=["Name","Team","Position"])
+                    w = csv.DictWriter(buf, fieldnames=["Name", "Team", "Position"])
                     w.writeheader(); w.writerows(rows)
-                    st.download_button("⬇️ Export CSV", data=buf.getvalue().encode("utf-8"),
-                                       file_name=f"shortlist_{sel}.csv", mime="text/csv")
+                    st.download_button(
+                        "⬇️ Export CSV",
+                        data=buf.getvalue().encode("utf-8"),
+                        file_name=f"shortlist_{sel}.csv",
+                        mime="text/csv",
+                    )
         else:
             st.caption("Pick or create a list on the left.")
