@@ -1,6 +1,0 @@
-PlayerID,Name,Birthdate,Age,Position,ContractStart,ContractEnd,Nationality,Loan,Minutes,Matches,TransfermarktURL,TeamTAG,Attacking,Creativity,Vision,Pace,Passing,Dribbling,Shooting,Defending,PhysicalPresence,WorkRateOverall,DominantFoot,ExtraNotes,InjuryHistory
-,Mikko Nurminen,2000-01-01,25.0,ST,2025-04-24,2025-04-24,,False,0.0,0.0,,KELA,8.0,5.0,8.0,5.0,5.0,8.0,5.0,7.0,5.0,5.0,Right,,
-,Jake Nyman,,,"LB, RB",2025-04-24,2025-04-24,FIN ,False,3000.0,2.0,,KELA,,,,,,,,,,,,,
-,Leo Väyrynen,,,,,,,,,,,KELA,,,,,,,,,,,,,
-,Matti Huovinen,,,,,,,,,,,KELA,,,,,,,,,,,,,
-,John Doe,,,,,,,,,,,KELA,6.0,0.0,0.0,0.0,6.0,8.0,0.0,7.0,0.0,0.0,Unknown,,
