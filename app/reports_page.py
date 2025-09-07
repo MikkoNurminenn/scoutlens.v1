@@ -85,21 +85,22 @@ def _insert_report(payload: Dict[str, Any]) -> bool:
         return False
 
 
-def _list_reports(limit: int = 1000) -> List[Dict[str, Any]]:
-    """Fetch latest reports ordered by kickoff/creation time."""
-    rows = (
-        _safe_query("reports", order_by="kickoff_at", desc=True, limit=limit)
-        or _safe_query(
-            "scout_reports", order_by="kickoff_at", desc=True, limit=limit
-        )
-    )
+def _list_reports() -> List[Dict[str, Any]]:
+    """Return normalized reports with ordering fallbacks."""
+    # Prefer VIEW; if schema cache wasn't refreshed yet, fallback to base table
+    # Ordering strategy:
+    # 1) Try kickoff_at desc (VIEW provides it via COALESCE)
+    # 2) If that fails (e.g., querying base table without kickoff_at),
+    #    retry created_at desc
+    rows = _safe_query("reports", order_by="kickoff_at", desc=True)
     if not rows:
-        rows = (
-            _safe_query("reports", order_by="created_at", desc=True, limit=limit)
-            or _safe_query(
-                "scout_reports", order_by="created_at", desc=True, limit=limit
-            )
-        )
+        rows = _safe_query("reports", order_by="created_at", desc=True)
+
+    if not rows:
+        # fallback to base table (some envs call scout_reports directly)
+        rows = _safe_query("scout_reports", order_by="kickoff_at", desc=True)
+        if not rows:
+            rows = _safe_query("scout_reports", order_by="created_at", desc=True)
 
     norm: List[Dict[str, Any]] = []
     for r in rows:
@@ -117,6 +118,7 @@ def _list_reports(limit: int = 1000) -> List[Dict[str, Any]]:
                 "tags": r.get("tags"),
                 "notes": r.get("notes"),
                 "created_at": r.get("created_at"),
+                "updated_at": r.get("updated_at"),
             }
         )
     return norm
