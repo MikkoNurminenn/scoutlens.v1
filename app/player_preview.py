@@ -14,7 +14,7 @@ def _inject_css_once(key: str, css_html: str):
 
 import plotly.express as px
 
-from app_paths import file_path, DATA_DIR
+from app.app_paths import file_path, DATA_DIR
 
 # ---- tiedostopolut
 PLAYERS_FP = file_path("players.json")
@@ -33,7 +33,7 @@ def _load_json(fp: Path, default):
 
 # ---- tiimit: käytä teams_storea, muuten fallback
 try:
-    from teams_store import list_teams_all  # ensisijainen
+    from app.teams_store import list_teams_all  # ensisijainen
 except Exception:
     def _norm_team_for_list(p: dict) -> str:
         # EI lueta current_club -kenttiä

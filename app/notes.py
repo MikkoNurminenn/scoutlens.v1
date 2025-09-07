@@ -10,7 +10,7 @@ import streamlit as st
 import json
 from postgrest.exceptions import APIError
 
-from supabase_client import get_client
+from app.supabase_client import get_client
 
 def _dbg(e: APIError, title="🔧 Supabase PostgREST -virhe"):
     with st.expander(title, expanded=True):

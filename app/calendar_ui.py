@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from zoneinfo import ZoneInfo
 
-from app_paths import file_path, DATA_DIR
+from app.app_paths import file_path, DATA_DIR
 
 MATCHES_FP = file_path("matches.json")
 

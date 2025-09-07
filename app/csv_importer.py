@@ -1,7 +1,13 @@
 # csv_importer.py
 
 import pandas as pd
-from data_utils import BASE_DIR, save_players, save_seasonal_stats, load_players, MASTER_FIELDS
+from app.data_utils import (
+    BASE_DIR,
+    save_players,
+    save_seasonal_stats,
+    load_players,
+    MASTER_FIELDS,
+)
 from pathlib import Path
 
 def import_master_csv(uploaded_csv_path: str, team_name: str) -> None:

@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-from data_utils import load_data, save_data, validate_player_input, list_teams
-from metrics import add_minutes_per_match, calculate_summary
-from visuals import create_minutes_age_plot
+from app.data_utils import load_data, save_data, validate_player_input, list_teams
+from app.metrics import add_minutes_per_match, calculate_summary
+from app.visuals import create_minutes_age_plot
 
 def show_age_minutes():
     st.sidebar.header("⚽ Team Selection")

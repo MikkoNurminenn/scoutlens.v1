@@ -6,8 +6,8 @@ import streamlit as st
 from postgrest.exceptions import APIError
 import traceback
 
-from supabase_client import get_client
-from utils.supa import first_row
+from app.supabase_client import get_client
+from app.utils.supa import first_row
 
 
 # ---------- Debug helper ----------

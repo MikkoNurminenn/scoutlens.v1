@@ -13,10 +13,10 @@ from pathlib import Path
 import streamlit as st
 
 # --- Pages
-from reports_page import show_reports_page
-from shortlists import show_shortlists
-from export_page import show_export_page
-from login import login
+from app.reports_page import show_reports_page
+from app.shortlists import show_shortlists
+from app.export_page import show_export_page
+from app.login import login
 
 APP_TITLE   = "ScoutLens"
 APP_TAGLINE = "LATAM scouting toolkit"

@@ -209,7 +209,7 @@ sb.table("shortlist_items").select(
 ## Supabase Queries (Python examples)
 
 ```python
-from supabase_client import get_client
+from app.supabase_client import get_client
 sb = get_client()
 
 def list_reports(limit=50):

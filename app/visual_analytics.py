@@ -5,8 +5,8 @@ import plotly.graph_objects as go
 import json
 from pathlib import Path
 
-from app_paths import file_path, DATA_DIR
-from data_utils import list_teams, load_master
+from app.app_paths import file_path, DATA_DIR
+from app.data_utils import list_teams, load_master
 
 # ---------- JSON-polut ----------
 PLAYERS_FP    = file_path("players.json")
