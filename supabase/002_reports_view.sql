@@ -1,5 +1,5 @@
 -- 002_reports_view.sql
--- Normalize reports via a stable VIEW and ensure kickoff_at is available.
+-- Normalize reports via a stable VIEW using report_date only.
 
 -- (A) Minimal base table (safe if exists already)
 create extension if not exists pgcrypto;
@@ -11,7 +11,7 @@ create table if not exists public.scout_reports (
   player_name text,
   competition text,
   opponent text,
-  match_datetime timestamptz,
+  report_date date,
   location text,
   ratings jsonb,
   tags text[],
@@ -20,20 +20,16 @@ create table if not exists public.scout_reports (
   updated_at timestamptz not null default now()
 );
 
--- (B) Optional physical column for kickoff time
-alter table public.scout_reports
-  add column if not exists kickoff_at timestamptz;
-
 -- (C) View with unified columns for the app
 create or replace view public.reports as
 select
   r.id,
-  coalesce(r.title, r.report_title)         as title,
+  coalesce(r.title, r.report_title) as title,
   r.player_id,
   r.player_name,
   r.competition,
   r.opponent,
-  coalesce(r.kickoff_at, r.match_datetime)  as kickoff_at,
+  r.report_date,
   r.location,
   r.ratings,
   r.tags,
