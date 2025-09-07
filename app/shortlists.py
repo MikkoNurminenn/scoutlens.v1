@@ -4,8 +4,10 @@ from typing import Any, Dict, List
 
 import streamlit as st
 from postgrest.exceptions import APIError
+import traceback
 
 from supabase_client import get_client
+from utils.supa import first_row
 
 
 # ---------- Debug helper ----------
@@ -69,19 +71,20 @@ def _save_shortlists(data: Dict[str, List[str]]):
         client.table("shortlist_items").delete().neq("id", "").execute()
         client.table("shortlists").delete().neq("id", "").execute()
         for name, ids in data.items():
-            res = (
-                client.table("shortlists")
-                .insert({"name": name}, returning="representation")
-                .execute()
-            )
-            sl_id = (res.data or [{}])[0].get("id")
+            res = client.table("shortlists").insert({"name": name}).execute()
+            sl_id = (first_row(res) or {}).get("id")
             if sl_id and ids:
                 rows = [{"shortlist_id": sl_id, "player_id": pid} for pid in ids]
                 client.table("shortlist_items").insert(rows).execute()
     except APIError as e:
         _pgrest_debug(e)
+        st.error("❌ Save failed")
+        st.code("".join(traceback.format_exc()), language="text")
+        raise
     except Exception:
-        pass
+        st.error("❌ Save failed")
+        st.code("".join(traceback.format_exc()), language="text")
+        raise
 
 
 # ---------- helpers ----------

@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Callable
 import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
+import traceback
 
 from supabase_client import get_client
 from db_tables import PLAYERS, REPORTS
@@ -79,11 +80,10 @@ def _insert_report(payload: Dict[str, Any]) -> bool:
     try:
         client.table(REPORTS).insert(payload).execute()
         return True
-    except APIError as e:
-        st.error(
-            f"Could not save report to Supabase: {getattr(e, 'message', e)}"
-        )
-        return False
+    except Exception:
+        st.error("❌ Save failed")
+        st.code("".join(traceback.format_exc()), language="text")
+        raise
 
 
 def _list_reports() -> List[Dict[str, Any]]:

@@ -9,6 +9,7 @@ from datetime import date, datetime
 import pandas as pd
 import numpy as np
 import streamlit as st
+import traceback
 
 # --- Supabase & data helpers ---
 from supabase_client import get_client
@@ -276,14 +277,24 @@ def upsert_player_storage(player: dict) -> str:
     if not pid:
         pid = uuid4().hex
         player["id"] = pid
-    client.table("players").upsert(player).execute()
+    try:
+        client.table("players").upsert(player).execute()
+    except Exception:
+        st.error("❌ Save failed")
+        st.code("".join(traceback.format_exc()), language="text")
+        raise
     return pid
 
 def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     client = get_client()
     if not client:
         return 0
-    client.table("players").delete().in_("id", [str(i) for i in ids]).execute()
+    try:
+        client.table("players").delete().in_("id", [str(i) for i in ids]).execute()
+    except Exception:
+        st.error("❌ Delete failed")
+        st.code("".join(traceback.format_exc()), language="text")
+        raise
     return len(ids)
 
 def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) -> Path:
@@ -294,7 +305,12 @@ def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) 
     out.write_bytes(content)
     client = get_client()
     if client:
-        client.table("players").update({"photo_path": str(out)}).eq("id", player_id).execute()
+        try:
+            client.table("players").update({"photo_path": str(out)}).eq("id", player_id).execute()
+        except Exception:
+            st.error("❌ Save failed")
+            st.code("".join(traceback.format_exc()), language="text")
+            raise
     return out
 
 # -------------------------------------------------------
@@ -698,7 +714,12 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             tags = [t.strip() for t in tag_str.split(",") if t.strip()]
             client = get_client()
             if client:
-                client.table("players").update({"tags": tags}).eq("id", pid_str).execute()
+                try:
+                    client.table("players").update({"tags": tags}).eq("id", pid_str).execute()
+                except Exception:
+                    st.error("❌ Save failed")
+                    st.code("".join(traceback.format_exc()), language="text")
+                    raise
             st.success("Tags saved.")
 
     # 📅 Season Stats
