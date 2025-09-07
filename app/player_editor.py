@@ -42,13 +42,27 @@ CANON_MAP = {
 CANON_ORDER = ["id","name","team_name","position","date_of_birth","preferred_foot","club_number","scout_rating","transfermarkt_url","created_at"]
 
 
-def canonicalize_dict(d):
-    out={}
-    for k,v in (d or {}).items():
-        if k is None: continue
-        canon = CANON_MAP.get(k,k)
-        if canon not in out or out[canon] in (None,"",pd.NA):
-            out[canon]=v
+def _is_blank_or_na(x) -> bool:
+    if x is None:
+        return True
+    if isinstance(x, str) and x.strip() == "":
+        return True
+    if pd.isna(x):
+        return True
+    return False
+
+
+def canonicalize_dict(d: dict) -> dict:
+    out = {}
+    for k, v in (d or {}).items():
+        if k is None:
+            continue
+        canon = CANON_MAP.get(k, k)
+        canon = str(canon).strip()
+        if not canon:
+            continue
+        if (canon not in out) or _is_blank_or_na(out.get(canon)):
+            out[canon] = None if _is_blank_or_na(v) else v
     return out
 
 
