@@ -25,6 +25,13 @@ APP_VERSION = "0.9.1"
 # Page config must be first Streamlit call
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 
+# Temporary cache bust during Supabase client upgrade
+try:
+    st.cache_data.clear()
+    st.cache_resource.clear()
+except Exception:
+    pass
+
 # --------- Global CSS injection ----------
 def inject_css():
     base = Path("app/styles")

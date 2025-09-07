@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 import streamlit as st
 from postgrest.exceptions import APIError
+import traceback
 
 from supabase_client import get_client
 from utils.supa import first_row
@@ -77,8 +78,13 @@ def _save_shortlists(data: Dict[str, List[str]]):
                 client.table("shortlist_items").insert(rows).execute()
     except APIError as e:
         _pgrest_debug(e)
+        st.error("❌ Save failed")
+        st.code("".join(traceback.format_exc()), language="text")
+        raise
     except Exception:
-        pass
+        st.error("❌ Save failed")
+        st.code("".join(traceback.format_exc()), language="text")
+        raise
 
 
 # ---------- helpers ----------

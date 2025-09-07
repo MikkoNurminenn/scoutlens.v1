@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+import traceback
 
 from supabase_client import get_client
 from data_utils import list_teams, list_players_by_team  # käyttää Supabasea
@@ -149,7 +150,12 @@ def insert_match(m: Dict[str, Any]) -> None:
         "kickoff_at": m["kickoff_at"],
         "notes": m.get("notes", ""),
     }
-    client.table(MATCHES).insert(new_item).execute()
+    try:
+        client.table(MATCHES).insert(new_item).execute()
+    except Exception:
+        st.error("❌ Save failed")
+        st.code("".join(traceback.format_exc()), language="text")
+        raise
 
 
 def _warn_api_error(e: APIError, ctx: str):
@@ -198,14 +204,24 @@ def save_report(records: List[Dict[str, Any]]) -> None:
     if not client or not records:
         return
     payload = clean_jsonable(records)
-    client.table(SCOUT_REPORTS).upsert(payload, on_conflict="id").execute()
+    try:
+        client.table(SCOUT_REPORTS).upsert(payload, on_conflict="id").execute()
+    except Exception:
+        st.error("❌ Save failed")
+        st.code("".join(traceback.format_exc()), language="text")
+        raise
 
 
 def delete_reports(ids: List[str]) -> None:
     client = get_client()
     if not client:
         return
-    client.table(SCOUT_REPORTS).delete().in_("id", [str(i) for i in ids]).execute()
+    try:
+        client.table(SCOUT_REPORTS).delete().in_("id", [str(i) for i in ids]).execute()
+    except Exception:
+        st.error("❌ Delete failed")
+        st.code("".join(traceback.format_exc()), language="text")
+        raise
 
 
 def dbg_report_count():

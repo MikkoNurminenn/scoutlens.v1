@@ -4,4 +4,5 @@ numpy
 plotly
 matplotlib
 streamlit>=1.36
-supabase>=2.3
+supabase>=2.5.0
+postgrest>=0.15
