@@ -1,72 +1,44 @@
-# app/team_view.py
-# ScoutLens — Team View (all-in enhanced)
-# -------------------------------------------------------
-# - Namespaced session_state keys (no collisions)
-# - Quick stats, saved views, visible columns
-# - Persistent shortlist (JSON), prepare-only actions (NO navigation)
-# - Robust age filter (handles min==max), filter chips
-# - Fast table fallback, optional position guessing
-
+# app/team_view.py — ScoutLens Team View (Supabase, features preserved)
 from __future__ import annotations
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date
+from collections import Counter
 
 import pandas as pd
 import streamlit as st
+from postgrest.exceptions import APIError
 
 from supabase_client import get_client
 
 # -------------------- CONFIG / STATE KEYS --------------------
-STATE_TEAM_KEY        = "team_view__selected_team"
-STATE_SHORTLIST_KEY   = "team_view__shortlist_ids"
-STATE_SAVED_VIEWS_KEY = "team_view__saved_views"
-STATE_VISIBLE_COLS_KEY= "team_view__visible_cols"
-STATE_Q_KEY           = "team_view__q"
-STATE_POS_KEY         = "team_view__pos"
-STATE_FOOT_KEY        = "team_view__foot"
-STATE_CLUB_KEY        = "team_view__club"
-STATE_AGE_KEY         = "team_view__age"
-STATE_CACHE_BUSTER    = "team_view__cache_buster"
+STATE_TEAM_KEY         = "team_view__selected_team"
+STATE_SHORTLIST_KEY    = "team_view__shortlist_ids"
+STATE_SAVED_VIEWS_KEY  = "team_view__saved_views"
+STATE_VISIBLE_COLS_KEY = "team_view__visible_cols"
+STATE_Q_KEY            = "team_view__q"
+STATE_POS_KEY          = "team_view__pos"
+STATE_FOOT_KEY         = "team_view__foot"
+STATE_CLUB_KEY         = "team_view__club"
+STATE_AGE_KEY          = "team_view__age"
+STATE_CACHE_BUSTER     = "team_view__cache_buster"
 
-# Threshold for switching cards -> table
-CARD_THRESHOLD = 80
+CARD_THRESHOLD = 80  # korttinäkymän raja
 
-# Data tables
-
-# External (optional) teams source
-try:
-    from data_utils import list_teams
-except Exception:
-    list_teams = None  # fallback players.jsonista
-
-# ===================== Utils & IO =====================
+# ========= Helpers =========
+def _pgrest_debug(e: APIError, title="🔧 Supabase PostgREST -virhe (debug)"):
+    with st.expander(title, expanded=True):
+        st.code(
+            f"""code:    {getattr(e,'code',None)}
+message: {getattr(e,'message',str(e))}
+details: {getattr(e,'details',None)}
+hint:    {getattr(e,'hint',None)}""",
+            language="text",
+        )
 
 def _safe_str(v: Any) -> str:
-    """Return a string representation of ``v`` or an empty string."""
-
     return "" if v is None else str(v)
 
-@st.cache_data(show_spinner=False)
-def _load_shortlist() -> set:
-    client = get_client()
-    if not client:
-        return set()
-    res = client.table("shortlists").select("player_id").execute()
-    return {str(r.get("player_id")) for r in (res.data or []) if r.get("player_id")}
-
-
-def _save_shortlist(s: set) -> None:
-    client = get_client()
-    if not client:
-        return
-    client.table("shortlists").delete().neq("player_id", None).execute()
-    if s:
-        rows = [{"player_id": str(pid)} for pid in s]
-        client.table("shortlists").insert(rows).execute()
-
 def _norm_team(p: Dict[str, Any]) -> str:
-    """Extract a normalised team name from a player record."""
-
     return (
         p.get("team_name")
         or p.get("Team")
@@ -77,33 +49,22 @@ def _norm_team(p: Dict[str, Any]) -> str:
     ).strip()
 
 def _norm_name(p: Dict[str, Any]) -> str:
-    """Return a player's name from record ``p``."""
-
     return (p.get("name") or p.get("Name") or "").strip()
 
 def _parse_birthdate_to_age(v: Any) -> Optional[int]:
-    """Convert a date-like value to an age in years.
-
-    Args:
-        v: A ``date``, ``datetime`` or string representation of a birth date.
-
-    Returns:
-        Player age in years if parsing succeeds, otherwise ``None``.
-    """
-
     if not v:
         return None
     try:
         if isinstance(v, (datetime, date)):
-            b = v
+            b = v if isinstance(v, date) else v.date()
         else:
             s = str(v).strip()
             if len(s) == 4 and s.isdigit():
-                b = date(int(s), 7, 1)                  # YYYY
+                b = date(int(s), 7, 1)
             elif "-" in s:
-                b = datetime.strptime(s[:10], "%Y-%m-%d").date()  # YYYY-MM-DD
+                b = datetime.strptime(s[:10], "%Y-%m-%d").date()
             elif "/" in s:
-                b = datetime.strptime(s[:10], "%d/%m/%Y").date()  # DD/MM/YYYY
+                b = datetime.strptime(s[:10], "%d/%m/%Y").date()
             else:
                 return None
         today = date.today()
@@ -112,54 +73,64 @@ def _parse_birthdate_to_age(v: Any) -> Optional[int]:
         return None
 
 def _derive_age(p: Dict[str, Any]) -> Optional[int]:
-    """Best-effort derivation of a player's age from record ``p``."""
-
-    for k in ("BirthDate", "birthdate", "Birthdate", "DOB", "date_of_birth", "YOB", "BirthYear", "birthyear"):
+    keys = ("BirthDate","birthdate","Birthdate","DOB","date_of_birth","YOB","BirthYear","birthyear")
+    for k in keys:
         if k in p and p[k]:
             age = _parse_birthdate_to_age(p[k])
             if age is None and str(p[k]).isdigit() and len(str(p[k])) == 4:
                 age = _parse_birthdate_to_age(str(p[k]))
             if age is not None:
                 return age
-    for k in ("Age", "age"):
+    for k in ("Age","age"):
         if k in p and str(p[k]).isdigit():
             return int(p[k])
     return None
 
 def _guess_position(text: str) -> str:
-    """Guess a player's position from free-form ``text``.
-
-    Args:
-        text: Description potentially containing position keywords.
-
-    Returns:
-        Standardised position abbreviation or an empty string if unknown.
-    """
-
     t = (text or "").lower()
-    if any(k in t for k in ["gk", "keeper", "goal"]): return "GK"
-    if any(k in t for k in ["left back", "lb", "lwb"]): return "LB"
-    if any(k in t for k in ["right back", "rb", "rwb"]): return "RB"
-    if any(k in t for k in ["center back", "centre back", "cb"]): return "CB"
-    if any(k in t for k in ["dm", "volante", "pivot"]): return "DM"
-    if any(k in t for k in ["cm", "mezzala", "interior"]): return "CM"
-    if any(k in t for k in ["am", "enganche", "no.10", "10 "]): return "AM"
-    if any(k in t for k in ["lw", "left wing"]): return "LW"
-    if any(k in t for k in ["rw", "right wing"]): return "RW"
-    if any(k in t for k in ["st", "cf", "9 "]): return "ST"
+    if any(k in t for k in ["gk","keeper","goal"]): return "GK"
+    if any(k in t for k in ["left back","lb","lwb"]): return "LB"
+    if any(k in t for k in ["right back","rb","rwb"]): return "RB"
+    if any(k in t for k in ["center back","centre back","cb"]): return "CB"
+    if any(k in t for k in ["dm","volante","pivot"]): return "DM"
+    if any(k in t for k in ["cm","mezzala","interior"]): return "CM"
+    if any(k in t for k in ["am","enganche","no.10","10 "]): return "AM"
+    if any(k in t for k in ["lw","left wing"]): return "LW"
+    if any(k in t for k in ["rw","right wing"]): return "RW"
+    if any(k in t for k in ["st","cf","9 "]): return "ST"
     return ""
 
-# ===================== Data shaping =====================
-
-def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, Any]]:
-    """Gather normalised player rows for ``team`` from storage."""
-
-    team = (team or "").strip()
-    client = get_client()
-    if not client:
+# ========= Supabase IO =========
+@st.cache_data(show_spinner=False, ttl=10)
+def _load_team_names(cache_buster: int) -> List[str]:
+    sb = get_client()
+    try:
+        # ensisijaisesti teams-taulusta
+        data = sb.table("teams").select("name").order("name").execute().data or []
+        names = [ (t.get("name") or "").strip() for t in data if (t.get("name") or "").strip() ]
+        if names:
+            return names
+        # fallback: pelaajista
+        pdata = sb.table("players").select("team_name").execute().data or []
+        return sorted({ (p.get("team_name") or "").strip() for p in pdata if (p.get("team_name") or "").strip() })
+    except APIError as e:
+        _pgrest_debug(e)
         return []
-    res = client.table("players").select("*").eq("team_name", team).execute()
-    players = res.data or []
+    except Exception:
+        return []
+
+@st.cache_data(show_spinner=False, ttl=10)
+def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, Any]]:
+    sb = get_client()
+    try:
+        res = sb.table("players").select("*").eq("team_name", team).execute()
+        players = res.data or []
+    except APIError as e:
+        _pgrest_debug(e)
+        return []
+    except Exception:
+        return []
+
     out: List[Dict[str, Any]] = []
     for p in players:
         if _norm_team(p) == team:
@@ -175,21 +146,46 @@ def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, An
             out.append(row)
     return out
 
-def _teams_from_players_json(cache_buster: int) -> List[str]:
-    """Return a sorted list of unique team names from players data."""
+@st.cache_data(show_spinner=False, ttl=10)
+def _load_shortlist() -> set:
+    sb = get_client()
+    try:
+        res = sb.table("shortlists").select("player_id").execute()
+        return {str(r.get("player_id")) for r in (res.data or []) if r.get("player_id")}
+    except APIError as e:
+        # Taulu puuttuu → näytä ohje, mutta älä kaadu
+        _pgrest_debug(e, "ℹ️ Shortlist-taulu puuttuu? (debug)")
+        st.info("Shortlist on pois käytöstä, koska taulua `public.shortlists` ei löytynyt.")
+        return set()
+    except Exception:
+        return set()
 
-    client = get_client()
-    if not client:
+def _save_shortlist(s: set) -> None:
+    sb = get_client()
+    try:
+        # yksinkertainen “replace” strategia: tyhjennä ja lisää uudelleen
+        sb.table("shortlists").delete().neq("player_id", None).execute()
+        if s:
+            rows = [{"player_id": str(pid)} for pid in s]
+            sb.table("shortlists").insert(rows).execute()
+    except APIError as e:
+        _pgrest_debug(e, "ℹ️ Shortlist-talennus epäonnistui (debug)")
+        st.error("Shortlistin tallennus epäonnistui. Luo taulu `public.shortlists` (katso SQL-ohje alla).")
+    except Exception:
+        pass
+
+# ========= Data shaping =========
+def _teams_from_players_json(cache_buster: int) -> List[str]:
+    sb = get_client()
+    try:
+        res = sb.table("players").select("team_name").execute()
+        return sorted({(p.get("team_name") or '').strip() for p in (res.data or []) if (p.get("team_name") or '').strip()})
+    except Exception:
         return []
-    res = client.table("players").select("team_name").execute()
-    teams = sorted({(p.get("team_name") or "").strip() for p in (res.data or []) if (p.get("team_name") or "").strip()})
-    return teams
 
 def _rows_to_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
-    """Convert a list of player dicts into a normalised DataFrame."""
-
     if not rows:
-        return pd.DataFrame(columns=["id", "name", "team_name"])
+        return pd.DataFrame(columns=["id","name","team_name"])
 
     cols = set()
     for r in rows:
@@ -198,67 +194,45 @@ def _rows_to_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
 
     # Standard names
     if "name" not in df.columns and "Name" in df.columns:
-        df.rename(columns={"Name": "name"}, inplace=True)
+        df.rename(columns={"Name":"name"}, inplace=True)
     if "team_name" not in df.columns:
-        for c in ["team", "Team", "current_club", "CurrentClub"]:
+        for c in ["team","Team","current_club","CurrentClub"]:
             if c in df.columns:
-                df["team_name"] = df[c]
-                break
-        if "team_name" not in df.columns:
-            df["team_name"] = ""
-
+                df["team_name"] = df[c]; break
+        if "team_name" not in df.columns: df["team_name"] = ""
     if "CurrentClub" not in df.columns:
         df["CurrentClub"] = df["team_name"]
 
-    # Unify Position
     if "Position" not in df.columns:
-        for c in ["Position", "position", "Role", "role", "Pos", "pos"]:
+        for c in ["Position","position","Role","role","Pos","pos"]:
             if c in df.columns:
-                df.rename(columns={c: "Position"}, inplace=True)
-                break
+                df.rename(columns={c:"Position"}, inplace=True); break
     if "Position" not in df.columns:
-        src = None
-        for c in ["role","Role","Notes","notes","profile","Profile","description","Desc"]:
-            if c in df.columns:
-                src = c
-                break
-        if src:
-            df["Position"] = df[src].astype(str).map(_guess_position)
+        src = next((c for c in ["role","Role","Notes","notes","profile","Profile","description","Desc"] if c in df.columns), None)
+        if src: df["Position"] = df[src].astype(str).map(_guess_position)
 
-    # Unify Foot
     if "Foot" not in df.columns:
-        for c in ["Foot", "PreferredFoot", "foot", "preferred_foot"]:
+        for c in ["Foot","PreferredFoot","foot","preferred_foot"]:
             if c in df.columns:
-                df.rename(columns={c: "Foot"}, inplace=True)
-                break
+                df.rename(columns={c:"Foot"}, inplace=True); break
 
-    if "Age" not in df.columns:
-        df["Age"] = None
+    if "Age" not in df.columns: df["Age"] = None
 
-    # Best-effort numeric casting
+    # Try numeric
     for c in df.columns:
         if df[c].dtype == object:
-            try:
-                df[c] = pd.to_numeric(df[c], errors="ignore")
-            except Exception:
-                pass
+            try: df[c] = pd.to_numeric(df[c], errors="ignore")
+            except Exception: pass
 
-    # Ensure id is string
-    if "id" in df.columns:
-        df["id"] = df["id"].astype(str)
-
+    if "id" in df.columns: df["id"] = df["id"].astype(str)
     return df
 
-# ===================== UI =====================
-
+# ========= UI =========
 def show_team_view():
-    """Render the Team View page within Streamlit."""
-
     st.header("🏟️ Team View")
-    st.caption(f"Data folder → `{DATA_DIR}`")
 
-    # Reload button
-    col_reload, _ = st.columns([0.2, 0.8])
+    # Reload
+    col_reload, _ = st.columns([0.22, 0.78])
     with col_reload:
         if st.button("↻ Reload data", help="Clear caches and reload"):
             st.cache_data.clear()
@@ -267,30 +241,33 @@ def show_team_view():
 
     cache_buster = st.session_state.get(STATE_CACHE_BUSTER, 0)
 
-    # Migration from old key (yksisuuntainen kopio vain jos ei ole asetettu)
-    if "selected_team" in st.session_state and STATE_TEAM_KEY not in st.session_state:
-        st.session_state[STATE_TEAM_KEY] = st.session_state["selected_team"]
-
-    # Teams source
+    # Teams
     preselected = st.session_state.get(STATE_TEAM_KEY)
-    teams: List[str] = []
-    if callable(list_teams):
-        try:
-            teams = list_teams() or []
-        except Exception:
-            teams = []
+    teams: List[str] = _load_team_names(cache_buster)
     if not teams:
         teams = _teams_from_players_json(cache_buster)
 
     if not teams:
         st.info("No teams available. Add players first.")
+        # Shortlist-taulun ohje tarvittaessa
+        with st.expander("SQL: create public.shortlists (valinnainen)"):
+            st.code(
+                "create table if not exists public.shortlists (\n"
+                "  player_id uuid primary key\n"
+                ");\n"
+                "alter table public.shortlists enable row level security;\n"
+                "create policy if not exists read_shortlists on public.shortlists for select using (true);\n"
+                "create policy if not exists write_shortlists on public.shortlists for insert with check (true);\n"
+                "create policy if not exists del_shortlists on public.shortlists for delete using (true);\n"
+                "notify pgrst, 'reload schema';",
+                language="sql",
+            )
         return
 
     selected_idx = teams.index(preselected) if preselected in teams else 0
-    # ⚠️ Uniikki key tälle näkymälle – EI "selected_team" (se on sivupalkissa)
     team = st.selectbox("Select Team", teams, index=selected_idx, key=STATE_TEAM_KEY)
 
-    # Load players for team
+    # Players for team
     rows = _collect_players_for_team(team, cache_buster)
     if not rows:
         st.info(f"No players found for team {team}.")
@@ -298,22 +275,18 @@ def show_team_view():
 
     df = _rows_to_df(rows)
 
-    # --------- Quick stats ----------
-    st.subheader(f"Players — {team}  ")
-    with st.container():
-        left, mid, right = st.columns(3)
-        ages_series = pd.to_numeric(df["Age"], errors="coerce").dropna()
-        avg_age = round(ages_series.mean(), 1) if not ages_series.empty else "–"
-        with left:
-            st.metric("Players", len(df))
-        with mid:
-            st.metric("Average age", avg_age)
-        with right:
-            pos_counts = df.get("Position", pd.Series(dtype=object)).fillna("—").astype(str).value_counts()
-            top_pos = ", ".join([f"{k} {v}" for k, v in pos_counts.head(2).items()]) if len(pos_counts) else "–"
-            st.metric("Top positions", top_pos)
+    # KPI:t
+    st.subheader(f"Players — {team}")
+    c1, c2, c3 = st.columns(3)
+    with c1: st.metric("Players", len(df))
+    with c2:
+        pos_counts = Counter((df.get("Position") or pd.Series(dtype=object)).fillna("—").astype(str))
+        st.metric("Unique positions", len(pos_counts))
+    with c3:
+        avg = round(pd.to_numeric(df.get("scout_rating", pd.Series([None]*len(df))), errors="coerce").dropna().mean(), 1) if len(df) else 0
+        st.metric("Avg rating", avg if avg == avg else "–")  # NaN check
 
-    # Small distribution chart (optional)
+    # Pieni jakauma
     if "Position" in df.columns and df["Position"].notna().any():
         st.caption("Position distribution")
         st.bar_chart(df["Position"].fillna("—").astype(str).value_counts())
@@ -330,25 +303,21 @@ def show_team_view():
             foot_vals = sorted([v for v in df.get("Foot", pd.Series(dtype=object)).dropna().astype(str).unique() if v])
             foot_sel = st.multiselect("Foot", foot_vals, default=st.session_state.get(STATE_FOOT_KEY, []), key=STATE_FOOT_KEY)
         with c4:
-            # Robust age filter (slider only when min<max)
-            age_min, age_max = None, None
+            age_min = age_max = None
             if "Age" in df.columns:
                 ages = pd.to_numeric(df["Age"], errors="coerce").dropna()
                 if not ages.empty:
-                    amin = int(ages.min()); amax = int(ages.max())
-                    amin_c = max(14, amin); amax_c = min(45, amax)
+                    amin, amax = int(ages.min()), int(ages.max())
+                    amin_c, amax_c = max(14, amin), min(45, amax)
                     if amin_c >= amax_c:
                         st.caption(f"Age range: {amin_c} only")
-                        # poista mahdollinen vanha slider-arvo
                         st.session_state.pop(STATE_AGE_KEY, None)
                     else:
                         default_age = st.session_state.get(STATE_AGE_KEY, (amin_c, amax_c))
-                        # clamp default to current bounds
                         d0 = max(amin_c, min(default_age[0], amax_c))
                         d1 = max(amin_c, min(default_age[1], amax_c))
                         if d0 > d1: d0, d1 = d1, d0
-                        age_min, age_max = st.slider("Age", min_value=amin_c, max_value=amax_c,
-                                                     value=(d0, d1), key=STATE_AGE_KEY)
+                        age_min, age_max = st.slider("Age", min_value=amin_c, max_value=amax_c, value=(d0, d1), key=STATE_AGE_KEY)
                 else:
                     st.caption("No age data")
         with c5:
@@ -363,80 +332,22 @@ def show_team_view():
                 st.session_state.pop(STATE_AGE_KEY, None)
                 st.rerun()
 
-    # Active filter chips
+    # Chips
     chips = []
     if q: chips.append(f"🔎 {q}")
     if pos_sel: chips.append("📍 " + "/".join(pos_sel))
     if foot_sel: chips.append("🦶 " + "/".join(foot_sel))
     if (STATE_AGE_KEY in st.session_state) or (age_min is not None and age_max is not None):
         lo, hi = (st.session_state.get(STATE_AGE_KEY, (age_min, age_max)))
-        if lo is not None and hi is not None:
-            chips.append(f"🎂 {lo}-{hi}")
+        if lo is not None and hi is not None: chips.append(f"🎂 {lo}-{hi}")
     if club_sel: chips.append("🏟️ " + "/".join(club_sel))
     if chips:
-        chips_html = " ".join(f"<span class='sl-chip'>{c}</span>" for c in chips)
-        st.markdown(chips_html, unsafe_allow_html=True)
+        st.markdown(" ".join(f"<span class='sl-chip'>{c}</span>" for c in chips), unsafe_allow_html=True)
 
-    # --------- Advanced: sort + visible columns + starters + shortlist toggle ----------
-    with st.expander("Advanced", expanded=False):
-        cA, cB, cC = st.columns([1.3, 1.2, 1.5])
-        with cA:
-            numeric_candidates = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
-            sort_by = st.selectbox("Sort by (numeric)", numeric_candidates, index=0 if numeric_candidates else None)
-            sort_desc = st.toggle("Sort descending", value=True)
-        with cB:
-            starters_flag = None
-            for k in ("Starter", "starter", "IsStarter", "is_starter", "XI"):
-                if k in df.columns:
-                    starters_flag = k
-                    break
-            only_starters = st.checkbox("Only starters", value=False, disabled=starters_flag is None)
-        with cC:
-            all_cols = list(df.columns)
-            default_visible = st.session_state.get(STATE_VISIBLE_COLS_KEY) or ["name","Position","Age","CurrentClub","Foot"]
-            visible_cols = st.multiselect("Visible columns", all_cols, default=default_visible)
-            st.session_state[STATE_VISIBLE_COLS_KEY] = visible_cols
-
-    # Persistent shortlist init
-    if STATE_SHORTLIST_KEY not in st.session_state:
-        st.session_state[STATE_SHORTLIST_KEY] = _load_shortlist()
-
-    # --------- Apply filters ----------
-    df_show = df.copy()
-    if q:
-        df_show = df_show[df_show["name"].astype(str).str.contains(q, case=False, na=False)]
-    if pos_sel:
-        df_show = df_show[df_show.get("Position", pd.Series(dtype=object)).astype(str).isin(pos_sel)]
-    if foot_sel:
-        df_show = df_show[df_show.get("Foot", pd.Series(dtype=object)).astype(str).isin(foot_sel)]
-    if (STATE_AGE_KEY in st.session_state) or (age_min is not None and age_max is not None):
-        lo, hi = st.session_state.get(STATE_AGE_KEY, (age_min, age_max))
-        if lo is not None and hi is not None and "Age" in df_show.columns:
-            df_show = df_show[pd.to_numeric(df_show["Age"], errors="coerce").between(lo, hi, inclusive="both")]
-    if club_sel:
-        df_show = df_show[df_show.get("CurrentClub", pd.Series(dtype=object)).astype(str).isin(club_sel)]
-    if 'starters_flag' in locals() and starters_flag and only_starters:
-        df_show = df_show[df_show[starters_flag] == True]  # noqa: E712
-    # Sorting
-    if sort_by:
-        df_show = df_show.sort_values(by=sort_by, ascending=not sort_desc, kind="mergesort")
-
-    st.markdown(f"**Results:** {len(df_show)} / {len(df)}  •  Columns: {len(df_show.columns)}")
-
-    # Preferred + rating-like columns
-    preferred_cols = ["id", "name", "Position", "Age", "Foot", "team_name", "CurrentClub"]
-    rating_like = [c for c in df_show.columns if c not in preferred_cols and pd.api.types.is_numeric_dtype(df_show[c])]
-    # User visible columns take precedence if defined
-    if st.session_state.get(STATE_VISIBLE_COLS_KEY):
-        preferred_cols = [c for c in st.session_state[STATE_VISIBLE_COLS_KEY] if c in df_show.columns]
-    else:
-        preferred_cols = [c for c in preferred_cols if c in df_show.columns] + rating_like[:6]
-
-    # --------- Saved Views (store & apply) ----------
+    # --------- Saved Views ----------
+    st.session_state.setdefault(STATE_SAVED_VIEWS_KEY, {})
     st.divider()
     st.caption("Saved Views")
-    st.session_state.setdefault(STATE_SAVED_VIEWS_KEY, {})
-
     sv_c1, sv_c2 = st.columns([1.3, 2])
     with sv_c1:
         view_name = st.text_input("New view name", "", placeholder="e.g. U23 left-footed")
@@ -460,41 +371,50 @@ def show_team_view():
             st.session_state[STATE_POS_KEY] = v.get("pos_sel", [])
             st.session_state[STATE_FOOT_KEY] = v.get("foot_sel", [])
             st.session_state[STATE_CLUB_KEY] = v.get("club_sel", [])
-            if v.get("age") is not None:
-                st.session_state[STATE_AGE_KEY] = tuple(v["age"])
-            else:
-                st.session_state.pop(STATE_AGE_KEY, None)
+            if v.get("age") is not None: st.session_state[STATE_AGE_KEY] = tuple(v["age"])
+            else: st.session_state.pop(STATE_AGE_KEY, None)
             st.rerun()
 
-    # --------- Render list/table ----------
-    def _shortlist_toggle(pid: str):
-        """Add or remove ``pid`` from the shortlist."""
+    # --------- Apply filters ----------
+    df_show = df.copy()
+    if q: df_show = df_show[df_show["name"].astype(str).str.contains(q, case=False, na=False)]
+    if pos_sel: df_show = df_show[df_show.get("Position", pd.Series(dtype=object)).astype(str).isin(pos_sel)]
+    if foot_sel: df_show = df_show[df_show.get("Foot", pd.Series(dtype=object)).astype(str).isin(foot_sel)]
+    if (STATE_AGE_KEY in st.session_state) or (age_min is not None and age_max is not None):
+        lo, hi = st.session_state.get(STATE_AGE_KEY, (age_min, age_max))
+        if lo is not None and hi is not None and "Age" in df_show.columns:
+            df_show = df_show[pd.to_numeric(df_show["Age"], errors="coerce").between(lo, hi, inclusive="both")]
+    if club_sel:
+        df_show = df_show[df_show.get("CurrentClub", pd.Series(dtype=object)).astype(str).isin(club_sel)]
 
-        if not pid:
-            return
-        s = st.session_state[STATE_SHORTLIST_KEY]
-        if pid in s:
-            s.remove(pid)
-        else:
-            s.add(pid)
-        _save_shortlist(s)
+    st.markdown(f"**Results:** {len(df_show)} / {len(df)}  •  Columns: {len(df_show.columns)}")
 
-    def _fmt_num(v):
-        """Format numeric values for compact display."""
-
-        try:
-            f = float(v)
-            return str(int(f)) if f.is_integer() else f"{f:.1f}"
-        except Exception:
-            return str(v)
+    # Visible columns & sorting
+    preferred_cols = ["id","name","Position","Age","CurrentClub","Foot","team_name"]
+    rating_like = [c for c in df_show.columns if c not in preferred_cols and pd.api.types.is_numeric_dtype(df_show[c])]
+    if st.session_state.get(STATE_VISIBLE_COLS_KEY):
+        preferred_cols = [c for c in st.session_state[STATE_VISIBLE_COLS_KEY] if c in df_show.columns]
+    else:
+        preferred_cols = [c for c in preferred_cols if c in df_show.columns] + rating_like[:6]
 
     use_cards = len(df_show) <= CARD_THRESHOLD
 
+    # --------- Render ----------
     if len(df_show) == 0:
         st.info("No matches with current filters.")
     elif use_cards and "id" in df_show.columns:
         st.write("Click ☆ to add to shortlist.")
-        # Choose top-3 numeric columns for quick glance
+        # init shortlist state
+        if STATE_SHORTLIST_KEY not in st.session_state:
+            st.session_state[STATE_SHORTLIST_KEY] = _load_shortlist()
+
+        def _shortlist_toggle(pid: str):
+            if not pid: return
+            s = st.session_state[STATE_SHORTLIST_KEY]
+            if pid in s: s.remove(pid)
+            else: s.add(pid)
+            _save_shortlist(s)
+
         top_numeric = [c for c in rating_like if c in df_show.columns][:3]
         for _, r in df_show.reset_index(drop=True).iterrows():
             with st.container(border=True):
@@ -506,16 +426,12 @@ def show_team_view():
                     if st.button(label, key=f"team_view__short_{pid}", help="Toggle shortlist"):
                         _shortlist_toggle(pid)
                 with c1:
-                    n = r.get("name", "")
-                    pos = r.get("Position", "")
-                    age = r.get("Age", "")
-                    club = r.get("CurrentClub", "")
+                    n = r.get("name",""); pos = r.get("Position",""); age = r.get("Age",""); club = r.get("CurrentClub","")
                     st.markdown(f"**{_safe_str(n)}**  \n{_safe_str(pos)} • Age {age} • {club}")
                 with c2:
                     if top_numeric:
-                        kv = " • ".join(f"{c}: {_fmt_num(r[c])}" for c in top_numeric if pd.notna(r.get(c)))
+                        kv = " • ".join(f"{c}: {r[c] if pd.notna(r.get(c)) else ''}" for c in top_numeric if c in r)
                         if kv: st.caption(kv)
-                    # Action buttons (PREPARE ONLY — no navigation)
                     pid = str(r.get("id",""))
                     bb1, bb2 = st.columns(2)
                     with bb1:
@@ -528,7 +444,6 @@ def show_team_view():
                             st.success("✅ Scout Match Reporter prepared. Open it from the sidebar.")
             st.divider()
     else:
-        # Fast table view
         show_cols = preferred_cols if preferred_cols else list(df_show.columns)
         st.markdown("<div class='sl-table'>", unsafe_allow_html=True)
         st.dataframe(df_show[show_cols].reset_index(drop=True), use_container_width=True, height=520)
@@ -537,19 +452,11 @@ def show_team_view():
     # --------- Export ----------
     st.markdown("### Export")
     df_export = df_show.reset_index(drop=True)
-    csv = df_export.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇️ Download CSV", csv, file_name=f"{team.replace(' ', '_')}_players.csv", mime="text/csv")
-
-    json_bytes = df_export.to_json(orient="records", force_ascii=False, indent=2).encode("utf-8")
-    st.download_button("⬇️ Download JSON", json_bytes, file_name=f"{team.replace(' ', '_')}_players.json", mime="application/json")
-
-    # Export shortlist (for current team rows if id present)
-    if "id" in df.columns and st.session_state[STATE_SHORTLIST_KEY]:
-        ids = list(st.session_state[STATE_SHORTLIST_KEY])
-        df_short = df[df["id"].astype(str).isin(ids)]
-        if len(df_short):
-            csv_s = df_short.to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️ Download Shortlist CSV", csv_s, file_name=f"{team.replace(' ','_')}_shortlist.csv", mime="text/csv")
+    st.download_button("⬇️ Download CSV", df_export.to_csv(index=False).encode("utf-8"),
+                       file_name=f"{team.replace(' ', '_')}_players.csv", mime="text/csv")
+    st.download_button("⬇️ Download JSON",
+                       df_export.to_json(orient="records", force_ascii=False, indent=2).encode("utf-8"),
+                       file_name=f"{team.replace(' ', '_')}_players.json", mime="application/json")
 
 # Suora ajo
 if __name__ == "__main__":
