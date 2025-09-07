@@ -1,6 +1,5 @@
 from __future__ import annotations
 import json
-import os
 from pathlib import Path
 
 import streamlit as st
@@ -9,10 +8,9 @@ from supabase import create_client
 
 def _client():
     """Create a Supabase client using service role credentials."""
-    url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE") or st.secrets.get(
-        "SUPABASE_SERVICE_ROLE"
-    )
+    creds = st.secrets.get("supabase", {})
+    url = creds.get("url")
+    key = creds.get("service_role")
     if not url or not key:
         raise RuntimeError("Supabase credentials not configured")
     return create_client(url, key)
