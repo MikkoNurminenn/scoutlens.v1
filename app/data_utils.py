@@ -338,7 +338,11 @@ def insert_player_quick(data: Dict[str, Any]) -> Dict[str, Any]:
     payload["name"] = name
     sb = get_client()
     try:
-        res = sb.table("players").insert(payload).select("*").execute()
+        res = (
+            sb.table("players")
+            .insert(payload, returning="representation")
+            .execute()
+        )
     except APIError as e:
         raise e
     return (res.data or [])[0] if res.data else {}
