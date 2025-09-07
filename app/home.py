@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 from postgrest.exceptions import APIError
 from supabase_client import get_client
+from time_utils import to_tz
 
 
 # ---------------- Utilities ----------------
@@ -20,21 +21,13 @@ def _safe_len(x) -> int:
 
 
 def _match_dt(m: Dict[str, Any]) -> Optional[datetime]:
-    """Yhdistä matchin date + time tekstikentistä datetimeksi."""
-    d = (m.get("date") or "").strip()
-    t = (m.get("time") or "").strip()
-    if d and t:
-        try:
-            return datetime.strptime(f"{d} {t}", "%Y-%m-%d %H:%M")
-        except Exception:
-            return None
-    if d:
-        try:
-            # jos aika puuttuu → käytä klo 12:00, jotta sorttaus toimii
-            return datetime.strptime(d, "%Y-%m-%d").replace(hour=12, minute=0)
-        except Exception:
-            return None
-    return None
+    dt_iso = m.get("kickoff_at")
+    if not dt_iso:
+        return None
+    try:
+        return datetime.fromisoformat(str(dt_iso).replace("Z", "+00:00"))
+    except Exception:
+        return None
 
 
 def _postgrest_error_box(e: APIError):
@@ -118,7 +111,12 @@ def _append_note(text: str):
 def _load_matches() -> List[Dict[str, Any]]:
     client = get_client()
     try:
-        res = client.table("matches").select("*").execute()
+        res = (
+            client.table("matches")
+            .select("*")
+            .order("kickoff_at", desc=True)
+            .execute()
+        )
         return res.data or []
     except APIError as e:
         _postgrest_error_box(e)
@@ -215,14 +213,23 @@ def show_home():
     now = datetime.now()
     matches_with_dt = [(m, _match_dt(m)) for m in matches]
     upcoming = [m for m, dtv in matches_with_dt if dtv and dtv >= now]
-    upcoming.sort(key=lambda m: _match_dt(m))
+    upcoming.sort(key=_match_dt)
+    latam_tz = st.session_state.get("latam_tz", "America/Bogota")
+    user_tz = st.session_state.get("user_tz", "Europe/Helsinki")
 
     if not upcoming:
         st.write("—")
     else:
         for m in upcoming[:10]:
-            dt = _match_dt(m)
-            when = dt.strftime("%Y-%m-%d %H:%M") if dt else (m.get("date") or "")
+            ko = m.get("kickoff_at")
+            when = ""
+            if ko:
+                try:
+                    dt_latam = to_tz(ko, latam_tz)
+                    dt_user = to_tz(ko, user_tz)
+                    when = f"{dt_latam:%Y-%m-%d %H:%M} ({latam_tz}) · {dt_user:%H:%M} ({user_tz})"
+                except Exception:
+                    pass
             home = m.get("home_team") or m.get("HomeTeam") or ""
             away = m.get("away_team") or m.get("AwayTeam") or ""
             comp = m.get("competition") or ""

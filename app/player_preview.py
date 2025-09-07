@@ -354,7 +354,7 @@ def show_player_preview():
 
     for rep in my_reports:
         m = matches.get(rep.get("match_id"), {})
-        dt = (m.get("datetime") or "")[:10]
+        dt = (m.get("kickoff_at") or "")[:10]
         label = f"{m.get('home_team','?')} vs {m.get('away_team','?')}  ({dt})"
         with st.expander(label, expanded=False):
             # badge-metat
