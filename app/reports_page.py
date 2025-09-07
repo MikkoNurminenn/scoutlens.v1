@@ -17,7 +17,7 @@ main navigation in ``app.py``.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Callable
 
 import pandas as pd
 import streamlit as st
@@ -25,7 +25,7 @@ from postgrest.exceptions import APIError
 
 from supabase_client import get_client
 from db_tables import PLAYERS, REPORTS
-from data_utils import insert_player_quick
+from services.players import insert_player
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -125,6 +125,42 @@ def _list_reports() -> List[Dict[str, Any]]:
     return norm
 
 
+def render_add_player_form(on_success: Callable | None = None) -> None:
+    with st.form(key="players__add_form", border=True):
+        name = st.text_input("Name*", "")
+        position = st.text_input("Position", "")
+        preferred_foot = st.selectbox("Preferred Foot", ["", "Right", "Left", "Both"])
+        nationality = st.text_input("Nationality", "")
+        current_club = st.text_input("Current Club", "")
+        transfermarkt_url = st.text_input("Transfermarkt URL", "")
+
+        submitted = st.form_submit_button("Create Player", use_container_width=True)
+        if submitted:
+            if not name.strip():
+                st.error("Name is required.")
+                return
+
+            payload = {
+                "name": name.strip(),
+                "position": position.strip() or None,
+                "preferred_foot": preferred_foot or None,
+                "nationality": nationality.strip() or None,
+                "current_club": current_club.strip() or None,
+                "transfermarkt_url": transfermarkt_url.strip() or None,
+            }
+
+            try:
+                row = insert_player(payload)
+                st.success(f"Player created: {row.get('name')} (id: {row.get('id')})")
+                st.session_state["players__last_created"] = row
+                if callable(on_success):
+                    on_success(row)
+            except APIError as e:
+                st.error(f"Supabase error: {getattr(e, 'message', str(e))}")
+            except Exception as e:
+                st.error(f"Unexpected error: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Page
 # ---------------------------------------------------------------------------
@@ -134,54 +170,22 @@ def show_reports_page() -> None:
     """Render the reports page."""
 
     st.markdown("## 📝 Reports")
+    def _on_player_created(row):
+        st.session_state["reports__selected_player_id"] = row["id"]
 
     with st.expander("➕ Add Player", expanded=False):
-        with st.form("reports__quick_add", clear_on_submit=False):
-            c1, c2 = st.columns(2)
-            with c1:
-                name = st.text_input("Name *", key="r_add_name")
-                position = st.text_input("Position", key="r_add_pos")
-                foot = st.selectbox(
-                    "Preferred foot", ["", "Left", "Right", "Both"], key="r_add_foot"
-                )
-                nationality = st.text_input("Nationality", key="r_add_nat")
-            with c2:
-                club = st.text_input("Current club", key="r_add_club")
-                dob = st.date_input(
-                    "Birth date", value=None, key="r_add_dob", format="YYYY-MM-DD"
-                )
-                tm = st.text_input("Transfermarkt URL", key="r_add_tm")
-            notes = st.text_area("Notes", key="r_add_notes", height=80)
-
-            save = st.form_submit_button("Save Player", use_container_width=True)
-
-            if save:
-                try:
-                    payload = {
-                        "name": name,
-                        "position": position,
-                        "preferred_foot": foot or None,
-                        "nationality": nationality,
-                        "current_club": club,
-                        "transfermarkt_url": tm,
-                        "notes": notes,
-                    }
-                    if isinstance(dob, date):
-                        payload["date_of_birth"] = dob.isoformat()
-                    row = insert_player_quick(payload)
-                    st.success(f"Player '{row.get('name')}' created.")
-                    for k in list(st.session_state.keys()):
-                        if k.startswith("r_add_"):
-                            del st.session_state[k]
-                    st.rerun()
-                except Exception as e:
-                    st.error(str(e))
+        render_add_player_form(on_success=_on_player_created)
 
     players = _load_players()
-    player_options = {p["name"]: p["id"] for p in players}
+    player_options = {p["id"]: p["name"] for p in players}
 
     with st.form("reports__new_report"):
-        selected_name = st.selectbox("Player", options=list(player_options.keys()))
+        selected_player_id = st.selectbox(
+            "Player",
+            options=list(player_options.keys()),
+            format_func=lambda x: player_options.get(x, ""),
+            key="reports__selected_player_id",
+        )
         report_date = st.date_input("Report date", value=date.today())
         competition = st.text_input("Competition")
         opponent = st.text_input("Opponent")
@@ -198,7 +202,7 @@ def show_reports_page() -> None:
 
     if submitted:
         payload = {
-            "player_id": player_options.get(selected_name),
+            "player_id": selected_player_id,
             "report_date": report_date.isoformat(),
             "competition": competition.strip() or None,
             "opponent": opponent.strip() or None,

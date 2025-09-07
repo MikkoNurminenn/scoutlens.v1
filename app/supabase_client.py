@@ -1,18 +1,13 @@
-# app/supabase_client.py
 from supabase import create_client
 import streamlit as st
 
-def get_client(write: bool = False):
-    """
-    Luo Supabase client.
-    - write=False → käyttää anon_key (SELECT, read-only)
-    - write=True  → käyttää service_role_key (INSERT/UPDATE/DELETE)
-    """
-    url = st.secrets["supabase"]["url"]
+_client = None
 
-    if write:
-        key = st.secrets["supabase"]["service_role_key"]
-    else:
+def get_client():
+    """Return a cached Supabase client using anon key only."""
+    global _client
+    if _client is None:
+        url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["anon_key"]
-
-    return create_client(url, key)
+        _client = create_client(url, key)
+    return _client
