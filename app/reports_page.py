@@ -219,7 +219,7 @@ def show_reports_page() -> None:
         }
         if _insert_report(payload):
             st.success("Report saved")
-            st.experimental_rerun()
+            st.rerun()
 
     st.divider()
 
