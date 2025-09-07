@@ -12,6 +12,7 @@ import math
 import numpy as np
 import pandas as pd
 
+from postgrest.exceptions import APIError
 from schema import MASTER_FIELDS, COMMON_FIELDS
 from supabase_client import get_client
 
@@ -302,6 +303,45 @@ def ensure_team_exists(team_name: str) -> bool:
         return False
     client.table("teams").insert({"name": team_name}).execute()
     return True
+
+
+# ---------------------------------------------------------------------------
+# Quick player insert
+# ---------------------------------------------------------------------------
+_ALLOWED = {
+    "players": {
+        "name",
+        "position",
+        "preferred_foot",
+        "nationality",
+        "current_club",
+        "date_of_birth",
+        "transfermarkt_url",
+        "notes",
+    }
+}
+
+
+def _filter_cols(table: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        k: v
+        for k, v in (payload or {}).items()
+        if k in _ALLOWED.get(table, set()) and v not in (None, "")
+    }
+
+
+def insert_player_quick(data: Dict[str, Any]) -> Dict[str, Any]:
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise ValueError("Name is required")
+    payload = _filter_cols("players", data)
+    payload["name"] = name
+    sb = get_client()
+    try:
+        res = sb.table("players").insert(payload).select("*").execute()
+    except APIError as e:
+        raise e
+    return (res.data or [])[0] if res.data else {}
 
 
 def validate_player_input(name: str, df: pd.DataFrame) -> Tuple[bool, str]:
