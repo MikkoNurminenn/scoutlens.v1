@@ -150,8 +150,14 @@ def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, An
 def _load_shortlist() -> set:
     sb = get_client()
     try:
-        res = sb.table("shortlists").select("player_id").execute()
-        return {str(r.get("player_id")) for r in (res.data or []) if r.get("player_id")}
+        res = (
+            sb.table("shortlists")
+            .select("player_id")
+            .eq("name", "Default")
+            .execute()
+        )
+        data = res.data or []
+        return {str(r["player_id"]) for r in data if r.get("player_id")}
     except APIError as e:
         # Taulu puuttuu → näytä ohje, mutta älä kaadu
         _pgrest_debug(e, "ℹ️ Shortlist-taulu puuttuu? (debug)")
@@ -163,10 +169,10 @@ def _load_shortlist() -> set:
 def _save_shortlist(s: set) -> None:
     sb = get_client()
     try:
-        # yksinkertainen “replace” strategia: tyhjennä ja lisää uudelleen
-        sb.table("shortlists").delete().neq("player_id", None).execute()
+        # yksinkertainen "replace" strategia: tyhjennä ja lisää uudelleen
+        sb.table("shortlists").delete().eq("name", "Default").execute()
         if s:
-            rows = [{"player_id": str(pid)} for pid in s]
+            rows = [{"name": "Default", "player_id": str(pid)} for pid in s]
             sb.table("shortlists").insert(rows).execute()
     except APIError as e:
         _pgrest_debug(e, "ℹ️ Shortlist-talennus epäonnistui (debug)")
