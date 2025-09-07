@@ -12,23 +12,22 @@ If needed, install Streamlit with:
 
 ### Supabase Sync
 
-Set `SUPABASE_URL` and `SUPABASE_KEY` environment variables to enable
-optional Supabase storage. Functions in `app/sync_utils.py` and
-`app/teams_store.py` will then read and write data to your Supabase tables.
+Configure a `[supabase]` block in your Streamlit secrets to enable optional
+Supabase storage. Functions in `app/sync_utils.py` and `app/teams_store.py`
+will then read and write data to your Supabase tables.
 
 #### Developer Setup
 
 1. Create a project at [Supabase](https://supabase.com) and copy the API URL
-   and service role or anon key from the dashboard.
+   and keys from the dashboard.
 2. Create a storage bucket (for example, `data`) for JSON files.
-3. Export the required environment variables before running ScoutLens or the
-   sync helpers:
+3. Add the credentials to `.streamlit/secrets.toml`:
 
-   ```bash
-   export SUPABASE_URL="https://<project>.supabase.co"
-   export SUPABASE_KEY="<service-role-or-anon-key>"
-   # Optional: set to 1 to force cloud mode
-   export SCOUTLENS_CLOUD=1
+   ```toml
+   [supabase]
+   url = "https://<project>.supabase.co"
+   anon_key = "<public-anon-key>"
+   service_role = "<service-role-key>"  # optional, for sync_utils only
    ```
 
 The application reads and writes JSON data to Supabase storage through
