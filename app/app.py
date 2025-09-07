@@ -13,12 +13,9 @@ from pathlib import Path
 import streamlit as st
 
 # --- Pages
-from home import show_home
-from team_view import show_team_view
-from player_editor import show_player_editor
+# Only keep core pages: reports and shortlists
 from scout_reporter import show_scout_match_reporter
-from notes import show_notes  # varmista, että notes.py sisältää show_notes()
-from shortlists import show_shortlists  # ⭐ uusi sivu
+from shortlists import show_shortlists
 from login import login
 
 APP_TITLE   = "ScoutLens"
@@ -43,45 +40,37 @@ inject_css()
 login()
 
 # --------- Navigation setup ----------
-# Näkyvät sivut sivupalkissa:
-NAV_KEYS = ["Home", "Team View", "Shortlists", "Player Editor", "Scout Match Reporter", "Notes"]
+# Only two primary pages in sidebar
+NAV_KEYS = ["Reports", "Players / Shortlists"]
 
 NAV_LABELS = {
-    "Home": "🏠 Home",
-    "Team View": "🏟️ Team View",
-    "Shortlists": "⭐ Shortlists",          # ⬅️ uusi label
-    "Player Editor": "✍️ Player Editor",
-    "Scout Match Reporter": "📝 Scout Match Reporter",
-    "Notes": "🗒️ Notes",
+    "Reports": "📝 Reports",
+    "Players / Shortlists": "👥 Players / Shortlists",
 }
 LABEL_LIST   = [NAV_LABELS[k] for k in NAV_KEYS]
 LABEL_TO_KEY = {v: k for k, v in NAV_LABELS.items() if k in NAV_KEYS}
 
 PAGE_FUNCS = {
-    "Home": show_home,
-    "Team View": show_team_view,
-    "Shortlists": show_shortlists,          # ⬅️ uusi reitti
-    "Player Editor": show_player_editor,
-    "Scout Match Reporter": show_scout_match_reporter,
-    "Notes": show_notes,
+    "Reports": show_scout_match_reporter,
+    "Players / Shortlists": show_shortlists,
 }
 
 # --- Legacy key remap: mapataan vanhat reitit nykyisiin label-keyhin
 LEGACY_REMAP = {
     # snake/camel/old keys -> canonical keys used in this shell
-    "home": "Home",
-    "team_view": "Team View",
-    "player_editor": "Player Editor",
-    "player_preview": "Player Editor",
-    "scout_reporter": "Scout Match Reporter",
-    "scout_match_reporter": "Scout Match Reporter",
-    "add_player": "Player Editor",
-    "add_player_form": "Player Editor",
-    "csv_importer": "Home",
-    "match_calendar": "Home",
-    "notes": "Notes",
-    "shortlists": "Shortlists",             # ⬅️ legacy → uusi
-    "shortlist": "Shortlists",
+    "home": "Reports",
+    "team_view": "Players / Shortlists",
+    "player_editor": "Players / Shortlists",
+    "player_preview": "Players / Shortlists",
+    "scout_reporter": "Reports",
+    "scout_match_reporter": "Reports",
+    "add_player": "Players / Shortlists",
+    "add_player_form": "Players / Shortlists",
+    "csv_importer": "Reports",
+    "match_calendar": "Reports",
+    "notes": "Reports",
+    "shortlists": "Players / Shortlists",
+    "shortlist": "Players / Shortlists",
 }
 
 def _sync_query(page: str) -> None:

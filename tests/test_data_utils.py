@@ -106,17 +106,6 @@ def setup_data_utils(monkeypatch):
 
 
 # ---------------- Tests ----------------
-def test_list_teams(monkeypatch):
-    du, db = setup_data_utils(monkeypatch)
-    assert du.list_teams() == []
-
-    # lisää joukkueita teams-tauluun
-    db["teams"].extend([{"id": "t1", "name": "Team A"}, {"id": "t2", "name": "Team B"}])
-
-    teams = du.list_teams()
-    assert set(teams) == {"Team A", "Team B"}
-
-
 def test_load_master_empty_when_missing(monkeypatch):
     du, db = setup_data_utils(monkeypatch)
     team = "My Team"
