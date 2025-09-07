@@ -267,13 +267,7 @@ def show_add_player_form():
 
             st.success(f"Pelaaja '{nm}' lisätty joukkueeseen {team}.")
             if save_add_btn:
-                try:
-                    st.rerun()
-                except Exception:
-                    try:
-                        st.experimental_rerun()
-                    except Exception:
-                        pass
+                st.rerun()
 
 if __name__ == "__main__":
     show_add_player_form()

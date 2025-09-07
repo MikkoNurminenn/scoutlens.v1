@@ -122,18 +122,17 @@ def show_data_manager():
     df = _to_df(team_players)
 
     st.subheader(f"Players for {team}")
-    editor = getattr(st, "data_editor", None) or getattr(st, "experimental_data_editor", None)
-    if not editor:
+    try:
+        edited = st.data_editor(
+            df,
+            key="dm_players_editor",
+            num_rows="dynamic",
+            use_container_width=True,
+        )
+    except AttributeError:
         st.error("Editable data grid not available in this Streamlit version.")
         st.dataframe(df)
         return
-
-    edited = editor(
-        df,
-        key="dm_players_editor",
-        num_rows="dynamic",
-        use_container_width=True
-    )
 
     # 3) Tallenna muutokset players.jsoniin (korvaa valitun joukkueen rivit)
     if st.button("Save Changes", key="dm_save_players"):
