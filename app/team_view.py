@@ -107,12 +107,14 @@ def _load_team_names(cache_buster: int) -> List[str]:
     sb = get_client()
     try:
         # ensisijaisesti teams-taulusta
-        data = sb.table("teams").select("name").order("name").execute().data or []
+        res = sb.table("teams").select("name").order("name").execute()
+        data = res.data if res.data is not None else []
         names = [ (t.get("name") or "").strip() for t in data if (t.get("name") or "").strip() ]
         if names:
             return names
         # fallback: pelaajista
-        pdata = sb.table("players").select("team_name").execute().data or []
+        pres = sb.table("players").select("team_name").execute()
+        pdata = pres.data if pres.data is not None else []
         return sorted({ (p.get("team_name") or "").strip() for p in pdata if (p.get("team_name") or "").strip() })
     except APIError as e:
         _dbg(e)
@@ -125,7 +127,7 @@ def _collect_players_for_team(team: str, cache_buster: int) -> List[Dict[str, An
     sb = get_client()
     try:
         res = sb.table("players").select("*").eq("team_name", team).execute()
-        players = res.data or []
+        players = res.data if res.data is not None else []
     except APIError as e:
         _dbg(e)
         return []
@@ -157,7 +159,7 @@ def _load_shortlist() -> set:
             .eq("name", "Default")
             .execute()
         )
-        data = res.data or []
+        data = res.data if res.data is not None else []
         return {str(r["player_id"]) for r in data if r.get("player_id")}
     except APIError as e:
         # Taulu puuttuu → näytä ohje, mutta älä kaadu
@@ -186,53 +188,22 @@ def _teams_from_players_json(cache_buster: int) -> List[str]:
     sb = get_client()
     try:
         res = sb.table("players").select("team_name").execute()
-        return sorted({(p.get("team_name") or '').strip() for p in (res.data or []) if (p.get("team_name") or '').strip()})
+        data = res.data if res.data is not None else []
+        return sorted({(p.get("team_name") or '').strip() for p in data if (p.get("team_name") or '').strip()})
     except Exception:
         return []
 
-def _rows_to_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
-    if not rows:
-        return pd.DataFrame(columns=["id","name","team_name"])
-
-    cols = set()
-    for r in rows:
-        cols.update(r.keys())
-    df = pd.DataFrame([{c: r.get(c, None) for c in cols} for r in rows])
-
-    # Standard names
-    if "name" not in df.columns and "Name" in df.columns:
-        df.rename(columns={"Name":"name"}, inplace=True)
-    if "team_name" not in df.columns:
-        for c in ["team","Team","current_club","CurrentClub"]:
-            if c in df.columns:
-                df["team_name"] = df[c]; break
-        if "team_name" not in df.columns: df["team_name"] = ""
-    if "CurrentClub" not in df.columns:
-        df["CurrentClub"] = df["team_name"]
-
-    if "Position" not in df.columns:
-        for c in ["Position","position","Role","role","Pos","pos"]:
-            if c in df.columns:
-                df.rename(columns={c:"Position"}, inplace=True); break
-    if "Position" not in df.columns:
-        src = next((c for c in ["role","Role","Notes","notes","profile","Profile","description","Desc"] if c in df.columns), None)
-        if src: df["Position"] = df[src].astype(str).map(_guess_position)
-
-    if "Foot" not in df.columns:
-        for c in ["Foot","PreferredFoot","foot","preferred_foot"]:
-            if c in df.columns:
-                df.rename(columns={c:"Foot"}, inplace=True); break
-
-    if "Age" not in df.columns: df["Age"] = None
-
-    # Try numeric
-    for c in df.columns:
-        if df[c].dtype == object:
-            try: df[c] = pd.to_numeric(df[c], errors="ignore")
-            except Exception: pass
-
-    if "id" in df.columns: df["id"] = df["id"].astype(str)
-    return df
+def _rows_to_df(rows) -> pd.DataFrame:
+    import pandas as pd
+    if rows is None:
+        return pd.DataFrame()
+    if isinstance(rows, list):
+        return pd.DataFrame(rows)
+    if isinstance(rows, dict):
+        return pd.DataFrame([rows])
+    if isinstance(rows, pd.DataFrame):
+        return rows.copy()
+    return pd.DataFrame()
 
 # ========= UI =========
 def show_team_view():
@@ -276,11 +247,10 @@ def show_team_view():
 
     # Players for team
     rows = _collect_players_for_team(team, cache_buster)
-    if not rows:
+    df = _rows_to_df(rows)
+    if df.empty:
         st.info(f"No players found for team {team}.")
         return
-
-    df = _rows_to_df(rows)
 
     # KPI:t
     st.subheader(f"Players — {team}")
