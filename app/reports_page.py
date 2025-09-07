@@ -90,16 +90,16 @@ def _list_reports() -> List[Dict[str, Any]]:
     """Return normalized reports with ordering fallbacks."""
     # Prefer VIEW; if schema cache wasn't refreshed yet, fallback to base table
     # Ordering strategy:
-    # 1) Try kickoff_at desc (VIEW provides it via COALESCE)
-    # 2) If that fails (e.g., querying base table without kickoff_at),
+    # 1) Try report_date desc
+    # 2) If that fails (e.g., querying base table without report_date),
     #    retry created_at desc
-    rows = _safe_query("reports", order_by="kickoff_at", desc=True)
+    rows = _safe_query("reports", order_by="report_date", desc=True)
     if not rows:
         rows = _safe_query("reports", order_by="created_at", desc=True)
 
     if not rows:
         # fallback to base table (some envs call scout_reports directly)
-        rows = _safe_query("scout_reports", order_by="kickoff_at", desc=True)
+        rows = _safe_query("scout_reports", order_by="report_date", desc=True)
         if not rows:
             rows = _safe_query("scout_reports", order_by="created_at", desc=True)
 
@@ -113,7 +113,7 @@ def _list_reports() -> List[Dict[str, Any]]:
                 "player_name": r.get("player_name"),
                 "competition": r.get("competition"),
                 "opponent": r.get("opponent"),
-                "kickoff_at": r.get("kickoff_at") or r.get("match_datetime"),
+                "report_date": r.get("report_date") or r.get("match_datetime"),
                 "location": r.get("location"),
                 "ratings": r.get("ratings"),
                 "tags": r.get("tags"),
