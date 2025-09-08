@@ -43,6 +43,50 @@ POSITIONS = [
     "CF",
 ]
 
+# --- Essential attributes (1–5) + foot/position + comments ---
+
+
+def render_essential_section() -> dict:
+    st.subheader("Essential attributes (per match)")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        foot = st.selectbox("Foot", ["right", "left", "both"], index=0, key="reports__foot")
+        use_dd = st.toggle(
+            "Use position dropdown", value=True, key="reports__pos_toggle"
+        )
+    with col2:
+        position = (
+            st.selectbox("Position", POSITIONS, index=6, key="reports__pos_dd")
+            if use_dd
+            else st.text_input(
+                "Position (free text)", value="CM", key="reports__pos_txt"
+            )
+        )
+
+    st.markdown("---")
+    c1, c2 = st.columns(2)
+    with c1:
+        technique = st.slider("Technique", 1, 5, 3, key="reports__tech")
+        game_intel = st.slider("Game intelligence", 1, 5, 3, key="reports__gi")
+    with c2:
+        mental = st.slider("Mental / GRIT", 1, 5, 3, key="reports__mental")
+        athletic = st.slider("Athletic ability", 1, 5, 3, key="reports__ath")
+
+    comments = st.text_area(
+        "General comments / conclusion", key="reports__comments", height=120
+    )
+
+    return {
+        "foot": foot,
+        "position": position,
+        "technique": technique,
+        "game_intelligence": game_intel,
+        "mental": mental,
+        "athletic": athletic,
+        "comments": comments,
+    }
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -158,61 +202,21 @@ def show_reports_page() -> None:
         opponent = st.text_input("Opponent", key="reports__opponent")
         location = st.text_input("Location", key="reports__location")
 
-        st.markdown("### Essential attributes")
-        foot = st.selectbox(
-            "Foot", ["right", "left", "both"], key="reports__foot"
-        )
-        use_pos_dropdown = st.checkbox(
-            "Use position dropdown", value=True, key="reports__use_pos_dropdown"
-        )
-        if use_pos_dropdown:
-            position = st.selectbox(
-                "Position", POSITIONS, key="reports__position_dropdown"
-            )
-        else:
-            position = st.text_input("Position", key="reports__position_text")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            technique = st.slider(
-                "Technique", 1, 5, 3, key="reports__technique"
-            )
-            mental = st.slider(
-                "Mental / GRIT", 1, 5, 3, key="reports__mental"
-            )
-        with col2:
-            game_intel = st.slider(
-                "Game intelligence", 1, 5, 3, key="reports__game_intelligence"
-            )
-            athletic = st.slider(
-                "Athletic ability", 1, 5, 3, key="reports__athletic"
-            )
-
-        comments = st.text_area(
-            "General comments / Conclusion", key="reports__comments"
-        )
-
+        attrs = render_essential_section()
         submitted = st.form_submit_button("Save")
 
     if submitted:
         sb = get_client()
-        position_val = position.strip() if isinstance(position, str) else position
-        attributes = {
-            "foot": foot,
-            "position": position_val,
-            "technique": technique,
-            "game_intelligence": game_intel,
-            "mental": mental,
-            "athletic": athletic,
-            "comments": comments,
-        }
+        pos_val = attrs.get("position")
+        if isinstance(pos_val, str):
+            attrs["position"] = pos_val.strip()
         payload = {
             "player_id": selected_player_id,
             "report_date": report_date.isoformat(),
             "competition": competition.strip() or None,
             "opponent": opponent.strip() or None,
             "location": location.strip() or None,
-            "attributes": attributes,
+            "attributes": attrs,
         }
         try:
             sb.table("reports").insert(payload).execute()
@@ -248,14 +252,6 @@ def show_reports_page() -> None:
                     "GI": a.get("game_intelligence"),
                     "MENT": a.get("mental"),
                     "ATH": a.get("athletic"),
-                    "Comment": (
-                        (a.get("comments") or "")[:60]
-                        + (
-                            "…"
-                            if a.get("comments") and len(a.get("comments")) > 60
-                            else ""
-                        )
-                    ),
                 }
             )
         st.dataframe(table, use_container_width=True)
