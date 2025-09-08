@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Dict, List, Callable
 
+import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
 
@@ -64,7 +65,6 @@ def render_essential_section() -> dict:
             )
         )
 
-    st.markdown("---")
     c1, c2 = st.columns(2)
     with c1:
         technique = st.slider("Technique", 1, 5, 3, key="reports__tech")
@@ -202,6 +202,7 @@ def show_reports_page() -> None:
         opponent = st.text_input("Opponent", key="reports__opponent")
         location = st.text_input("Location", key="reports__location")
 
+        st.divider()
         attrs = render_essential_section()
         submitted = st.form_submit_button("Save")
 
@@ -228,37 +229,137 @@ def show_reports_page() -> None:
     st.divider()
 
     sb = get_client()
-    rows = (
-        sb.table("reports")
-        .select(
-            "id,report_date,competition,opponent,position_played,rating,"
-            "player:player_id(name,current_club),attributes"
+    try:
+        rows = (
+            sb.table("reports")
+            .select(
+                "id,report_date,competition,opponent,position_played,rating,"
+                "player:player_id(name,current_club),attributes"
+            )
+            .order("report_date", desc=True)
+            .limit(50)
+            .execute()
+            .data
         )
-        .order("report_date", desc=True)
-        .limit(50)
-        .execute()
-        .data
-    )
+    except APIError as e:
+        st.error(f"Supabase error: {getattr(e, 'message', e)}")
+        rows = []
+
     if rows:
-        table = []
+        data = []
         for r in rows:
             a = r.get("attributes") or {}
             player = r.get("player") or {}
-            table.append(
+            txt = (a.get("comments") or "").strip()
+            if len(txt) > 100:
+                txt = txt[:97] + "..."
+
+            data.append(
                 {
                     "Date": r.get("report_date"),
                     "Player": player.get("name", ""),
                     "Club": player.get("current_club", ""),
-                    "Opponent": r.get("opponent", ""),
+                    "Opponent": r.get("opponent") or "",
+                    "Competition": r.get("competition") or "",
                     "Pos": a.get("position"),
                     "Foot": a.get("foot"),
                     "Tech": a.get("technique"),
                     "GI": a.get("game_intelligence"),
                     "MENT": a.get("mental"),
                     "ATH": a.get("athletic"),
+                    "Comments": txt,
                 }
             )
-        st.dataframe(table, use_container_width=True)
+        df = pd.DataFrame(data)
+
+        c1, c2, c3 = st.columns([2, 2, 1])
+        with c1:
+            q_opp = st.text_input(
+                "Filter by opponent",
+                placeholder="e.g. Millonarios",
+                key="reports__f_opp",
+            )
+        with c2:
+            q_comp = st.text_input(
+                "Filter by competition",
+                placeholder="e.g. Liga",
+                key="reports__f_comp",
+            )
+        with c3:
+            min_ment = st.slider("MENT ≥", 1, 5, 1, key="reports__f_ment")
+
+        def _apply_filters(df_in: pd.DataFrame) -> pd.DataFrame:
+            out = df_in.copy()
+            if q_opp:
+                out = out[out["Opponent"].str.contains(q_opp, case=False, na=False)]
+            if q_comp:
+                out = out[out["Competition"].str.contains(q_comp, case=False, na=False)]
+            if "MENT" in out.columns and min_ment > 1:
+                out = out[(out["MENT"].fillna(0) >= min_ment)]
+            return out
+
+        df_f = _apply_filters(df)
+
+        order = [
+            "Date",
+            "Player",
+            "Club",
+            "Opponent",
+            "Pos",
+            "Foot",
+            "Tech",
+            "GI",
+            "MENT",
+            "ATH",
+            "Comments",
+        ]
+        for col in order:
+            if col not in df_f.columns:
+                df_f[col] = None
+        df_f = df_f[order]
+
+        if "Foot" in df_f.columns:
+            df_f["Foot"] = df_f["Foot"].fillna("").astype(str).str.capitalize()
+
+        def _style_vals(s: pd.Series) -> list[str]:
+            colors: list[str] = []
+            for v in s:
+                if pd.isna(v):
+                    colors.append("")
+                elif isinstance(v, (int, float)):
+                    if v >= 4:
+                        colors.append(
+                            "background-color: rgba(0, 200, 120, 0.15)"
+                        )
+                    elif v <= 2:
+                        colors.append(
+                            "background-color: rgba(255, 80, 80, 0.15)"
+                        )
+                    else:
+                        colors.append("")
+                else:
+                    colors.append("")
+            return colors
+
+        styler = df_f.style.apply(
+            _style_vals, subset=["Tech", "GI", "MENT", "ATH"]
+        ).set_properties(
+            subset=["Comments"], **{"text-align": "left", "white-space": "pre-wrap"}
+        )
+
+        cap_col, btn_col = st.columns([3, 1])
+        with cap_col:
+            st.caption(f"Showing {len(df_f)} reports")
+        with btn_col:
+            if st.button("Clear filters", key="reports__clear_filters"):
+                st.session_state["reports__f_opp"] = ""
+                st.session_state["reports__f_comp"] = ""
+                st.session_state["reports__f_ment"] = 1
+                st.rerun()
+
+        st.dataframe(
+            styler, use_container_width=True, hide_index=True, height=400
+        )
     else:
         st.caption("No reports yet.")
 
