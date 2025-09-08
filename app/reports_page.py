@@ -305,6 +305,7 @@ def show_reports_page() -> None:
             "Player",
             "Club",
             "Opponent",
+            "Competition",
             "Pos",
             "Foot",
             "Tech",
@@ -349,12 +350,16 @@ def show_reports_page() -> None:
 
         cap_col, btn_col = st.columns([3, 1])
         with cap_col:
-            st.caption(f"Showing {len(df_f)} reports")
+            st.caption(f"Showing {len(df_f)} / {len(df)} reports")
         with btn_col:
             if st.button("Clear filters", key="reports__clear_filters"):
-                st.session_state["reports__f_opp"] = ""
-                st.session_state["reports__f_comp"] = ""
-                st.session_state["reports__f_ment"] = 1
+                st.session_state.update(
+                    {
+                        "reports__f_opp": "",
+                        "reports__f_comp": "",
+                        "reports__f_ment": 1,
+                    }
+                )
                 st.rerun()
 
         st.dataframe(
