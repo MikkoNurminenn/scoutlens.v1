@@ -2,16 +2,11 @@
 
 This page focuses on creating and listing scouting reports stored in Supabase.
 
-The implementation is intentionally minimal but follows the repository's
-guidelines:
-
-* use the shared Supabase client via ``get_client``
-* handle ``APIError`` gracefully and surface a friendly ``st.error`` message
-* avoid any local JSON/SQLite storage – Supabase is the single source of truth
-* UTC aware dates are used when inserting new reports
-
-This file introduces a ``show_reports_page`` function which is wired into the
-main navigation in ``app.py``.
+Guidelines:
+- use the shared Supabase client via get_client
+- handle APIError gracefully and surface a friendly st.error message
+- avoid any local JSON/SQLite storage – Supabase is the single source of truth
+- UTC aware dates are used when inserting new reports
 """
 
 from __future__ import annotations
@@ -29,23 +24,10 @@ from app.services.players import insert_player
 
 
 POSITIONS = [
-    "GK",
-    "RB",
-    "CB",
-    "LB",
-    "RWB",
-    "LWB",
-    "DM",
-    "CM",
-    "AM",
-    "RW",
-    "LW",
-    "SS",
-    "CF",
+    "GK","RB","CB","LB","RWB","LWB","DM","CM","AM","RW","LW","SS","CF",
 ]
 
 # --- Essential attributes (1–5) + foot/position + comments ---
-
 
 def render_essential_section() -> dict:
     st.subheader("Essential attributes (per match)")
@@ -53,16 +35,12 @@ def render_essential_section() -> dict:
     col1, col2 = st.columns(2)
     with col1:
         foot = st.selectbox("Foot", ["right", "left", "both"], index=0, key="reports__foot")
-        use_dd = st.toggle(
-            "Use position dropdown", value=True, key="reports__pos_toggle"
-        )
+        use_dd = st.toggle("Use position dropdown", value=True, key="reports__pos_toggle")
     with col2:
         position = (
             st.selectbox("Position", POSITIONS, index=6, key="reports__pos_dd")
             if use_dd
-            else st.text_input(
-                "Position (free text)", value="CM", key="reports__pos_txt"
-            )
+            else st.text_input("Position (free text)", value="CM", key="reports__pos_txt")
         )
 
     c1, c2 = st.columns(2)
@@ -73,9 +51,7 @@ def render_essential_section() -> dict:
         mental = st.slider("Mental / GRIT", 1, 5, 3, key="reports__mental")
         athletic = st.slider("Athletic ability", 1, 5, 3, key="reports__ath")
 
-    comments = st.text_area(
-        "General comments / conclusion", key="reports__comments", height=120
-    )
+    comments = st.text_area("General comments / conclusion", key="reports__comments", height=120)
 
     return {
         "foot": foot,
@@ -91,10 +67,12 @@ def render_essential_section() -> dict:
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _safe_query(
-    table_name: str, select: str = "*", order_by: str | None = None,
-    desc: bool = False, limit: int | None = None,
+    table_name: str,
+    select: str = "*",
+    order_by: str | None = None,
+    desc: bool = False,
+    limit: int | None = None,
 ):
     client = get_client()
     q = client.table(table_name).select(select)
@@ -105,11 +83,8 @@ def _safe_query(
     try:
         return q.execute().data or []
     except APIError as e:
-        st.error(
-            f"Supabase APIError on {table_name}: {getattr(e, 'message', e)}"
-        )
+        st.error(f"Supabase APIError on {table_name}: {getattr(e, 'message', e)}")
         return []
-
 
 def _load_players() -> List[Dict[str, Any]]:
     """Return normalized players."""
@@ -122,17 +97,12 @@ def _load_players() -> List[Dict[str, Any]]:
                 "name": r.get("name") or r.get("full_name") or r.get("player_name"),
                 "position": r.get("position") or r.get("pos"),
                 "nationality": r.get("nationality") or r.get("nation"),
-                "current_club": r.get("current_club")
-                or r.get("club")
-                or r.get("team")
-                or r.get("current_team"),
+                "current_club": r.get("current_club") or r.get("club") or r.get("team") or r.get("current_team"),
                 "preferred_foot": r.get("preferred_foot") or r.get("foot"),
                 "transfermarkt_url": r.get("transfermarkt_url") or r.get("tm_url"),
             }
         )
     return norm
-
-
 
 def render_add_player_form(on_success: Callable | None = None) -> None:
     with st.form(key="players__add_form", border=True):
@@ -169,16 +139,14 @@ def render_add_player_form(on_success: Callable | None = None) -> None:
             except Exception as e:
                 st.error(f"Unexpected error: {e}")
 
-
 # ---------------------------------------------------------------------------
 # Page
 # ---------------------------------------------------------------------------
 
-
 def show_reports_page() -> None:
     """Render the reports page."""
-
     st.markdown("## 📝 Reports")
+
     def _on_player_created(row):
         st.session_state["reports__selected_player_id"] = row["id"]
 
@@ -188,43 +156,47 @@ def show_reports_page() -> None:
     players = _load_players()
     player_options = {p["id"]: p["name"] for p in players}
 
-    with st.form("scout_report_minimal"):
-        selected_player_id = st.selectbox(
-            "Player",
-            options=list(player_options.keys()),
-            format_func=lambda x: player_options.get(x, ""),
-            key="reports__selected_player_id",
-        )
-        report_date = st.date_input(
-            "Report date", value=date.today(), key="reports__report_date"
-        )
-        competition = st.text_input("Competition", key="reports__competition")
-        opponent = st.text_input("Opponent", key="reports__opponent")
-        location = st.text_input("Location", key="reports__location")
-
+    # Älä näytä raporttilomaketta, jos ei ole vielä yhtään pelaajaa
+    if not player_options:
+        st.info("No players yet — add one above to create your first report.")
         st.divider()
-        attrs = render_essential_section()
-        submitted = st.form_submit_button("Save")
+    else:
+        with st.form("scout_report_minimal"):
+            selected_player_id = st.selectbox(
+                "Player",
+                options=list(player_options.keys()),
+                format_func=lambda x: player_options.get(x, ""),
+                key="reports__selected_player_id",
+            )
+            report_date = st.date_input("Report date", value=date.today(), key="reports__report_date")
+            competition = st.text_input("Competition", key="reports__competition")
+            opponent = st.text_input("Opponent", key="reports__opponent")
+            location = st.text_input("Location", key="reports__location")
 
-    if submitted:
-        sb = get_client()
-        pos_val = attrs.get("position")
-        if isinstance(pos_val, str):
-            attrs["position"] = pos_val.strip()
-        payload = {
-            "player_id": selected_player_id,
-            "report_date": report_date.isoformat(),
-            "competition": competition.strip() or None,
-            "opponent": opponent.strip() or None,
-            "location": location.strip() or None,
-            "attributes": attrs,
-        }
-        try:
-            sb.table("reports").insert(payload).execute()
-            st.toast("Report saved ✅")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Failed to save report: {e}")
+            st.divider()
+            attrs = render_essential_section()
+            submitted = st.form_submit_button("Save")
+
+        if submitted:
+            sb = get_client()
+            pos_val = attrs.get("position")
+            if isinstance(pos_val, str):
+                attrs["position"] = pos_val.strip()
+
+            payload = {
+                "player_id": selected_player_id,
+                "report_date": report_date.isoformat(),
+                "competition": (competition or "").strip() or None,
+                "opponent": (opponent or "").strip() or None,
+                "location": (location or "").strip() or None,
+                "attributes": attrs,
+            }
+            try:
+                sb.table("reports").insert(payload).execute()
+                st.toast("Report saved ✅")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to save report: {e}")
 
     st.divider()
 
@@ -250,6 +222,12 @@ def show_reports_page() -> None:
         for r in rows:
             a = r.get("attributes") or {}
             player = r.get("player") or {}
+
+            # Lyhennetään kommentit siististi
+            txt = (a.get("comments") or "").strip()
+            if len(txt) > 100:
+                txt = txt[:97] + "..."
+
             data.append(
                 {
                     "Date": r.get("report_date"),
@@ -263,23 +241,16 @@ def show_reports_page() -> None:
                     "GI": a.get("game_intelligence"),
                     "MENT": a.get("mental"),
                     "ATH": a.get("athletic"),
+                    "Comments": txt,
                 }
             )
         df = pd.DataFrame(data)
 
         c1, c2, c3 = st.columns([2, 2, 1])
         with c1:
-            q_opp = st.text_input(
-                "Filter by opponent",
-                placeholder="e.g. Millonarios",
-                key="reports__f_opp",
-            )
+            q_opp = st.text_input("Filter by opponent", placeholder="e.g. Millonarios", key="reports__f_opp")
         with c2:
-            q_comp = st.text_input(
-                "Filter by competition",
-                placeholder="e.g. Liga",
-                key="reports__f_comp",
-            )
+            q_comp = st.text_input("Filter by competition", placeholder="e.g. Liga", key="reports__f_comp")
         with c3:
             min_ment = st.slider("MENT ≥", 1, 5, 1, key="reports__f_ment")
 
@@ -296,16 +267,8 @@ def show_reports_page() -> None:
         df_f = _apply_filters(df)
 
         order = [
-            "Date",
-            "Player",
-            "Club",
-            "Opponent",
-            "Pos",
-            "Foot",
-            "Tech",
-            "GI",
-            "MENT",
-            "ATH",
+            "Date","Player","Club","Opponent","Competition",
+            "Pos","Foot","Tech","GI","MENT","ATH","Comments",
         ]
         for col in order:
             if col not in df_f.columns:
@@ -322,31 +285,31 @@ def show_reports_page() -> None:
                     colors.append("")
                 elif isinstance(v, (int, float)):
                     if v >= 4:
-                        colors.append(
-                            "background-color: rgba(0, 200, 120, 0.15)"
-                        )
+                        colors.append("background-color: rgba(0, 200, 120, 0.15)")
                     elif v <= 2:
-                        colors.append(
-                            "background-color: rgba(255, 80, 80, 0.15)"
-                        )
+                        colors.append("background-color: rgba(255, 80, 80, 0.15)")
                     else:
                         colors.append("")
                 else:
                     colors.append("")
             return colors
 
-        styler = df_f.style.apply(_style_vals, subset=["Tech", "GI", "MENT", "ATH"])
-
-        st.caption(f"Showing {len(df_f)} / {len(df)} reports")
-        if st.button("Clear filters", key="reports__clear_filters"):
-            st.session_state["reports__f_opp"] = ""
-            st.session_state["reports__f_comp"] = ""
-            st.session_state["reports__f_ment"] = 1
-            st.rerun()
-
-        st.dataframe(
-            styler, use_container_width=True, hide_index=True, height=360
+        styler = (
+            df_f.style
+            .apply(_style_vals, subset=["Tech", "GI", "MENT", "ATH"])
+            .set_properties(subset=["Comments"], **{"text-align": "left", "white-space": "pre-wrap"})
         )
+
+        cap_col, btn_col = st.columns([3, 1])
+        with cap_col:
+            st.caption(f"Showing {len(df_f)} / {len(df)} reports")
+        with btn_col:
+            if st.button("Clear filters", key="reports__clear_filters"):
+                st.session_state.update(
+                    {"reports__f_opp": "", "reports__f_comp": "", "reports__f_ment": 1}
+                )
+                st.rerun()
+
+        st.dataframe(styler, use_container_width=True, hide_index=True, height=400)
     else:
         st.caption("No reports yet.")
-
