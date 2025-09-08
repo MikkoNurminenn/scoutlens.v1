@@ -230,7 +230,10 @@ def show_reports_page() -> None:
     sb = get_client()
     rows = (
         sb.table("reports")
-        .select("id,report_date,player:player_id(name,current_club),attributes")
+        .select(
+            "id,report_date,competition,opponent,position_played,rating,"
+            "player:player_id(name,current_club),attributes"
+        )
         .order("report_date", desc=True)
         .limit(50)
         .execute()
@@ -246,6 +249,7 @@ def show_reports_page() -> None:
                     "Date": r.get("report_date"),
                     "Player": player.get("name", ""),
                     "Club": player.get("current_club", ""),
+                    "Opponent": r.get("opponent", ""),
                     "Pos": a.get("position"),
                     "Foot": a.get("foot"),
                     "Tech": a.get("technique"),
