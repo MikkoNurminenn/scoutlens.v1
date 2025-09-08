@@ -16,17 +16,32 @@ main navigation in ``app.py``.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Any, Dict, List, Callable
 
-import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
-import traceback
 
 from app.supabase_client import get_client
-from app.db_tables import PLAYERS, REPORTS
+from app.db_tables import PLAYERS
 from app.services.players import insert_player
+
+
+POSITIONS = [
+    "GK",
+    "RB",
+    "CB",
+    "LB",
+    "RWB",
+    "LWB",
+    "DM",
+    "CM",
+    "AM",
+    "RW",
+    "LW",
+    "SS",
+    "CF",
+]
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -73,56 +88,6 @@ def _load_players() -> List[Dict[str, Any]]:
         )
     return norm
 
-
-def _insert_report(payload: Dict[str, Any]) -> bool:
-    """Insert a new report into Supabase. Returns True on success."""
-    client = get_client()
-    try:
-        client.table(REPORTS).insert(payload).execute()
-        return True
-    except Exception:
-        st.error("❌ Save failed")
-        st.code("".join(traceback.format_exc()), language="text")
-        raise
-
-
-def _list_reports() -> List[Dict[str, Any]]:
-    """Return normalized reports with ordering fallbacks."""
-    # Prefer VIEW; if schema cache wasn't refreshed yet, fallback to base table
-    # Ordering strategy:
-    # 1) Try report_date desc
-    # 2) If that fails (e.g., querying base table without report_date),
-    #    retry created_at desc
-    rows = _safe_query("reports", order_by="report_date", desc=True)
-    if not rows:
-        rows = _safe_query("reports", order_by="created_at", desc=True)
-
-    if not rows:
-        # fallback to base table (some envs call scout_reports directly)
-        rows = _safe_query("scout_reports", order_by="report_date", desc=True)
-        if not rows:
-            rows = _safe_query("scout_reports", order_by="created_at", desc=True)
-
-    norm: List[Dict[str, Any]] = []
-    for r in rows:
-        norm.append(
-            {
-                "id": r.get("id"),
-                "title": r.get("title") or r.get("report_title"),
-                "player_id": r.get("player_id"),
-                "player_name": r.get("player_name"),
-                "competition": r.get("competition"),
-                "opponent": r.get("opponent"),
-                "report_date": r.get("report_date") or r.get("match_datetime"),
-                "location": r.get("location"),
-                "ratings": r.get("ratings"),
-                "tags": r.get("tags"),
-                "notes": r.get("notes"),
-                "created_at": r.get("created_at"),
-                "updated_at": r.get("updated_at"),
-            }
-        )
-    return norm
 
 
 def render_add_player_form(on_success: Callable | None = None) -> None:
@@ -179,54 +144,121 @@ def show_reports_page() -> None:
     players = _load_players()
     player_options = {p["id"]: p["name"] for p in players}
 
-    with st.form("reports__new_report"):
+    with st.form("scout_report_minimal"):
         selected_player_id = st.selectbox(
             "Player",
             options=list(player_options.keys()),
             format_func=lambda x: player_options.get(x, ""),
             key="reports__selected_player_id",
         )
-        report_date = st.date_input("Report date", value=date.today())
-        competition = st.text_input("Competition")
-        opponent = st.text_input("Opponent")
-        location = st.text_input("Location")
-        position_played = st.text_input("Position played")
-        minutes = st.number_input("Minutes", min_value=0, max_value=120, step=1)
-        rating = st.number_input("Rating", min_value=0.0, max_value=10.0, step=0.1)
-        strengths = st.text_area("Strengths")
-        weaknesses = st.text_area("Weaknesses")
-        notes = st.text_area("Notes")
-        scout_name = st.text_input("Scout name")
+        report_date = st.date_input(
+            "Report date", value=date.today(), key="reports__report_date"
+        )
+        competition = st.text_input("Competition", key="reports__competition")
+        opponent = st.text_input("Opponent", key="reports__opponent")
+        location = st.text_input("Location", key="reports__location")
+
+        st.markdown("### Essential attributes")
+        foot = st.selectbox(
+            "Foot", ["right", "left", "both"], key="reports__foot"
+        )
+        use_pos_dropdown = st.checkbox(
+            "Use position dropdown", value=True, key="reports__use_pos_dropdown"
+        )
+        if use_pos_dropdown:
+            position = st.selectbox(
+                "Position", POSITIONS, key="reports__position_dropdown"
+            )
+        else:
+            position = st.text_input("Position", key="reports__position_text")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            technique = st.slider(
+                "Technique", 1, 5, 3, key="reports__technique"
+            )
+            mental = st.slider(
+                "Mental / GRIT", 1, 5, 3, key="reports__mental"
+            )
+        with col2:
+            game_intel = st.slider(
+                "Game intelligence", 1, 5, 3, key="reports__game_intelligence"
+            )
+            athletic = st.slider(
+                "Athletic ability", 1, 5, 3, key="reports__athletic"
+            )
+
+        comments = st.text_area(
+            "General comments / Conclusion", key="reports__comments"
+        )
 
         submitted = st.form_submit_button("Save")
 
     if submitted:
+        sb = get_client()
+        position_val = position.strip() if isinstance(position, str) else position
+        attributes = {
+            "foot": foot,
+            "position": position_val,
+            "technique": technique,
+            "game_intelligence": game_intel,
+            "mental": mental,
+            "athletic": athletic,
+            "comments": comments,
+        }
         payload = {
             "player_id": selected_player_id,
             "report_date": report_date.isoformat(),
             "competition": competition.strip() or None,
             "opponent": opponent.strip() or None,
             "location": location.strip() or None,
-            "position_played": position_played.strip() or None,
-            "minutes": int(minutes) if minutes else None,
-            "rating": float(rating),
-            "strengths": strengths.strip() or None,
-            "weaknesses": weaknesses.strip() or None,
-            "notes": notes.strip() or None,
-            "scout_name": scout_name.strip() or None,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            "attributes": attributes,
         }
-        if _insert_report(payload):
-            st.success("Report saved")
+        try:
+            sb.table("reports").insert(payload).execute()
+            st.toast("Report saved ✅")
             st.rerun()
+        except Exception as e:
+            st.error(f"Failed to save report: {e}")
 
     st.divider()
 
-    rows = _list_reports()
+    sb = get_client()
+    rows = (
+        sb.table("reports")
+        .select("id,report_date,player:player_id(name,current_club),attributes")
+        .order("report_date", desc=True)
+        .limit(50)
+        .execute()
+        .data
+    )
     if rows:
-        df = pd.DataFrame(rows)
-        st.dataframe(df)
+        table = []
+        for r in rows:
+            a = r.get("attributes") or {}
+            player = r.get("player") or {}
+            table.append(
+                {
+                    "Date": r.get("report_date"),
+                    "Player": player.get("name", ""),
+                    "Club": player.get("current_club", ""),
+                    "Pos": a.get("position"),
+                    "Foot": a.get("foot"),
+                    "Tech": a.get("technique"),
+                    "GI": a.get("game_intelligence"),
+                    "MENT": a.get("mental"),
+                    "ATH": a.get("athletic"),
+                    "Comment": (
+                        (a.get("comments") or "")[:60]
+                        + (
+                            "…"
+                            if a.get("comments") and len(a.get("comments")) > 60
+                            else ""
+                        )
+                    ),
+                }
+            )
+        st.dataframe(table, use_container_width=True)
     else:
         st.caption("No reports yet.")
 
