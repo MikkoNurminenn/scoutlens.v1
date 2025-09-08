@@ -22,6 +22,7 @@ if str(ROOT) not in sys.path:
 from app.reports_page import show_reports_page
 from app.shortlists import show_shortlists
 from app.export_page import show_export_page
+from app.player_inspect import show_player_inspect
 from app.login import login
 
 APP_TITLE   = "ScoutLens"
@@ -54,11 +55,12 @@ login()
 
 # --------- Navigation setup ----------
 # Visible pages in the sidebar
-NAV_KEYS = ["Reports", "Players", "Export"]
+NAV_KEYS = ["Reports", "Players", "Inspect", "Export"]
 
 NAV_LABELS = {
     "Reports": "📝 Reports",
     "Players": "📋 Players / Shortlists",
+    "Inspect": "🔍 Inspect Player",
     "Export": "⬇️ Export",
 }
 LABEL_LIST = [NAV_LABELS[k] for k in NAV_KEYS]
@@ -67,6 +69,7 @@ LABEL_TO_KEY = {v: k for k, v in NAV_LABELS.items() if k in NAV_KEYS}
 PAGE_FUNCS = {
     "Reports": show_reports_page,
     "Players": show_shortlists,
+    "Inspect": show_player_inspect,
     "Export": show_export_page,
 }
 
