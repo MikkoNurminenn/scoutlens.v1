@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import Tree
 
 block_cipher = None
 
@@ -7,7 +8,7 @@ a = Analysis(
     ['app/app.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets/login_bg.png', 'assets')],
+    datas=Tree('assets', prefix='assets'),
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
