@@ -190,9 +190,10 @@ def login(title: str = "ScoutLens", *, dim_background: bool = False, background_
         /* Legacy wrappers safety: hide if empty so no ghost card appears */
         .login-card:empty, .login-wrap:empty { display: none !important; height: 0 !important; padding: 0 !important; margin: 0 !important; border: 0 !important; box-shadow: none !important; }
         /* Make the FORM itself the glass card */
-        div[data-testid="stForm"] { width: 100%; max-width: 520px; margin: 0 auto;
-            background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(8px);
-            border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 6px 30px rgba(0,0,0,.25); padding: 26px 24px; }
+        div[data-testid="stForm"] { width: 100%; max-width: 440px; margin: 0 auto;
+                background: rgba(15, 23, 42, 0.40); backdrop-filter: blur(6px);
+                border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);
+                box-shadow: 0 4px 20px rgba(0,0,0,.18); padding: 22px 20px; }
         div[data-testid="stForm"] > div { padding: 0; }
         .form-title { color: #e2e8f0; margin: 0 0 8px 0; font-weight: 700; font-size: 1.4rem; }
         /* Inputs */
@@ -212,7 +213,7 @@ def login(title: str = "ScoutLens", *, dim_background: bool = False, background_
         remaining = int((lu - _now()).total_seconds() // 1)
         minutes = remaining // 60
         seconds = remaining % 60
-        st.error(f"Liian monta yritystä. Yritä uudelleen {minutes} min {seconds} s kuluttua.")
+        st.error(f"Too many attempts. Try again in {minutes} min {seconds} s.")
         st.stop()
 
     with st.container():
@@ -239,25 +240,24 @@ def login(title: str = "ScoutLens", *, dim_background: bool = False, background_
         with st.form("login_form", clear_on_submit=False):
             st.markdown(f"<div class='form-title'>{title}</div>", unsafe_allow_html=True)
 
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                username = st.text_input("Käyttäjätunnus", autocomplete="username", placeholder="Syötä käyttäjätunnus")
-            with col2:
-                show_pw = st.checkbox("Näytä salasana", value=False)
-
+            username = st.text_input(
+                "Username",
+                autocomplete="username",
+                placeholder="Enter your username",
+            )
             password = st.text_input(
-                "Salasana",
-                type="text" if show_pw else "password",
+                "Password",
+                type="password",
                 autocomplete="current-password",
-                placeholder="Syötä salasana",
+                placeholder="Enter your password",
             )
 
-            remember = st.checkbox("Pidä kirjautuneena (istunnon ajan)", value=True)
-            submitted = st.form_submit_button("Kirjaudu sisään")
+            remember = st.checkbox("Keep me signed in (this session)", value=True)
+            submitted = st.form_submit_button("Sign in")
 
         if submitted:
             if len(password) < cfg.min_password_len:
-                st.warning(f"Salasanan tulee olla vähintään {cfg.min_password_len} merkkiä.")
+                st.warning(f"Password must be at least {cfg.min_password_len} characters.")
                 st.stop()
 
             # Tarkista ensin staattinen pääkäyttäjä (aina sallittu)
@@ -278,7 +278,7 @@ def login(title: str = "ScoutLens", *, dim_background: bool = False, background_
 
             if not authed_user:
                 _register_failure(cfg)
-                st.error("Virheellinen käyttäjätunnus tai salasana.")
+                st.error("Invalid username or password.")
                 st.stop()
 
             _clear_failures()
