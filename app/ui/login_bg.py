@@ -36,7 +36,9 @@ def _read_image_b64(p: Path) -> str:
     return b64encode(p.read_bytes()).decode("ascii")
 
 
-def set_login_background(image: str = "login_bg.png", opacity: float = 0.25) -> None:
+def set_login_background(
+    image: str = "login_bg.png", opacity: float = 0.25, add_panel_css: bool = False
+) -> None:
     tried = _candidate_paths(image)
     img_path = next((p for p in tried if p.exists()), None)
     if not img_path:
@@ -45,6 +47,19 @@ def set_login_background(image: str = "login_bg.png", opacity: float = 0.25) -> 
         return
 
     b64 = _read_image_b64(img_path)
+    panel_css = (
+        """
+      .login-panel {
+        background: rgba(0,0,0,0.35);
+        backdrop-filter: blur(4px);
+        border-radius: 16px;
+        padding: 1.25rem;
+      }
+      .login-panel:empty { display: none; }
+    """
+        if add_panel_css
+        else ""
+    )
     css = f"""
     <style>
       [data-testid="stAppViewContainer"]::before {{
@@ -65,12 +80,7 @@ def set_login_background(image: str = "login_bg.png", opacity: float = 0.25) -> 
           position: absolute;
         }}
       }}
-      .login-panel {{
-        background: rgba(0,0,0,0.35);
-        backdrop-filter: blur(4px);
-        border-radius: 16px;
-        padding: 1.25rem;
-      }}
+      {panel_css}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
