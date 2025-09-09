@@ -1,3 +1,5 @@
+"""Inspect Player page to view profile and scouting reports."""
+
 from __future__ import annotations
 
 import pandas as pd
@@ -7,136 +9,105 @@ from postgrest.exceptions import APIError
 from app.supabase_client import get_client
 
 
-PAGE_KEY = "inspect__v3"  # change key to force fresh widgets
+PLAYER_FIELDS = (
+    "id,name,position,preferred_foot,nationality,current_club,"
+    "date_of_birth,transfermarkt_url,created_at,updated_at"
+)
 
 
-@st.cache_data(show_spinner=False, ttl=30)
-def _load_players():
-    sb = get_client()
-    resp = (
+def _players_for_picker(sb):
+    """Return list of players for the selectbox."""
+    return (
         sb.table("players")
         .select("id,name,current_club")
         .order("name")
         .execute()
+        .data
+        or []
     )
-    return resp.data or []
 
 
-@st.cache_data(show_spinner=False, ttl=10)
-def _load_player_profile(player_id: str):
-    sb = get_client()
-    resp = (
+def _player_profile(sb, player_id: str):
+    """Fetch a player's profile."""
+    return (
         sb.table("players")
-        .select(
-            "id,name,position,preferred_foot,nationality,current_club,date_of_birth,transfermarkt_url"
-        )
+        .select(PLAYER_FIELDS)
         .eq("id", player_id)
         .single()
         .execute()
+        .data
     )
-    return resp.data or {}
 
 
-@st.cache_data(show_spinner=False, ttl=10)
-def _load_reports(player_id: str):
-    sb = get_client()
-    resp = (
+def _reports_for_player(sb, player_id: str, limit: int = 100):
+    """Fetch scouting reports for a player."""
+    return (
         sb.table("reports")
         .select(
-            "id,report_date,competition,opponent,location,position_played,minutes,rating,scout_name,strengths,weaknesses,notes"
+            "id,report_date,competition,opponent,location,position_played," \
+            "minutes,rating,strengths,weaknesses,notes,scout_name"
         )
         .eq("player_id", player_id)
         .order("report_date", desc=True)
+        .limit(limit)
         .execute()
+        .data
+        or []
     )
-    return resp.data or []
 
 
 def show_inspect_player() -> None:
+    """Render Inspect Player page."""
     st.title("🔍 Inspect Player")
+    sb = get_client()
 
-    # 1) Player picker
     try:
-        players = _load_players()
+        players = _players_for_picker(sb)
     except APIError as e:
         st.error(f"Failed to load players: {e}")
-        players = []
-
-    if players:
-        labels = [f"{p['name']} ({p.get('current_club') or '—'})" for p in players]
-        id_by_label = {lbl: p["id"] for lbl, p in zip(labels, players)}
-        disabled = False
-    else:
-        labels = ["— no players found —"]
-        id_by_label = {}
-        disabled = True
-
-    selected_label = st.selectbox(
-        "Pick a player to inspect:",
-        options=labels,
-        key=PAGE_KEY + "player_select",
-        index=0,
-        disabled=disabled,
-    )
-
-    if disabled:
-        st.info("No players found. Add a player first from Reports or Players.")
         return
 
-    player_id = id_by_label[selected_label]
+    if not players:
+        st.info("No players found. Create a player from Reports or Players first.")
+        return
 
-    # 2) Player profile
+    labels = [f"{p['name']} ({p.get('current_club') or '—'})" for p in players]
+    id_by_label = {lbl: p["id"] for lbl, p in zip(labels, players)}
+    choice = st.selectbox("Pick a player to inspect.", labels, key="inspect__player_select")
+    player_id = id_by_label[choice]
+
     try:
-        profile = _load_player_profile(player_id)
+        player = _player_profile(sb, player_id)
+        reports = _reports_for_player(sb, player_id)
     except APIError as e:
-        st.error(f"Failed to load player profile: {e}")
+        st.error(f"Failed to load player data: {e}")
         return
 
     with st.container(border=True):
-        st.markdown(f"### {profile.get('name', 'Unknown')}")
+        st.subheader(player["name"])
         c1, c2, c3 = st.columns(3)
-        c1.write(f"**Position:** {profile.get('position') or '—'}")
-        c2.write(f"**Preferred Foot:** {profile.get('preferred_foot') or '—'}")
-        c3.write(f"**Nationality:** {profile.get('nationality') or '—'}")
-        c4, c5, c6 = st.columns(3)
-        c4.write(f"**Club:** {profile.get('current_club') or '—'}")
-        dob = profile.get("date_of_birth")
-        c5.write(f"**DOB:** {dob or '—'}")
-        tm = profile.get("transfermarkt_url")
-        c6.markdown(f"[Transfermarkt]({tm})" if tm else "**Transfermarkt:** —")
+        c1.metric("Position", player.get("position") or "—")
+        c2.metric("Club", player.get("current_club") or "—")
+        c3.metric("Nationality", player.get("nationality") or "—")
+        r1, r2, r3 = st.columns(3)
+        r1.write(f"**Preferred foot:** {player.get('preferred_foot') or '—'}")
+        r2.write(f"**Date of birth:** {player.get('date_of_birth') or '—'}")
+        tm = player.get("transfermarkt_url")
+        r3.write("**Transfermarkt:** " + (f"[link]({tm})" if tm else "—"))
 
-    st.markdown("### Reports")
-
-    # 3) Reports
-    try:
-        reps = _load_reports(player_id)
-    except APIError as e:
-        st.error(f"Failed to load reports: {e}")
+    st.markdown("### Scout reports")
+    if not reports:
+        st.info("No reports for this player yet.")
         return
 
-    if not reps:
-        st.info("No reports yet for this player.")
-        return
-
-    df = pd.DataFrame(reps)
-
-    avg_rating = None
-    if "rating" in df.columns:
-        col = pd.to_numeric(df["rating"], errors="coerce").dropna()
-        if not col.empty:
-            avg_rating = col.mean()
-
-    total_minutes = None
-    if "minutes" in df.columns:
-        col = pd.to_numeric(df["minutes"], errors="coerce").dropna()
-        if not col.empty:
-            total_minutes = col.sum()
-
+    df = pd.DataFrame(reports)
+    avg = df["rating"].dropna().mean() if "rating" in df else None
+    mins = int(df["minutes"].dropna().sum()) if "minutes" in df else None
     m1, m2 = st.columns(2)
-    m1.metric("Avg rating", f"{avg_rating:.2f}" if avg_rating is not None else "—")
-    m2.metric("Total minutes", int(total_minutes) if total_minutes is not None else "—")
+    m1.metric("Avg rating", f"{avg:.1f}" if avg is not None else "—")
+    m2.metric("Total minutes", f"{mins}" if mins is not None else "—")
 
-    prefer = [
+    cols = [
         "report_date",
         "competition",
         "opponent",
@@ -149,8 +120,8 @@ def show_inspect_player() -> None:
         "weaknesses",
         "notes",
     ]
-    cols = [c for c in prefer if c in df.columns] + [c for c in df.columns if c not in prefer]
-    st.dataframe(df[cols], use_container_width=True, hide_index=True)
+    cols = [c for c in cols if c in df.columns]
+    st.dataframe(df[cols], hide_index=True, use_container_width=True)
 
 
 __all__ = ["show_inspect_player"]
