@@ -22,7 +22,7 @@ if str(ROOT) not in sys.path:
 from app.reports_page import show_reports_page
 from app.shortlists import show_shortlists
 from app.export_page import show_export_page
-from app.player_inspect import show_player_inspect
+from app.inspect_player import show_inspect_player
 from app.login import login
 
 APP_TITLE   = "ScoutLens"
@@ -69,7 +69,7 @@ LABEL_TO_KEY = {v: k for k, v in NAV_LABELS.items() if k in NAV_KEYS}
 PAGE_FUNCS = {
     "Reports": show_reports_page,
     "Players": show_shortlists,
-    "Inspect": show_player_inspect,
+    "Inspect": show_inspect_player,
     "Export": show_export_page,
 }
 
