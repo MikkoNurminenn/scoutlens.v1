@@ -220,21 +220,21 @@ def login(title: str = "ScoutLens") -> None:
                 st.warning(f"Salasanan tulee olla vähintään {cfg.min_password_len} merkkiä.")
                 st.stop()
 
-            # Try hashed users first
-            user = _read_user(username)
+            # Tarkista ensin staattinen pääkäyttäjä (aina sallittu)
             authed_user: Optional[UserRecord] = None
-            if user and user.salt and user.password_hash:
-                if verify_password(password, salt_hex=user.salt, expected_hash_hex=user.password_hash):
-                    authed_user = user
+            if username == static_creds.username and password == static_creds.password:
+                authed_user = UserRecord(
+                    username=static_creds.username,
+                    display_name=static_creds.display_name,
+                    password_hash="",
+                    salt="",
+                )
             else:
-                # Fallback to static credentials
-                if username == static_creds.username and password == static_creds.password:
-                    authed_user = UserRecord(
-                        username=static_creds.username,
-                        display_name=static_creds.display_name,
-                        password_hash="",
-                        salt="",
-                    )
+                # Sen jälkeen kokeillaan hashattuja käyttäjiä
+                user = _read_user(username)
+                if user and user.salt and user.password_hash:
+                    if verify_password(password, salt_hex=user.salt, expected_hash_hex=user.password_hash):
+                        authed_user = user
 
             if not authed_user:
                 _register_failure(cfg)
