@@ -9,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Tuple
 
 import streamlit as st
-import requests
 
 from app.ui.login_bg import set_login_background
 
@@ -134,50 +133,6 @@ def _clear_failures() -> None:
     auth["lock_until"] = None
 
 
-# === Weather helpers ===
-@dataclass
-class GeoLocation:
-    city: str
-    country_code: str
-    lat: float
-    lon: float
-
-
-@st.cache_data(ttl=1800)
-def _ip_location() -> Optional[GeoLocation]:
-    try:
-        r = requests.get("http://ip-api.com/json", timeout=3)
-        if r.status_code != 200:
-            return None
-        d = r.json()
-        return GeoLocation(
-            city=str(d.get("city", "")),
-            country_code=str(d.get("countryCode", "")),
-            lat=float(d.get("lat", 0.0)),
-            lon=float(d.get("lon", 0.0)),
-        )
-    except Exception:
-        return None
-
-
-@st.cache_data(ttl=900)
-def _today_minmax(lat: float, lon: float) -> Optional[Tuple[float, float]]:
-    try:
-        url = (
-            "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
-            "&daily=temperature_2m_min,temperature_2m_max&timezone=auto&forecast_days=1"
-        ).format(lat=lat, lon=lon)
-        r = requests.get(url, timeout=5)
-        if r.status_code != 200:
-            return None
-        d = r.json()
-        mn = d["daily"]["temperature_2m_min"][0]
-        mx = d["daily"]["temperature_2m_max"][0]
-        return float(mn), float(mx)
-    except Exception:
-        return None
-
-
 # === Public API ===
 
 def logout() -> None:
@@ -188,7 +143,7 @@ def logout() -> None:
     st.rerun()
 
 
-def login(title: str = "ScoutLens", *, dim_background: bool = False, background_opacity: float = 1.0, show_weather: bool = True) -> None:
+def login(title: str = "ScoutLens", *, dim_background: bool = False, background_opacity: float = 1.0) -> None:
     """
     Hardened login gate with two modes:
 
@@ -214,21 +169,13 @@ def login(title: str = "ScoutLens", *, dim_background: bool = False, background_
 
     UI params:
       - dim_background: if True, adds a radial scrim over background.
-      - background_opacity: passed to set_login_background (1.0 = 100% näkyvyys).
+      - background_opacity: passed to set_login_background (1.0 = 100%).
     """
     _ensure_auth_state()
     if st.session_state["auth"].get("authenticated"):
         return
     cfg = _read_auth_config()
     static_creds = _read_static_creds()
-
-    # Optional weather prefetch
-    loc: Optional[GeoLocation] = None
-    today_minmax: Optional[Tuple[float, float]] = None
-    if show_weather:
-        loc = _ip_location()
-        if loc:
-            today_minmax = _today_minmax(loc.lat, loc.lon)
 
     # Background & glass UI
     set_login_background("login_bg.png", opacity=background_opacity)
@@ -291,12 +238,8 @@ def login(title: str = "ScoutLens", *, dim_background: bool = False, background_
             st.markdown('<div class="login-scrim"></div>', unsafe_allow_html=True)
 
         with st.form("login_form", clear_on_submit=False):
-            st.markdown("<style>.weather-badge{display:inline-block;margin:4px 0 12px 0;padding:6px 10px;border-radius:999px;font-size:12px;color:#e2e8f0;background:rgba(2,6,23,.55);border:1px solid rgba(255,255,255,.08);}</style>", unsafe_allow_html=True)
+            
             st.markdown(f"<div class='form-title'>{title}</div>", unsafe_allow_html=True)
-
-            if show_weather and loc and today_minmax:
-                tmin, tmax = today_minmax
-                city = f"{loc.city}, {loc.country_code}".strip(', ')
                 st.markdown(
                     f"<div class='weather-badge'>{city} · L {round(tmin)}° / H {round(tmax)}°</div>",
                     unsafe_allow_html=True,
