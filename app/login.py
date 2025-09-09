@@ -175,15 +175,39 @@ def login(title: str = "ScoutLens") -> None:
 
     # Background & glass UI
     set_login_background("login_bg.png", opacity=0.30)
-    st.markdown("""
+    st.markdown(
+        """
         <style>
         html, body, .stApp { background: transparent !important; }
-        .login-card { max-width: 420px; margin: 10vh auto; padding: 24px 22px;
-            background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(6px);
-            border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); }
+        .block-container { padding-top: 6vh; padding-bottom: 6vh; }
+        /* Center + dim background behind card */
+        .login-wrap { position: relative; min-height: 76vh; display: grid; place-items: center; }
+        .login-scrim { position: fixed; inset: 0; pointer-events: none;
+            background: radial-gradient(900px 520px at 18% 40%, rgba(2,6,23,.60), rgba(2,6,23,.35) 45%, rgba(2,6,23,.15) 70%, transparent 85%);
+        }
+        /* Glass card */
+        .login-card { width: 100%; max-width: 480px; margin: 0 auto; padding: 26px 24px;
+            background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(8px);
+            border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 6px 30px rgba(0,0,0,.25); }
+        .login-card h1, .login-card h2, .login-card h3 { margin: 0 0 8px 0; }
         .hint { font-size: 12px; opacity: .75; }
+        /* Remove Streamlit form chrome */
+        div[data-testid="stForm"] { background: transparent; border: 0 !important; box-shadow: none !important; }
+        div[data-testid="stForm"] > div { padding: 0; }
+        /* Inputs */
+        .stTextInput > div > div > input { 
+            background: rgba(2,6,23,.80);
+            border: 1px solid rgba(255,255,255,.10);
+            color: #f8fafc; border-radius: 12px;
+        }
+        .stTextInput > label, .stCheckbox > label { color: #e2e8f0; }
+        .stCheckbox > div[role="checkbox"] { border-radius: 6px; }
+        /* Button */
+        .stButton button { border-radius: 12px; padding: 10px 14px; font-weight: 600; }
         </style>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
 
     # Lockout check
     lu = _locked_until()
@@ -195,14 +219,14 @@ def login(title: str = "ScoutLens") -> None:
         st.stop()
 
     with st.container():
-        st.markdown('<div class="login-card">', unsafe_allow_html=True)
+        st.markdown('<div class="login-wrap"><div class="login-scrim"></div><div class="login-card">', unsafe_allow_html=True)
         st.header(title, anchor=False)
 
         # Form groups submit atomically (prevents double-runs)
         with st.form("login_form", clear_on_submit=False):
             col1, col2 = st.columns([1, 1])
             with col1:
-                username = st.text_input("Käyttäjätunnus", autocomplete="username")
+                username = st.text_input("Käyttäjätunnus", autocomplete="username", placeholder="Syötä käyttäjätunnus")
             with col2:
                 show_pw = st.checkbox("Näytä salasana", value=False)
 
@@ -210,6 +234,7 @@ def login(title: str = "ScoutLens") -> None:
                 "Salasana",
                 type="text" if show_pw else "password",
                 autocomplete="current-password",
+                placeholder="Syötä salasana",
             )
 
             remember = st.checkbox("Pidä kirjautuneena (istunnon ajan)", value=True)
@@ -249,8 +274,7 @@ def login(title: str = "ScoutLens") -> None:
                 auth["ephemeral"] = True
 
             st.rerun()
-
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div></div>", unsafe_allow_html=True)
 
     st.stop()
 
