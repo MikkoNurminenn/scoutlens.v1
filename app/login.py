@@ -143,7 +143,7 @@ def logout() -> None:
     st.rerun()
 
 
-def login(title: str = "ScoutLens") -> None:
+def login(title: str = "ScoutLens", *, dim_background: bool = False, background_opacity: float = 1.0) -> None:
     """
     Hardened login gate with two modes:
 
@@ -166,6 +166,10 @@ def login(title: str = "ScoutLens") -> None:
 
     When [users.*] exist, hashed mode is used; otherwise static mode is used.
     Tip for hashed mode: generate salt+hash via generate_password_hash("your-password").
+
+    UI params:
+      - dim_background: if True, adds a radial scrim over background.
+      - background_opacity: passed to set_login_background (1.0 = 100% näkyvyys).
     """
     _ensure_auth_state()
     if st.session_state["auth"].get("authenticated"):
@@ -174,7 +178,7 @@ def login(title: str = "ScoutLens") -> None:
     static_creds = _read_static_creds()
 
     # Background & glass UI
-    set_login_background("login_bg.png", opacity=0.30)
+    set_login_background("login_bg.png", opacity=background_opacity)
     st.markdown(
         """
         <style>
@@ -229,7 +233,8 @@ def login(title: str = "ScoutLens") -> None:
         )
 
         # Soft focus scrim for readability
-        st.markdown('<div class="login-scrim"></div>', unsafe_allow_html=True)
+        if dim_background:
+            st.markdown('<div class="login-scrim"></div>', unsafe_allow_html=True)
 
         with st.form("login_form", clear_on_submit=False):
             st.markdown(f"<div class='form-title'>{title}</div>", unsafe_allow_html=True)
