@@ -1,85 +1,64 @@
+from __future__ import annotations
 import streamlit as st
+from app.supabase_client import get_client
 from postgrest.exceptions import APIError
-from app.services.players import get_player, list_reports_by_player
 
 
-def show_inspect_player():
-    st.header("🔎 Inspect Player")
+def show_inspect_player() -> None:
+    st.title("🔍 Inspect Player")
+    sb = get_client()
 
-    q = st.query_params
-    player_id = q.get("player_id", [None])[0]
-
-    if not player_id:
-        st.info("Pick a player to inspect.")
-        return
-
+    # Load players (name + id + a few columns for context)
     try:
-        p = get_player(player_id)
+        resp = sb.table("players").select(
+            "id,name,position,current_club,nationality,date_of_birth"
+        ).order("name").execute()
+        players = resp.data or []
     except APIError as e:
-        st.error(f"Failed to load player: {e}")
+        st.error(f"Failed to load players: {e}")
         return
 
-    col1, col2 = st.columns([1, 2], gap="large")
+    if not players:
+        st.info("No players found. Add a player first from Reports or Players.")
+        return
 
-    with col1:
-        st.subheader(p["name"])
-        st.caption(
-            f"{p.get('position','—')} • {p.get('nationality','—')} • {p.get('preferred_foot','—')}"
-        )
-        st.text(f"Current club: {p.get('current_club','—')}")
-        if p.get("transfermarkt_url"):
-            st.link_button("Transfermarkt profile", p["transfermarkt_url"])
-        st.divider()
-        if st.button("📝 New report for this player", use_container_width=True):
-            st.query_params.update({"page": "Reports", "player_id": p["id"]})
-            st.rerun()
+    # Build label→id map to keep select labels clean
+    labels = [f"{p['name']} ({p.get('current_club') or '—'})" for p in players]
+    id_by_label = {lbl: p["id"] for lbl, p in zip(labels, players)}
 
-    with col2:
-        st.subheader("Reports")
-        try:
-            reps = list_reports_by_player(player_id)
-        except APIError as e:
-            st.error(f"Failed to load reports: {e}")
-            reps = []
+    selected_label = st.selectbox("Pick a player to inspect:", labels, key="inspect__player_select")
+    if not selected_label:
+        return
 
-        if not reps:
-            st.info("No reports for this player yet.")
-        else:
-            import pandas as pd
+    player_id = id_by_label[selected_label]
+    player = next(p for p in players if p["id"] == player_id)
 
-            df = pd.DataFrame(
-                reps,
-                columns=[
-                    "report_date",
-                    "competition",
-                    "opponent",
-                    "location",
-                    "position_played",
-                    "minutes",
-                    "rating",
-                    "scout_name",
-                    "notes",
-                ],
-            )
-            df["notes"] = df["notes"].fillna("").str.slice(0, 120).mask(
-                df["notes"].str.len() > 120, lambda s: s + "…"
-            )
-            st.dataframe(df, use_container_width=True, hide_index=True)
+    # Player header
+    st.subheader(player["name"])
+    cols = st.columns(4)
+    cols[0].metric("Position", player.get("position") or "—")
+    cols[1].metric("Club", player.get("current_club") or "—")
+    cols[2].metric("Nationality", player.get("nationality") or "—")
+    cols[3].metric("DOB", str(player.get("date_of_birth") or "—"))
 
-            with st.expander("Open report actions"):
-                for r in reps:
-                    c1, c2, c3, c4 = st.columns([2, 2, 2, 2])
-                    c1.write(
-                        f"**{r['report_date']}** {r.get('competition','—')} vs {r.get('opponent','—')}"
-                    )
-                    c2.write(f"Rating: **{r.get('rating','—')}**")
-                    if c3.button("View", key=f"view_{r['id']}"):
-                        st.query_params.update(
-                            {"page": "Reports", "report_id": r["id"], "mode": "view"}
-                        )
-                        st.rerun()
-                    if c4.button("Edit", key=f"edit_{r['id']}"):
-                        st.query_params.update(
-                            {"page": "Reports", "report_id": r["id"], "mode": "edit"}
-                        )
-                        st.rerun()
+    # Fetch reports for this player
+    try:
+        reps = sb.table("reports").select(
+            "id,report_date,competition,opponent,location,position_played,minutes,rating,notes,created_at"
+        ).eq("player_id", player_id).order("report_date", desc=True).execute().data or []
+    except APIError as e:
+        st.error(f"Failed to load reports: {e}")
+        return
+
+    st.markdown("### Reports")
+    if not reps:
+        st.info("No reports yet for this player.")
+        return
+
+    # Simple table; could be upgraded later
+    import pandas as pd
+    df = pd.DataFrame(reps)
+    # Reorder and prettify columns
+    cols_order = ["report_date","competition","opponent","location","position_played","minutes","rating","notes"]
+    df = df[[c for c in cols_order if c in df.columns]]
+    st.dataframe(df, use_container_width=True)
