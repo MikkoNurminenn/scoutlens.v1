@@ -1,6 +1,6 @@
 from __future__ import annotations
 import streamlit as st
-from app.utils.assets import get_asset_path, set_page_bg
+from app.ui.login_bg import set_login_background
 
 
 def login() -> None:
@@ -8,7 +8,7 @@ def login() -> None:
     if st.session_state.get("authenticated"):
         return
 
-    set_page_bg(get_asset_path("login_bg.png"))
+    set_login_background("login_bg.png", opacity=0.30)
 
     st.markdown(
         """
