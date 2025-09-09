@@ -180,26 +180,19 @@ def login(title: str = "ScoutLens") -> None:
         <style>
         html, body, .stApp { background: transparent !important; }
         .block-container { padding-top: 6vh; padding-bottom: 6vh; }
-        /* Center + dim background behind card */
-        .login-wrap { position: relative; min-height: 76vh; display: grid; place-items: center; }
+        /* Center + dim background behind form */
         .login-scrim { position: fixed; inset: 0; pointer-events: none;
-            background: radial-gradient(900px 520px at 18% 40%, rgba(2,6,23,.60), rgba(2,6,23,.35) 45%, rgba(2,6,23,.15) 70%, transparent 85%);
-        }
-        /* Glass card */
-        .login-card { width: 100%; max-width: 480px; margin: 0 auto; padding: 26px 24px;
+            background: radial-gradient(900px 520px at 18% 40%, rgba(2,6,23,.60), rgba(2,6,23,.35) 45%, rgba(2,6,23,.15) 70%, transparent 85%); }
+        /* Legacy wrappers safety: hide if empty so no ghost card appears */
+        .login-card:empty, .login-wrap:empty { display: none !important; height: 0 !important; padding: 0 !important; margin: 0 !important; border: 0 !important; box-shadow: none !important; }
+        /* Make the FORM itself the glass card */
+        div[data-testid="stForm"] { width: 100%; max-width: 520px; margin: 0 auto;
             background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(8px);
-            border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 6px 30px rgba(0,0,0,.25); }
-        .login-card h1, .login-card h2, .login-card h3 { margin: 0 0 8px 0; }
-        .hint { font-size: 12px; opacity: .75; }
-        /* Remove Streamlit form chrome */
-        div[data-testid="stForm"] { background: transparent; border: 0 !important; box-shadow: none !important; }
+            border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 6px 30px rgba(0,0,0,.25); padding: 26px 24px; }
         div[data-testid="stForm"] > div { padding: 0; }
+        .form-title { color: #e2e8f0; margin: 0 0 8px 0; font-weight: 700; font-size: 1.4rem; }
         /* Inputs */
-        .stTextInput > div > div > input { 
-            background: rgba(2,6,23,.80);
-            border: 1px solid rgba(255,255,255,.10);
-            color: #f8fafc; border-radius: 12px;
-        }
+        .stTextInput > div > div > input { background: rgba(2,6,23,.80); border: 1px solid rgba(255,255,255,.10); color: #f8fafc; border-radius: 12px; }
         .stTextInput > label, .stCheckbox > label { color: #e2e8f0; }
         .stCheckbox > div[role="checkbox"] { border-radius: 6px; }
         /* Button */
@@ -219,11 +212,28 @@ def login(title: str = "ScoutLens") -> None:
         st.stop()
 
     with st.container():
-        st.markdown('<div class="login-wrap"><div class="login-scrim"></div><div class="login-card">', unsafe_allow_html=True)
-        st.header(title, anchor=False)
+        # EXTRA styles to make the form itself the card (no empty wrapper issues)
+        st.markdown(
+            """
+            <style>
+            .block-container { min-height: 88vh; display: grid; place-items: center; }
+            div[data-testid="stForm"] { width: 100%; max-width: 520px; margin: 0 auto;
+                background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(8px);
+                border-radius: 14px; border: 1px solid rgba(255,255,255,0.10);
+                box-shadow: 0 6px 30px rgba(0,0,0,.25); padding: 26px 24px; }
+            div[data-testid="stForm"] > div { padding: 0 !important; }
+            .form-title { color: #e2e8f0; margin: 0 0 8px 0; font-weight: 700; font-size: 1.4rem; }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        # Form groups submit atomically (prevents double-runs)
+        # Soft focus scrim for readability
+        st.markdown('<div class="login-scrim"></div>', unsafe_allow_html=True)
+
         with st.form("login_form", clear_on_submit=False):
+            st.markdown(f"<div class='form-title'>{title}</div>", unsafe_allow_html=True)
+
             col1, col2 = st.columns([1, 1])
             with col1:
                 username = st.text_input("Käyttäjätunnus", autocomplete="username", placeholder="Syötä käyttäjätunnus")
@@ -274,7 +284,6 @@ def login(title: str = "ScoutLens") -> None:
                 auth["ephemeral"] = True
 
             st.rerun()
-        st.markdown("</div></div>", unsafe_allow_html=True)
 
     st.stop()
 
