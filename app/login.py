@@ -1,6 +1,6 @@
 from __future__ import annotations
 import streamlit as st
-from app.ui.backgrounds import inject_login_background_css
+from app.ui.backgrounds import inject_login_background
 
 
 def login() -> None:
@@ -8,7 +8,7 @@ def login() -> None:
     if st.session_state.get("authenticated"):
         return
 
-    inject_login_background_css(st, "login_bg.png")
+    inject_login_background(st, "login_bg.png")
 
     st.markdown('<div class="scoutlens-login-card">', unsafe_allow_html=True)
     st.title("ScoutLens")
