@@ -1,11 +1,11 @@
-# app/inspect_player.py
 from __future__ import annotations
 import streamlit as st
 import pandas as pd
 from postgrest.exceptions import APIError
 from app.supabase_client import get_client
 
-PAGE_KEY = "inspect__"  # yhtenäiset avainprefiksit
+PAGE_KEY = "inspect__v2"  # change key to force fresh widgets
+
 
 @st.cache_data(show_spinner=False, ttl=30)
 def _load_players():
@@ -15,6 +15,7 @@ def _load_players():
     ).order("name").execute()
     return resp.data or []
 
+
 @st.cache_data(show_spinner=False, ttl=10)
 def _load_reports(player_id: str):
     sb = get_client()
@@ -23,34 +24,46 @@ def _load_reports(player_id: str):
     ).eq("player_id", player_id).order("report_date", desc=True).execute()
     return resp.data or []
 
+
 def show_inspect_player() -> None:
     st.title("🔍 Inspect Player")
+    st.caption("Inspect view loaded ✅")  # DIAG
 
-    # 1) Pelaajat
+    # 1) Players
     try:
         players = _load_players()
     except APIError as e:
         st.error(f"Failed to load players: {e}")
-        return
+        players = []
 
-    if not players:
-        st.info("No players found. Add a player first from Reports or Players.")
-        return
+    st.caption(f"Loaded players: **{len(players)}**")  # DIAG
 
-    # 2) Selectbox
-    labels = [f"{p['name']} ({p.get('current_club') or '—'})" for p in players]
-    id_by_label = {lbl: p["id"] for lbl, p in zip(labels, players)}
+    # 2) Selectbox (always renders; disabled if no players)
+    if players:
+        labels = [f"{p['name']} ({p.get('current_club') or '—'})" for p in players]
+        id_by_label = {lbl: p["id"] for lbl, p in zip(labels, players)}
+        disabled = False
+    else:
+        labels = ["— no players found —"]
+        id_by_label = {}
+        disabled = True
 
     selected_label = st.selectbox(
         "Pick a player to inspect:",
         options=labels,
         key=PAGE_KEY + "player_select",
         index=0,
+        disabled=disabled,
     )
+
+    if disabled:
+        st.info("No players found. Add a player first from Reports or Players.")
+        return
+
     player_id = id_by_label[selected_label]
     player = next(p for p in players if p["id"] == player_id)
 
-    # 3) Pelaajan perusinfo
+    # 3) Player header
     st.subheader(player["name"])
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Position", player.get("position") or "—")
@@ -60,9 +73,9 @@ def show_inspect_player() -> None:
     c4.metric("DOB", str(dob) if dob else "—")
 
     st.divider()
-
-    # 4) Raportit
     st.markdown("### Reports")
+
+    # 4) Reports for this player
     try:
         reps = _load_reports(player_id)
     except APIError as e:
@@ -74,8 +87,6 @@ def show_inspect_player() -> None:
         return
 
     df = pd.DataFrame(reps)
-
-    # Kolumnien ystävällinen järjestys
     prefer = [
         "report_date",
         "competition",
@@ -89,4 +100,5 @@ def show_inspect_player() -> None:
     cols = [c for c in prefer if c in df.columns] + [c for c in df.columns if c not in prefer]
     st.dataframe(df[cols], use_container_width=True, hide_index=True)
 
-    # Ei st.rerun() callbackeissa – Streamlit hoitaa uudellenrenderöinnin valinnasta.
+    # Note: Do NOT call st.rerun() inside callbacks on this page.
+
