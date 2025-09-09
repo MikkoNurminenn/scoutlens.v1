@@ -8,7 +8,10 @@ a = Analysis(
     ['app/app.py'],
     pathex=[],
     binaries=[],
-    datas=Tree('assets', prefix='assets'),
+    datas=(
+        Tree('assets', prefix='assets')
+        + Tree('app/assets', prefix='app/assets')
+    ),
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
