@@ -11,6 +11,11 @@ def login() -> None:
     set_login_background("login_bg.png", opacity=0.30)
 
     st.markdown(
+        "<style>html, body, .stApp { background: transparent !important; }</style>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
         """
         <style>
         .login-card {
