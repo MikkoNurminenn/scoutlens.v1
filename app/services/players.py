@@ -1,8 +1,32 @@
 from __future__ import annotations
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from postgrest.exceptions import APIError
-from app.utils.supa import get_client, first_row
+from app.supabase_client import get_client
+from app.utils.supa import first_row
+
+sb = get_client()
+
+PLAYER_FIELDS = "id,name,position,nationality,preferred_foot,current_club,transfermarkt_url"
+
+
+def get_player(player_id: str) -> Dict[str, Any]:
+    res = sb.table("players").select(PLAYER_FIELDS).eq("id", player_id).single().execute()
+    return res.data
+
+
+def list_reports_by_player(player_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    res = (
+        sb.table("reports")
+        .select(
+            "id,report_date,competition,opponent,location,position_played,minutes,rating,notes,scout_name"
+        )
+        .eq("player_id", player_id)
+        .order("report_date", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return res.data or []
 
 
 def insert_player(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -11,7 +35,6 @@ def insert_player(payload: Dict[str, Any]) -> Dict[str, Any]:
     The Supabase client returns the affected rows in ``res.data`` so no
     chained ``select`` call is required.
     """
-    sb = get_client()
     try:
         resp = sb.table("players").insert(payload).execute()
         row = first_row(resp)
