@@ -55,12 +55,12 @@ login()
 
 # --------- Navigation setup ----------
 # Visible pages in the sidebar
-NAV_KEYS = ["Reports", "Players", "Inspect", "Export"]
+NAV_KEYS = ["Reports", "Players", "Inspect Player", "Export"]
 
 NAV_LABELS = {
     "Reports": "📝 Reports",
     "Players": "📋 Players / Shortlists",
-    "Inspect": "🔍 Inspect Player",
+    "Inspect Player": "🔍 Inspect Player",
     "Export": "⬇️ Export",
 }
 LABEL_LIST = [NAV_LABELS[k] for k in NAV_KEYS]
@@ -69,7 +69,7 @@ LABEL_TO_KEY = {v: k for k, v in NAV_LABELS.items() if k in NAV_KEYS}
 PAGE_FUNCS = {
     "Reports": show_reports_page,
     "Players": show_shortlists,
-    "Inspect": show_inspect_player,
+    "Inspect Player": show_inspect_player,
     "Export": show_export_page,
 }
 
@@ -96,7 +96,6 @@ def _on_nav_change() -> None:
     page = LABEL_TO_KEY.get(label, NAV_KEYS[0])
     st.session_state["nav_page"] = page
     _sync_query(page)
-    st.rerun()
 
 # --------- Init from URL once ----------
 if "nav_page" not in st.session_state:
