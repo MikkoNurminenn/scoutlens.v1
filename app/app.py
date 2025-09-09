@@ -20,9 +20,9 @@ if str(ROOT) not in sys.path:
 
 # --- Pages
 from app.reports_page import show_reports_page
-from app.shortlists import show_shortlists
-from app.export_page import show_export_page
 from app.inspect_player import show_inspect_player
+from app.shortlists_page import show_shortlists_page
+from app.export_page import show_export_page
 from app.login import login
 
 APP_TITLE   = "ScoutLens"
@@ -55,12 +55,12 @@ login()
 
 # --------- Navigation setup ----------
 # Visible pages in the sidebar
-NAV_KEYS = ["Reports", "Players", "Inspect Player", "Export"]
+NAV_KEYS = ["Reports", "Inspect Player", "Shortlists", "Export"]
 
 NAV_LABELS = {
     "Reports": "📝 Reports",
-    "Players": "📋 Players / Shortlists",
     "Inspect Player": "🔍 Inspect Player",
+    "Shortlists": "⭐ Shortlists",
     "Export": "⬇️ Export",
 }
 LABEL_LIST = [NAV_LABELS[k] for k in NAV_KEYS]
@@ -68,8 +68,8 @@ LABEL_TO_KEY = {v: k for k, v in NAV_LABELS.items() if k in NAV_KEYS}
 
 PAGE_FUNCS = {
     "Reports": show_reports_page,
-    "Players": show_shortlists,
     "Inspect Player": show_inspect_player,
+    "Shortlists": show_shortlists_page,
     "Export": show_export_page,
 }
 
@@ -78,8 +78,8 @@ LEGACY_REMAP = {
     "home": "Reports",
     "team_view": "Reports",
     "scout_reporter": "Reports",
-    "shortlists": "Players",
-    "player_editor": "Players",
+    "shortlists": "Shortlists",
+    "player_editor": "Shortlists",
 }
 
 def _sync_query(page: str) -> None:

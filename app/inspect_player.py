@@ -1,4 +1,4 @@
-"""Inspect Player page to view profile and scouting reports."""
+"""Inspect Player page for viewing player profile and linked reports."""
 
 from __future__ import annotations
 
@@ -9,61 +9,24 @@ from postgrest.exceptions import APIError
 from app.supabase_client import get_client
 
 
-PLAYER_FIELDS = (
-    "id,name,position,preferred_foot,nationality,current_club,"
-    "date_of_birth,transfermarkt_url,created_at,updated_at"
-)
-
-
-def _players_for_picker(sb):
-    """Return list of players for the selectbox."""
-    return (
-        sb.table("players")
-        .select("id,name,current_club")
-        .order("name")
-        .execute()
-        .data
-        or []
-    )
-
-
-def _player_profile(sb, player_id: str):
-    """Fetch a player's profile."""
-    return (
-        sb.table("players")
-        .select(PLAYER_FIELDS)
-        .eq("id", player_id)
-        .single()
-        .execute()
-        .data
-    )
-
-
-def _reports_for_player(sb, player_id: str, limit: int = 100):
-    """Fetch scouting reports for a player."""
-    return (
-        sb.table("reports")
-        .select(
-            "id,report_date,competition,opponent,location,position_played," \
-            "minutes,rating,strengths,weaknesses,notes,scout_name"
-        )
-        .eq("player_id", player_id)
-        .order("report_date", desc=True)
-        .limit(limit)
-        .execute()
-        .data
-        or []
-    )
-
-
 def show_inspect_player() -> None:
-    """Render Inspect Player page."""
+    """Render the Inspect Player page."""
     st.title("🔍 Inspect Player")
     sb = get_client()
 
+    # --- Players dropdown ---
     try:
-        players = _players_for_picker(sb)
-    except APIError as e:
+        players = (
+            sb.table("players")
+            .select(
+                "id,name,position,current_club,nationality,date_of_birth,team_name,preferred_foot,club_number,scout_rating,transfermarkt_url"
+            )
+            .order("name")
+            .execute()
+            .data
+            or []
+        )
+    except APIError as e:  # pragma: no cover - UI error handling
         st.error(f"Failed to load players: {e}")
         return
 
@@ -71,57 +34,83 @@ def show_inspect_player() -> None:
         st.info("No players found. Create a player from Reports or Players first.")
         return
 
-    labels = [f"{p['name']} ({p.get('current_club') or '—'})" for p in players]
-    id_by_label = {lbl: p["id"] for lbl, p in zip(labels, players)}
-    choice = st.selectbox("Pick a player to inspect.", labels, key="inspect__player_select")
-    player_id = id_by_label[choice]
+    label_by_id = {
+        p["id"]: f"{p['name']} ({p.get('current_club') or p.get('team_name') or '—'})"
+        for p in players
+    }
+    default_id = st.session_state.get("inspect__player_id") or players[0]["id"]
+    player_id = st.selectbox(
+        "Player",
+        options=list(label_by_id.keys()),
+        format_func=lambda x: label_by_id[x],
+        index=list(label_by_id.keys()).index(default_id)
+        if default_id in label_by_id
+        else 0,
+    )
+    st.session_state["inspect__player_id"] = player_id
 
+    player = next(p for p in players if p["id"] == player_id)
+
+    # --- Player header ---
+    st.subheader(player["name"])
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Position", player.get("position") or "—")
+    col2.metric("Club", player.get("current_club") or player.get("team_name") or "—")
+    col3.metric("Nationality", player.get("nationality") or "—")
+    with st.expander("Details"):
+        st.write(
+            {
+                "Date of birth": player.get("date_of_birth"),
+                "Preferred foot": player.get("preferred_foot"),
+                "Number": player.get("club_number"),
+                "Scout rating": player.get("scout_rating"),
+                "Transfermarkt": player.get("transfermarkt_url"),
+            }
+        )
+
+    # --- Reports list ---
     try:
-        player = _player_profile(sb, player_id)
-        reports = _reports_for_player(sb, player_id)
-    except APIError as e:
-        st.error(f"Failed to load player data: {e}")
+        reports = (
+            sb.table("reports")
+            .select(
+                "id,report_date,competition,opponent,location,position_played,minutes,rating,strengths,weaknesses,notes,scout_name,attributes,created_at,updated_at"
+            )
+            .eq("player_id", player_id)
+            .order("report_date", desc=True)
+            .execute()
+            .data
+            or []
+        )
+    except APIError as e:  # pragma: no cover - UI error handling
+        st.error(f"Failed to load reports: {e}")
         return
 
-    with st.container(border=True):
-        st.subheader(player["name"])
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Position", player.get("position") or "—")
-        c2.metric("Club", player.get("current_club") or "—")
-        c3.metric("Nationality", player.get("nationality") or "—")
-        r1, r2, r3 = st.columns(3)
-        r1.write(f"**Preferred foot:** {player.get('preferred_foot') or '—'}")
-        r2.write(f"**Date of birth:** {player.get('date_of_birth') or '—'}")
-        tm = player.get("transfermarkt_url")
-        r3.write("**Transfermarkt:** " + (f"[link]({tm})" if tm else "—"))
+    if reports:
+        total_minutes = sum(r.get("minutes") or 0 for r in reports)
+        ratings = [float(r["rating"]) for r in reports if r.get("rating") is not None]
+        avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else None
+        stats = f"Reports: **{len(reports)}** | Total minutes: **{total_minutes}**"
+        if avg_rating is not None:
+            stats += f" | Avg rating: **{avg_rating}**"
+        st.caption(stats)
 
-    st.markdown("### Scout reports")
-    if not reports:
-        st.info("No reports for this player yet.")
-        return
+        df = pd.DataFrame(reports)
+        st.dataframe(df, use_container_width=True)
 
-    df = pd.DataFrame(reports)
-    avg = df["rating"].dropna().mean() if "rating" in df else None
-    mins = int(df["minutes"].dropna().sum()) if "minutes" in df else None
-    m1, m2 = st.columns(2)
-    m1.metric("Avg rating", f"{avg:.1f}" if avg is not None else "—")
-    m2.metric("Total minutes", f"{mins}" if mins is not None else "—")
-
-    cols = [
-        "report_date",
-        "competition",
-        "opponent",
-        "location",
-        "position_played",
-        "minutes",
-        "rating",
-        "scout_name",
-        "strengths",
-        "weaknesses",
-        "notes",
-    ]
-    cols = [c for c in cols if c in df.columns]
-    st.dataframe(df[cols], hide_index=True, use_container_width=True)
+        st.download_button(
+            "⬇️ Export CSV",
+            df.to_csv(index=False).encode("utf-8"),
+            file_name=f"{player['name']}_reports.csv",
+            mime="text/csv",
+        )
+        st.download_button(
+            "⬇️ Export JSON",
+            df.to_json(orient="records").encode("utf-8"),
+            file_name=f"{player['name']}_reports.json",
+            mime="application/json",
+        )
+    else:
+        st.info("No reports yet for this player.")
 
 
 __all__ = ["show_inspect_player"]
