@@ -1,4 +1,4 @@
-# app/main.py
+# app/app.py
 # =============================================================================
 # ScoutLens — App shell with polished sidebar navigation (stable across reruns)
 # - Single-source-of-truth nav (st.session_state["nav_page"])
@@ -12,9 +12,8 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import streamlit as st
-from app.theme import use_theme
 
-# Ensure package imports work when running as `python app/main.py`
+# Ensure package imports work when running as `python app/app.py`
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -86,7 +85,7 @@ def _on_nav_change() -> None:
 
 
 def main() -> None:
-    use_theme(APP_TITLE)
+    st.set_page_config(page_title=APP_TITLE, layout="wide")
 
     # Temporary cache bust during Supabase client upgrade
     try:
@@ -133,8 +132,7 @@ def main() -> None:
 
         st.markdown(
             f"<div class='sb-footer'>"
-            f"<strong>{APP_TITLE}</strong> v{APP_VERSION}<br>"
-            f"Indigo × Sky theme • Hover + selection gradients"
+            f"<strong>{APP_TITLE}</strong> v{APP_VERSION}"
             f"</div>",
             unsafe_allow_html=True
         )

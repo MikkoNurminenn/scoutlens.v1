@@ -6,4 +6,4 @@ echo "📦 Installing dependencies..."
 pip install -r requirements.txt
 
 echo "🚀 Starting Streamlit app..."
-streamlit run app/main.py
+streamlit run app/app.py

@@ -14,11 +14,11 @@ If needed, install Streamlit with:
 
 From the project root run:
 
-    streamlit run app/main.py
+    streamlit run app/app.py
 
 You can verify the package imports with:
 
-    python -c "import app, app.theme; print('ok')"
+    python -c "import app; print('ok')"
 
 ### Supabase Sync
 
