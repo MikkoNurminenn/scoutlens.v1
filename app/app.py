@@ -13,6 +13,35 @@ from pathlib import Path
 import sys
 import streamlit as st
 
+st.set_page_config(
+    page_title="ScoutLens",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+
+def collapse_sidebar_on_next_rerun() -> None:
+    st.session_state._collapse_sidebar = True
+    st.rerun()
+
+
+if st.session_state.get("_collapse_sidebar"):
+    st.session_state._collapse_sidebar = False
+    st.markdown(
+        """
+        <script>
+        const tryClose = () => {
+          // Streamlit header hamburger button
+          const btn = window.parent.document.querySelector('button[kind="headerNoPadding"]');
+          if (btn) { btn.click(); } else { setTimeout(tryClose, 50); }
+        };
+        tryClose();
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 # Ensure package imports work when running as `python app/app.py`
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -68,6 +97,7 @@ LEGACY_REMAP = {
     "player_editor": "Shortlists",
 }
 
+
 def _sync_query(page: str) -> None:
     try:
         st.query_params["p"] = page
@@ -77,16 +107,8 @@ def _sync_query(page: str) -> None:
         except Exception:
             pass
 
-def _on_nav_change() -> None:
-    label = st.session_state["nav_choice"]
-    page = LABEL_TO_KEY.get(label, NAV_KEYS[0])
-    st.session_state["nav_page"] = page
-    _sync_query(page)
-
 
 def main() -> None:
-    st.set_page_config(page_title=APP_TITLE, layout="wide")
-
     # Temporary cache bust during Supabase client upgrade
     try:
         st.cache_data.clear()
@@ -111,6 +133,9 @@ def main() -> None:
         current_page = NAV_KEYS[0]
         st.session_state["nav_page"] = current_page
 
+    if "_prev_nav" not in st.session_state:
+        st.session_state["_prev_nav"] = current_page
+
     # Keep visible label in sync, safely
     desired_label = NAV_LABELS.get(current_page, NAV_LABELS[NAV_KEYS[0]])
     if st.session_state.get("nav_choice") != desired_label:
@@ -122,12 +147,11 @@ def main() -> None:
         st.markdown(f"<div class='scout-sub'>{APP_TAGLINE}</div>", unsafe_allow_html=True)
         st.markdown("<div class='nav-sep'>Navigation</div>", unsafe_allow_html=True)
 
-        st.radio(
+        selection = st.radio(
             "Navigate",
             options=LABEL_LIST,
             key="nav_choice",
             label_visibility="collapsed",
-            on_change=_on_nav_change,
         )
 
         st.markdown(
@@ -136,6 +160,16 @@ def main() -> None:
             f"</div>",
             unsafe_allow_html=True
         )
+
+    page = LABEL_TO_KEY.get(selection, NAV_KEYS[0])
+    prev = st.session_state.get("_prev_nav")
+    if prev != page:
+        st.session_state["_prev_nav"] = page
+        st.session_state["nav_page"] = page
+        _sync_query(page)
+        collapse_sidebar_on_next_rerun()
+
+    current_page = st.session_state.get("nav_page", NAV_KEYS[0])
 
     # --------- Render current page ----------
     PAGE_FUNCS.get(current_page, lambda: st.error("Page not found."))()
