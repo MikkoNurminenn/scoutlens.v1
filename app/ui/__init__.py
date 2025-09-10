@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from .sidebar import bootstrap_sidebar_auto_collapse  # tai oikea moduuli
+__all__ = ["bootstrap_sidebar_auto_collapse"]
 
 def bootstrap_sidebar_auto_collapse() -> None:
     """If session flag is set, click the header hamburger to close sidebar once."""
