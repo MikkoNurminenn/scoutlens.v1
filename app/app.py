@@ -6,80 +6,75 @@ import sys
 import traceback
 import streamlit as st
 
-# --- Robust ROOT/path bootstrap ------------------------------------------------
-ROOT = Path(__file__).resolve().parent.parent  # projektin juuri
-PKG_DIR = ROOT / "app"                         # pakettihakemisto
-
-# Miksi: Streamlitin käynnistyspolku vaihtelee; varmistetaan projektijuuri sys.pathissa.
+# ---- Peruspolut
+ROOT = Path(__file__).resolve().parent.parent
+PKG_DIR = ROOT / "app"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-# Miksi: jos kansiot eivät ole paketteja, importit kaatuvat riippumatta sys.pathista.
-# Luo tyhjä __init__.py jos puuttuu (turvallista myös olemassaolevalle tiedostolle).
-for pkg in [PKG_DIR]:
-    init_py = pkg / "__init__.py"
-    if not init_py.exists():
-        try:
-            init_py.write_text("# package marker\n", encoding="utf-8")
-        except Exception:
-            # Lukuoikeudet Cloudissa voivat estää kirjoituksen; jatketaan silti diagnostiikalla.
-            pass
-
-# Invalidoi importtikäyttövälimuisti siltä varalta, että rakenteet juuri kirjoitettiin.
 importlib.invalidate_caches()
 
-# --- Yksittäiset importit diagnostiikalla -------------------------------------
-def _fail_hard(context: str, err: BaseException) -> None:
-    st.error(f"ImportError {context}: {type(err).__name__}: {err}")
-    # Näytä hyödylliset tiedot debugiin ilman arkaluontoista dataa
-    st.code(
-        "Debug info:\n"
-        f"ROOT={ROOT}\n"
-        f"PKG_DIR exists={PKG_DIR.exists()} files={', '.join(sorted(p.name for p in PKG_DIR.glob('*')))}\n"
-        f"sys.path[0:3]={sys.path[:3]}\n"
-        f"Traceback:\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}"
-    )
-    st.stop()
+# ---- Robust: tuo bootstrap-funktio usealla polulla, muuten no-op
+def _import_bootstrap():
+    candidates = [
+        "app.ui",                 # jos __init__.py exporttaa
+        "app.ui.sidebar",         # tyypillinen sijainti
+        "app.ui.bootstrap",       # vaihtoehtoinen
+        "app.ui.layout",          # vaihtoehtoinen
+    ]
+    for mod in candidates:
+        try:
+            m = importlib.import_module(mod)
+            fn = getattr(m, "bootstrap_sidebar_auto_collapse", None)
+            if callable(fn):
+                return fn
+        except Exception:
+            continue
+    # Fallback: no-op, mutta kerro deville
+    def _noop():
+        st.info(
+            "UI bootstrap skipped: `bootstrap_sidebar_auto_collapse` ei löytynyt "
+            "(tarkista app/ui/__init__.py export tai moduulin nimi)."
+        )
+    return _noop
 
 try:
-    from app.ui import bootstrap_sidebar_auto_collapse
+    bootstrap_sidebar_auto_collapse = _import_bootstrap()
 except Exception as e:
-    _fail_hard("while importing app.ui.bootstrap_sidebar_auto_collapse", e)
+    st.error(f"UI bootstrap import failed: {e}")
+    st.code(''.join(traceback.format_exception(type(e), e, e.__traceback__)))
+    st.stop()
 
 st.set_page_config(page_title="ScoutLens", layout="wide", initial_sidebar_state="expanded")
 bootstrap_sidebar_auto_collapse()
 
-# Sivukohtaiset importit – tee nämä erikseen, jotta näemme mikä kaatuu
-try:
-    from app.reports_page import show_reports_page
-except Exception as e:
-    _fail_hard("while importing app.reports_page.show_reports_page", e)
+# ---- Sivujen importit diagnoosilla
+def _safe_import(what: str, mod: str, attr: str):
+    try:
+        m = importlib.import_module(mod)
+        v = getattr(m, attr)
+        return v
+    except Exception as e:
+        st.error(f"ImportError while importing {what} from {mod}.{attr}: {e}")
+        st.code(
+            "Debug info:\n"
+            f"ROOT={ROOT}\n"
+            f"PKG_DIR exists={PKG_DIR.exists()} files={', '.join(sorted(p.name for p in PKG_DIR.glob('*')))}\n"
+            f"sys.path[0:3]={sys.path[:3]}\n"
+            f"Traceback:\n{''.join(traceback.format_exception(type(e), e, e.__traceback__))}"
+        )
+        st.stop()
 
-try:
-    from app.inspect_player import show_inspect_player
-except Exception as e:
-    _fail_hard("while importing app.inspect_player.show_inspect_player", e)
-
-try:
-    from app.shortlists_page import show_shortlists_page
-except Exception as e:
-    _fail_hard("while importing app.shortlists_page.show_shortlists_page", e)
-
-try:
-    from app.export_page import show_export_page
-except Exception as e:
-    _fail_hard("while importing app.export_page.show_export_page", e)
-
-try:
-    from app.login import login
-except Exception as e:
-    _fail_hard("while importing app.login.login", e)
+show_reports_page   = _safe_import("reports page",   "app.reports_page",   "show_reports_page")
+show_inspect_player = _safe_import("inspect player", "app.inspect_player", "show_inspect_player")
+show_shortlists_page= _safe_import("shortlists",     "app.shortlists_page","show_shortlists_page")
+show_export_page    = _safe_import("export",         "app.export_page",    "show_export_page")
+login               = _safe_import("login",          "app.login",          "login")
 
 APP_TITLE   = "ScoutLens"
 APP_TAGLINE = "LATAM scouting toolkit"
 APP_VERSION = "0.9.1"
 
-# --------- Global CSS injection ----------
+# --------- CSS
 def inject_css():
     styles_dir = ROOT / "app" / "styles"
     parts = []
@@ -90,21 +85,13 @@ def inject_css():
     if parts:
         st.markdown(f"<style>{'\n'.join(parts)}</style>", unsafe_allow_html=True)
 
-# --------- Navigation setup ----------
+# --------- Nav
 NAV_KEYS = ["Reports", "Inspect Player", "Shortlists", "Export"]
 NAV_LABELS = {
     "Reports": "📝 Reports",
     "Inspect Player": "🔍 Inspect Player",
     "Shortlists": "⭐ Shortlists",
     "Export": "⬇️ Export",
-}
-LABEL_LIST = [NAV_LABELS[k] for k in NAV_KEYS]
-LABEL_TO_KEY = {v: k for k, v in NAV_LABELS.items() if k in NAV_KEYS}
-PAGE_FUNCS = {
-    "Reports": show_reports_page,
-    "Inspect Player": show_inspect_player,
-    "Shortlists": show_shortlists_page,
-    "Export": show_export_page,
 }
 LEGACY_REMAP = {
     "home": "Reports",
@@ -113,10 +100,15 @@ LEGACY_REMAP = {
     "shortlists": "Shortlists",
     "player_editor": "Shortlists",
 }
+PAGE_FUNCS = {
+    "Reports": show_reports_page,
+    "Inspect Player": show_inspect_player,
+    "Shortlists": show_shortlists_page,
+    "Export": show_export_page,
+}
 
 def _sync_query(page: str) -> None:
     try:
-        # Aseta koko mapping kerralla (vähentää versioriippuvuutta)
         st.query_params = {"p": page}
     except Exception:
         pass
@@ -125,27 +117,21 @@ def main() -> None:
     inject_css()
     login()
 
-    # Init from URL once
+    # URL → state init
     if "nav_page" not in st.session_state:
         p = st.query_params.get("p", None)
         p = LEGACY_REMAP.get(p, p)
         st.session_state["nav_page"] = p if p in NAV_KEYS else NAV_KEYS[0]
         _sync_query(st.session_state["nav_page"])
 
-    current_page = st.session_state.get("nav_page", NAV_KEYS[0])
-    current_page = LEGACY_REMAP.get(current_page, current_page)
-    if current_page not in NAV_KEYS:
-        current_page = NAV_KEYS[0]
-        st.session_state["nav_page"] = current_page
+    # Clamp
+    current = st.session_state.get("nav_page", NAV_KEYS[0])
+    current = LEGACY_REMAP.get(current, current)
+    if current not in NAV_KEYS:
+        current = NAV_KEYS[0]
+        st.session_state["nav_page"] = current
 
-    if "_prev_nav" not in st.session_state:
-        st.session_state["_prev_nav"] = current_page
-
-    desired_label = NAV_LABELS.get(current_page, NAV_LABELS[NAV_KEYS[0]])
-    if st.session_state.get("nav_choice") != desired_label:
-        st.session_state["nav_choice"] = desired_label
-
-    # Sidebar
+    # Sidebar: pidä state avaimena page-key; renderöi labelit format_funcilla
     with st.sidebar:
         st.markdown("<div class='scout-brand'>⚽ ScoutLens</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='scout-sub'>{APP_TAGLINE}</div>", unsafe_allow_html=True)
@@ -153,8 +139,10 @@ def main() -> None:
 
         selection = st.radio(
             "Navigate",
-            options=LABEL_LIST,
-            key="nav_choice",
+            options=NAV_KEYS,
+            index=NAV_KEYS.index(current),
+            format_func=lambda k: NAV_LABELS.get(k, k),
+            key="nav_choice_keyed",
             label_visibility="collapsed",
         )
 
@@ -163,17 +151,14 @@ def main() -> None:
             unsafe_allow_html=True
         )
 
-    page = LABEL_TO_KEY.get(selection, NAV_KEYS[0])
-    prev = st.session_state.get("_prev_nav")
-    if prev != page:
-        st.session_state["_prev_nav"] = page
+    if st.session_state.get("_prev_nav") != selection:
+        st.session_state["_prev_nav"] = selection
         st.session_state["_collapse_sidebar"] = True
-        st.session_state["nav_page"] = page
-        _sync_query(page)
+        st.session_state["nav_page"] = selection
+        _sync_query(selection)
         st.stop()
 
-    current_page = st.session_state.get("nav_page", NAV_KEYS[0])
-    PAGE_FUNCS.get(current_page, lambda: st.error("Page not found."))()
+    PAGE_FUNCS.get(selection, lambda: st.error("Page not found."))()
 
 if __name__ == "__main__":
     main()
