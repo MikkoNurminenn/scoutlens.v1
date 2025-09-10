@@ -9,8 +9,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Tuple
 
 import streamlit as st
-
+from app.ui import bootstrap_sidebar_auto_collapse
 from app.ui.login_bg import set_login_background
+
+bootstrap_sidebar_auto_collapse()
 
 
 # ============================

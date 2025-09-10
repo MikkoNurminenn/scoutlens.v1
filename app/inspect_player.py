@@ -5,8 +5,12 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
+from app.ui import bootstrap_sidebar_auto_collapse
 
 from app.supabase_client import get_client
+
+
+bootstrap_sidebar_auto_collapse()
 
 
 def show_inspect_player() -> None:

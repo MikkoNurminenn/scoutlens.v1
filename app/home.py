@@ -15,6 +15,7 @@ from postgrest.exceptions import APIError
 from app.supabase_client import get_client
 from app.time_utils import to_tz
 from app.db_tables import PLAYERS, SCOUT_REPORTS, NOTES, MATCHES
+from app.ui import bootstrap_sidebar_auto_collapse
 
 
 # ---------------- Utilities ----------------
@@ -38,6 +39,9 @@ def _get_app_tz() -> ZoneInfo:
 
 
 APP_TZ = _get_app_tz()
+
+
+bootstrap_sidebar_auto_collapse()
 
 
 def _ensure_aware(dt: datetime | None, default_tz: ZoneInfo) -> datetime | None:
