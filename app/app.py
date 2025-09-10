@@ -7,6 +7,9 @@ from types import ModuleType
 import traceback
 import streamlit as st
 
+from app.perf import track, render_perf
+from app.ui.nav import go
+
 # ---- Peruspolut
 ROOT = Path(__file__).resolve().parent.parent
 PKG_DIR = ROOT / "app"
@@ -98,43 +101,30 @@ PAGE_FUNCS = {
     "Export": show_export_page,
 }
 
-def _sync_query(page: str) -> None:
-    try:
-        st.query_params = {"p": page}
-    except Exception:
-        pass
-
 def main() -> None:
     inject_css()
     login()
 
-    # URL → state init
-    if "nav_page" not in st.session_state:
+    if "current_page" not in st.session_state:
         p = st.query_params.get("p", None)
         p = LEGACY_REMAP.get(p, p)
-        st.session_state["nav_page"] = p if p in NAV_KEYS else NAV_KEYS[0]
-        _sync_query(st.session_state["nav_page"])
+        st.session_state["current_page"] = p if p in NAV_KEYS else NAV_KEYS[0]
 
-    # Clamp
-    current = st.session_state.get("nav_page", NAV_KEYS[0])
-    current = LEGACY_REMAP.get(current, current)
-    if current not in NAV_KEYS:
-        current = NAV_KEYS[0]
-        st.session_state["nav_page"] = current
+    current = st.session_state.get("current_page", NAV_KEYS[0])
 
-    # Sidebar: pidä state avaimena page-key; renderöi labelit format_funcilla
     with st.sidebar:
         st.markdown("<div class='scout-brand'>⚽ ScoutLens</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='scout-sub'>{APP_TAGLINE}</div>", unsafe_allow_html=True)
         st.markdown("<div class='nav-sep'>Navigation</div>", unsafe_allow_html=True)
 
-        selection = st.radio(
+        st.radio(
             "Navigate",
             options=NAV_KEYS,
             index=NAV_KEYS.index(current),
             format_func=lambda k: NAV_LABELS.get(k, k),
-            key="nav_choice_keyed",
+            key="_nav_radio",
             label_visibility="collapsed",
+            on_change=lambda: go(st.session_state["_nav_radio"]),
         )
 
         st.markdown(
@@ -142,14 +132,10 @@ def main() -> None:
             unsafe_allow_html=True
         )
 
-    if st.session_state.get("_prev_nav") != selection:
-        st.session_state["_prev_nav"] = selection
-        st.session_state["_collapse_sidebar"] = True
-        st.session_state["nav_page"] = selection
-        _sync_query(selection)
-        st.stop()
-
-    PAGE_FUNCS.get(selection, lambda: st.error("Page not found."))()
+    page_func = PAGE_FUNCS.get(current, lambda: st.error("Page not found."))
+    with track(f"page:{current}"):
+        page_func()
+    render_perf()
 
 if __name__ == "__main__":
     main()

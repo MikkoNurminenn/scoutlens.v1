@@ -14,6 +14,7 @@ from .ui import bootstrap_sidebar_auto_collapse
 
 # --- Supabase & data helpers ---
 from app.supabase_client import get_client
+from app.ui.nav import go
 from app.data_utils import (
     load_master, save_master,
     load_seasonal_stats, save_seasonal_stats,
@@ -656,9 +657,12 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 st.error("Could not locate row to update.")
 
         if st.session_state.get("pe_last_saved_pid") == pid_str:
-            if st.button("Create match report for this player", key=f"{pid_str}_nav_report"):
-                st.session_state["nav_page"] = "Scout Match Report"
-                st.rerun()
+            st.button(
+                "Create match report for this player",
+                key=f"{pid_str}_nav_report",
+                on_click=go,
+                args=("Reports",),
+            )
 
         st.markdown("---")
         st.markdown("### 📄 Save THIS player to storage")
