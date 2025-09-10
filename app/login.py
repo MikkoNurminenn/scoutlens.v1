@@ -161,6 +161,7 @@ def login(
 
     # Background & base styles
     set_login_background("login_bg.png", opacity=background_opacity)
+    st.markdown('<div class="sl-hero"></div>', unsafe_allow_html=True)
     st.markdown(
         """
         <style>
