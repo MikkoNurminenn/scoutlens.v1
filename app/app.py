@@ -13,12 +13,13 @@ from pathlib import Path
 import sys
 import streamlit as st
 
-# Ensure package imports work when running as `python app/app.py`
+# Ensure package imports work when running from source
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from .ui import bootstrap_sidebar_auto_collapse
+# Use absolute import so Streamlit executes the file cleanly
+from app.ui import bootstrap_sidebar_auto_collapse
 
 st.set_page_config(
     page_title="ScoutLens",
