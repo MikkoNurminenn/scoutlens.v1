@@ -1,28 +1,85 @@
+/* File: styles/sidebar.css */
+
 /* Sidebar navigation */
 section[data-testid="stSidebar"] {
-  background: linear-gradient(180deg,#0b0f1a,#0f172a);
+  background: linear-gradient(180deg, var(--bg-page), var(--bg-card));
   color: var(--fg-strong);
-  box-shadow: inset -1px 0 0 rgba(255,255,255,0.05);
+  box-shadow: inset -1px 0 0 var(--divider);
 }
-section[data-testid="stSidebar"] .block-container { padding:var(--space-5) var(--space-4); }
+
+section[data-testid="stSidebar"] .block-container {
+  padding: var(--space-5) var(--space-4);
+}
 
 section[data-testid="stSidebar"] [role="radiogroup"] > label {
-  border:1px solid var(--divider);
-  border-radius:var(--radius-md);
-  padding:var(--space-3);
-  background:transparent;
-  transition:background .2s ease, transform .2s ease;
-  position:relative;
-  display:flex; align-items:center; gap:var(--space-2);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: transparent;
+  transition: background .2s ease, transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--fg-strong);
 }
+
+/* hover: lämmin amber‑wash + kevyt liike */
 section[data-testid="stSidebar"] [role="radiogroup"] > label:hover {
-  background:color-mix(in srgb,var(--accent-1) 8%, transparent);
-  transform:translateX(2px);
+  background: color-mix(in srgb, var(--accent-1) 10%, transparent);
+  transform: translateX(2px);
 }
+
+/* checked: enemmän amberia + lämmin reuna */
 section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) {
-  background:color-mix(in srgb,var(--accent-1) 15%, transparent);
+  background: color-mix(in srgb, var(--accent-1) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent-1) 45%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-1) 50%, transparent),
+              inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 40%, transparent);
 }
+
 section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked)::before {
-  content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
-  background:linear-gradient(var(--accent-1),var(--accent-2));
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, var(--accent-1), var(--accent-2));
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+}
+
+/* Näppäimistö: selkeä mutta lämmin fokusrengas */
+section[data-testid="stSidebar"] [role="radiogroup"] > label:focus-within {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fg-strong) 25%, transparent),
+              0 0 0 4px color-mix(in srgb, var(--accent-1) 45%, transparent);
+}
+
+/* Linkit sivupalkissa noudattavat teeman kontrastia */
+section[data-testid="stSidebar"] a {
+  color: var(--fg-strong);
+  text-decoration: none;
+}
+section[data-testid="stSidebar"] a:hover {
+  color: color-mix(in srgb, var(--fg-strong) 85%, var(--accent-1) 15%);
+}
+
+/* Liikettä vähentäville käyttäjille: poista siirtymät/siirrot */
+@media (prefers-reduced-motion: reduce) {
+  section[data-testid="stSidebar"] [role="radiogroup"] > label {
+    transition: background .2s ease;
+    transform: none;
+  }
+}
+
+/* Fallback, jos color-mix ei ole tuettu */
+@supports not (color: color-mix(in srgb, #000 0%, #000 0%)) {
+  /* #DF941B = var(--accent-1) */
+  section[data-testid="stSidebar"] [role="radiogroup"] > label:hover {
+    background: rgba(223, 148, 27, 0.10);
+  }
+  section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) {
+    background: rgba(223, 148, 27, 0.18);
+    border-color: rgba(223, 148, 27, 0.45);
+    box-shadow: 0 0 0 1px rgba(223, 148, 27, 0.5), inset 0 0 0 1px rgba(168, 102, 16, 0.4); /* #A86610 = var(--accent-2) */
+  }
 }
