@@ -1,4 +1,4 @@
-"""Inspect Player page for viewing player profile and linked reports (0–5 rating)."""
+"""Inspect Player page aligned with Reports schema (attributes JSON, 0–5)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from postgrest.exceptions import APIError
 
 from app.ui import bootstrap_sidebar_auto_collapse
 from app.supabase_client import get_client
-
 
 bootstrap_sidebar_auto_collapse()
 
@@ -26,25 +25,34 @@ def _calc_age(dob_str: str | None) -> str:
     return f"{years} yrs"
 
 
+def _avg_0_5(*vals) -> float | None:
+    nums = [float(v) for v in vals if v is not None and pd.notna(v)]
+    if not nums:
+        return None
+    # clip to 1–5 just in case, then average and clip to 0–5
+    nums = [min(5.0, max(1.0, n)) for n in nums]
+    return round(min(5.0, max(0.0, sum(nums) / len(nums))), 1)
+
+
 def show_inspect_player() -> None:
-    """Render the Inspect Player page (clean columns, rating 0–5)."""
+    """Render the Inspect Player page (reads reports.attributes)."""
     st.title("🔍 Inspect Player")
     sb = get_client()
 
-    # --- Players dropdown (only essential fields) ---
+    # --- Players dropdown (essential fields only) ---
     try:
         players = (
             sb.table("players")
             .select(
                 "id,name,position,current_club,nationality,date_of_birth,"
-                "team_name,preferred_foot,club_number,scout_rating,transfermarkt_url"
+                "preferred_foot,transfermarkt_url"
             )
             .order("name")
             .execute()
             .data
             or []
         )
-    except APIError as e:  # pragma: no cover - UI error handling
+    except APIError as e:
         st.error(f"Failed to load players: {e}")
         return
 
@@ -52,10 +60,9 @@ def show_inspect_player() -> None:
         st.info("No players found. Create a player from Reports or Players first.")
         return
 
-    # Map id -> label and keep stable order
     ids = [p["id"] for p in players]
     labels = {
-        p["id"]: f"{p['name']} ({p.get('current_club') or p.get('team_name') or '—'})"
+        p["id"]: f"{p['name']} ({p.get('current_club') or '—'})"
         for p in players
     }
     default_id = st.session_state.get("inspect__player_id") or ids[0]
@@ -73,11 +80,11 @@ def show_inspect_player() -> None:
     st.session_state["inspect__player_id"] = player_id
     player = next((p for p in players if p["id"] == player_id), players[0])
 
-    # --- Player header (compact & useful) ---
+    # --- Player header (compact)
     st.subheader(player["name"])
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Position", player.get("position") or "—")
-    c2.metric("Club", player.get("current_club") or player.get("team_name") or "—")
+    c2.metric("Club", player.get("current_club") or "—")
     c3.metric("Nationality", player.get("nationality") or "—")
     c4.metric("Age", _calc_age(player.get("date_of_birth")))
 
@@ -85,17 +92,15 @@ def show_inspect_player() -> None:
         tm = player.get("transfermarkt_url")
         st.write(
             {
-                "Preferred foot": player.get("preferred_foot"),
-                "Number": player.get("club_number"),
-                "Scout rating": player.get("scout_rating"),
-                "Date of birth": player.get("date_of_birth"),
+                "Preferred foot": player.get("preferred_foot") or "—",
+                "Date of birth": player.get("date_of_birth") or "—",
                 "Transfermarkt": tm if tm else "—",
             }
         )
         if tm:
             st.markdown(f"[Open on Transfermarkt]({tm})")
 
-    # --- Lightweight filters for reports ---
+    # --- Filters for reports ---
     st.markdown("### Match Reports")
     fc1, fc2 = st.columns([2, 1])
     comp_filter = fc1.text_input("Filter by competition (contains)", "")
@@ -105,7 +110,7 @@ def show_inspect_player() -> None:
         help="Optional: filter reports between two dates",
     )
 
-    # --- Reports query (attributes-based) ---
+    # --- Reports query (reads attributes JSON) ---
     try:
         reports = (
             sb.table("reports")
@@ -117,7 +122,7 @@ def show_inspect_player() -> None:
             .data
             or []
         )
-    except APIError as e:  # pragma: no cover - UI error handling
+    except APIError as e:
         st.error(f"Failed to load reports: {e}")
         return
 
@@ -125,99 +130,73 @@ def show_inspect_player() -> None:
         st.info("No reports yet for this player.")
         return
 
-    # --- Data shaping & filters ---
-    df = pd.DataFrame(reports)
-    if "report_date" in df:
-        df["report_date"] = pd.to_datetime(df["report_date"], errors="coerce")
+    # --- Normalize / flatten attributes ---
+    rows = []
+    for r in reports:
+        a = r.get("attributes") or {}
+        if not isinstance(a, dict):
+            a = {}
 
-    # expand attributes jsonb
-    attrs = df.pop("attributes", pd.Series(dtype="object"))
-    if not attrs.empty:
-        attrs = attrs.apply(lambda a: a or {})
-        for key in [
-            "position",
-            "foot",
-            "technique",
-            "game_intelligence",
-            "mental",
-            "athletic",
-            "comments",
-        ]:
-            df[key] = attrs.apply(lambda x, k=key: x.get(k))
+        tech = pd.to_numeric(a.get("technique"), errors="coerce")
+        gi   = pd.to_numeric(a.get("game_intelligence"), errors="coerce")
+        ment = pd.to_numeric(a.get("mental"), errors="coerce")
+        ath  = pd.to_numeric(a.get("athletic"), errors="coerce")
+        avg  = _avg_0_5(tech, gi, ment, ath)
 
-    # numeric conversions
-    for col in ["technique", "game_intelligence", "mental", "athletic"]:
-        if col in df:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    if {"technique", "game_intelligence", "mental", "athletic"}.issubset(df.columns):
-        df["rating"] = df[["technique", "game_intelligence", "mental", "athletic"]].mean(
-            axis=1, skipna=True
+        comment = (a.get("comments") or "").strip()
+        if len(comment) > 120:
+            comment = textwrap.shorten(comment, width=120, placeholder="…")
+
+        rows.append(
+            {
+                "Date": r.get("report_date"),
+                "Competition": r.get("competition") or "",
+                "Opponent": r.get("opponent") or "",
+                "Location": r.get("location") or "",
+                "Pos": a.get("position"),
+                "Foot": a.get("foot"),
+                "Tech": float(tech) if pd.notna(tech) else None,
+                "GI": float(gi) if pd.notna(gi) else None,
+                "MENT": float(ment) if pd.notna(ment) else None,
+                "ATH": float(ath) if pd.notna(ath) else None,
+                "Avg (0–5)": avg,
+                "Comments": comment,
+            }
         )
-        df["rating"] = df["rating"].round(1)
 
-    # text filter
+    df = pd.DataFrame(rows)
+
+    # Types & filters
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+
     if comp_filter:
-        df = df[df["competition"].fillna("").str.contains(comp_filter, case=False)]
+        df = df[df["Competition"].fillna("").str.contains(comp_filter, case=False)]
 
-    # date range filter
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start, end = date_range
         if start and end:
             df = df[
-                (df["report_date"] >= pd.to_datetime(start))
-                & (df["report_date"] <= pd.to_datetime(end))
+                (df["Date"] >= pd.to_datetime(start)) &
+                (df["Date"] <= pd.to_datetime(end))
             ]
 
     if df.empty:
         st.warning("No reports match the current filters.")
         return
 
-    # keep only clean columns and friendly headers
-    cols_order = [
-        "report_date",
-        "competition",
-        "opponent",
-        "position",
-        "foot",
-        "technique",
-        "game_intelligence",
-        "mental",
-        "athletic",
-        "rating",
-        "comments",
-    ]
-    df = df[[c for c in cols_order if c in df.columns]].copy()
+    df = df.sort_values("Date", ascending=False)
 
-    if "comments" in df:
-        df["comments"] = df["comments"].fillna("").apply(
-            lambda s: textwrap.shorten(str(s), width=120, placeholder="…")
-        )
-
-    ratings = pd.to_numeric(df.get("rating", pd.Series(dtype=float)), errors="coerce").dropna()
-    avg_rating = round(float(ratings.mean()), 2) if not ratings.empty else None
-
-    df = df.rename(
-        columns={
-            "report_date": "Date",
-            "competition": "Competition",
-            "opponent": "Opponent",
-            "position": "Pos",
-            "foot": "Foot",
-            "technique": "Technique",
-            "game_intelligence": "Game Intelligence",
-            "mental": "Mental",
-            "athletic": "Athletic",
-            "rating": "Rating (0–5)",
-            "comments": "Comments",
-        }
-    ).sort_values("Date", ascending=False)
+    # Quick stats
+    rating_series = pd.to_numeric(df["Avg (0–5)"], errors="coerce").dropna()
+    avg_rating = round(float(rating_series.mean()), 2) if not rating_series.empty else None
 
     stats = f"Reports: **{len(df)}**"
     if avg_rating is not None:
-        stats += f" | Avg rating: **{avg_rating} / 5**"
+        stats += f" | Avg (Tech/GI/MENT/ATH): **{avg_rating} / 5**"
     st.caption(stats)
 
-    # --- Table & exports ---
+    # Table & exports
     st.dataframe(df, use_container_width=True)
 
     csv_bytes = df.to_csv(index=False).encode("utf-8")
