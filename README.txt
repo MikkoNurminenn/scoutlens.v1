@@ -10,6 +10,16 @@ Make sure Python and Streamlit are installed.
 If needed, install Streamlit with:
     pip install streamlit
 
+## Running
+
+From the project root run:
+
+    streamlit run app/app.py
+
+You can verify the package imports with:
+
+    python -c "import app, app.theme; print('ok')"
+
 ### Supabase Sync
 
 Configure a `[supabase]` block in your Streamlit secrets to enable optional
