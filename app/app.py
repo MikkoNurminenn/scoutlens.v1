@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.ui import bootstrap_sidebar_auto_collapse
+from .ui import bootstrap_sidebar_auto_collapse
 
 st.set_page_config(
     page_title="ScoutLens",
