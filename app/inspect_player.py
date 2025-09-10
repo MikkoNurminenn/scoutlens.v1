@@ -29,7 +29,6 @@ def _avg_0_5(*vals) -> float | None:
     nums = [float(v) for v in vals if v is not None and pd.notna(v)]
     if not nums:
         return None
-    # clip to 1–5 just in case, then average and clip to 0–5
     nums = [min(5.0, max(1.0, n)) for n in nums]
     return round(min(5.0, max(0.0, sum(nums) / len(nums))), 1)
 
@@ -45,7 +44,7 @@ def show_inspect_player() -> None:
             sb.table("players")
             .select(
                 "id,name,position,current_club,nationality,date_of_birth,"
-                "team_name,preferred_foot,club_number,scout_rating,transfermarkt_url"
+                "team_name,preferred_foot,transfermarkt_url"
             )
             .order("name")
             .execute()
@@ -92,10 +91,8 @@ def show_inspect_player() -> None:
         tm = player.get("transfermarkt_url")
         st.write(
             {
-                "Preferred foot": player.get("preferred_foot"),
-                "Number": player.get("club_number"),
-                "Scout rating": player.get("scout_rating"),
-                "Date of birth": player.get("date_of_birth"),
+                "Preferred foot": player.get("preferred_foot") or "—",
+                "Date of birth": player.get("date_of_birth") or "—",
                 "Transfermarkt": tm if tm else "—",
             }
         )
@@ -112,7 +109,7 @@ def show_inspect_player() -> None:
         help="Optional: filter reports between two dates",
     )
 
-    # --- Reports query (NOTE: reads attributes JSON instead of old flat cols) ---
+    # --- Reports query (reads attributes JSON) ---
     try:
         reports = (
             sb.table("reports")
@@ -132,17 +129,20 @@ def show_inspect_player() -> None:
         st.info("No reports yet for this player.")
         return
 
-    # --- Normalize / flatten attributes ---
+    # --- Build rows to MATCH Reports page: Date, Player, Club, Opponent, Competition, Pos, Foot, Tech, GI, MENT, ATH, Comments
+    player_name = player.get("name") or ""
+    player_club = player.get("current_club") or player.get("team_name") or ""
+
     rows = []
     for r in reports:
         a = r.get("attributes") or {}
         if not isinstance(a, dict):
             a = {}
+
         tech = pd.to_numeric(a.get("technique"), errors="coerce")
-        gi = pd.to_numeric(a.get("game_intelligence"), errors="coerce")
+        gi   = pd.to_numeric(a.get("game_intelligence"), errors="coerce")
         ment = pd.to_numeric(a.get("mental"), errors="coerce")
-        ath = pd.to_numeric(a.get("athletic"), errors="coerce")
-        avg = _avg_0_5(tech, gi, ment, ath)
+        ath  = pd.to_numeric(a.get("athletic"), errors="coerce")
 
         comment = (a.get("comments") or "").strip()
         if len(comment) > 120:
@@ -151,15 +151,16 @@ def show_inspect_player() -> None:
         rows.append(
             {
                 "Date": r.get("report_date"),
-                "Competition": r.get("competition") or "",
+                "Player": player_name,
+                "Club": player_club,
                 "Opponent": r.get("opponent") or "",
+                "Competition": r.get("competition") or "",
                 "Pos": a.get("position"),
                 "Foot": a.get("foot"),
                 "Tech": float(tech) if pd.notna(tech) else None,
                 "GI": float(gi) if pd.notna(gi) else None,
                 "MENT": float(ment) if pd.notna(ment) else None,
                 "ATH": float(ath) if pd.notna(ath) else None,
-                "Avg (0–5)": avg,
                 "Comments": comment,
             }
         )
@@ -170,31 +171,37 @@ def show_inspect_player() -> None:
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 
+    # pyöritellään numerot yhteen desimaaliin (näyttö siisti, mutta sama sisältö)
+    for col in ["Tech", "GI", "MENT", "ATH"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").round(1)
+
     if comp_filter:
         df = df[df["Competition"].fillna("").str.contains(comp_filter, case=False)]
 
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start, end = date_range
         if start and end:
-            df = df[(df["Date"] >= pd.to_datetime(start)) & (df["Date"] <= pd.to_datetime(end))]
+            df = df[
+                (df["Date"] >= pd.to_datetime(start)) &
+                (df["Date"] <= pd.to_datetime(end))
+            ]
 
     if df.empty:
         st.warning("No reports match the current filters.")
         return
 
-    df = df.sort_values("Date", ascending=False)
+    # Järjestys kuten Reports-sivulla
+    cols_order = [
+        "Date", "Player", "Club", "Opponent", "Competition",
+        "Pos", "Foot", "Tech", "GI", "MENT", "ATH", "Comments",
+    ]
+    df = df[[c for c in cols_order if c in df.columns]].sort_values("Date", ascending=False)
 
-    # Quick stats
-    rating_series = pd.to_numeric(df["Avg (0–5)"], errors="coerce").dropna()
-    avg_rating = round(float(rating_series.mean()), 2) if not rating_series.empty else None
-    stats = f"Reports: **{len(df)}**"
-    if avg_rating is not None:
-        stats += f" | Avg (Tech/GI/MENT/ATH): **{avg_rating} / 5**"
-    st.caption(stats)
-
-    # Table & exports
+    st.caption(f"Reports: **{len(df)}**")
     st.dataframe(df, use_container_width=True)
 
+    # Exportit
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     json_bytes = df.to_json(orient="records", date_format="iso").encode("utf-8")
     st.download_button(
