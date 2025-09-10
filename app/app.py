@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import streamlit as st
+from app.theme import use_theme
 
 # Ensure package imports work when running as `python app/app.py`
 ROOT = Path(__file__).resolve().parent.parent
@@ -50,6 +51,8 @@ def inject_css():
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 inject_css()
+
+use_theme()
 
 login()
 
