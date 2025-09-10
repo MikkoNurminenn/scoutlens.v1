@@ -1,1 +1,17 @@
 **/.streamlit/secrets.toml
+
+# OS artifacts
+.DS_Store
+*/.DS_Store
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Local data and generated files
+data/
+players.csv
+dataa fm.rtf
