@@ -14,7 +14,7 @@ If needed, install Streamlit with:
 
 From the project root run:
 
-    streamlit run app/app.py
+    streamlit run app/main.py
 
 You can verify the package imports with:
 
