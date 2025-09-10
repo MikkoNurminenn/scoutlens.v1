@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 import traceback
-from .ui import bootstrap_sidebar_auto_collapse
+from app.ui import bootstrap_sidebar_auto_collapse
 
 # --- Supabase & data helpers ---
 from app.supabase_client import get_client
