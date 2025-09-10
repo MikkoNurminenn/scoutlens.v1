@@ -74,10 +74,26 @@ def set_login_background(
         opacity: {opacity};
         z-index: -1;
       }}
+      [data-testid="stAppViewContainer"] {{
+        background-color: transparent;
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+      }}
+      [data-testid="stHeader"] {{
+        background: rgba(0,0,0,0);
+      }}
+      [data-testid="stToolbar"] {{
+        right: 2rem;
+      }}
       @supports (-webkit-touch-callout: none) {{
         [data-testid="stAppViewContainer"]::before {{
           background-attachment: scroll;
           position: absolute;
+        }}
+        [data-testid="stAppViewContainer"] {{
+          background-attachment: scroll;
         }}
       }}
       {panel_css}
