@@ -1,4 +1,4 @@
-"""Inspect Player page for viewing player profile and linked reports (clean)."""
+"""Inspect Player page for viewing player profile and linked reports (0–5 rating)."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _calc_age(dob_str: str | None) -> str:
 
 
 def show_inspect_player() -> None:
-    """Render the Inspect Player page (clean columns)."""
+    """Render the Inspect Player page (clean columns, rating 0–5)."""
     st.title("🔍 Inspect Player")
     sb = get_client()
 
@@ -105,7 +105,7 @@ def show_inspect_player() -> None:
         help="Optional: filter reports between two dates",
     )
 
-    # --- Reports query (only essential columns) ---
+    # --- Reports query (essential columns only) ---
     try:
         reports = (
             sb.table("reports")
@@ -135,8 +135,15 @@ def show_inspect_player() -> None:
         df["report_date"] = pd.to_datetime(df["report_date"], errors="coerce")
     if "minutes" in df:
         df["minutes"] = pd.to_numeric(df["minutes"], errors="coerce")
+
+    # --- Normalize rating to 0–5 ---
     if "rating" in df:
         df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
+        # If legacy 0–10 values exist, scale to 0–5
+        if pd.notna(df["rating"]).any() and (df["rating"].max(skipna=True) or 0) > 5:
+            df["rating"] = df["rating"] / 2.0
+        # clip & round
+        df["rating"] = df["rating"].clip(lower=0, upper=5).round(1)
 
     # text filter
     if comp_filter:
@@ -146,7 +153,10 @@ def show_inspect_player() -> None:
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start, end = date_range
         if start and end:
-            df = df[(df["report_date"] >= pd.to_datetime(start)) & (df["report_date"] <= pd.to_datetime(end))]
+            df = df[
+                (df["report_date"] >= pd.to_datetime(start))
+                & (df["report_date"] <= pd.to_datetime(end))
+            ]
 
     if df.empty:
         st.warning("No reports match the current filters.")
@@ -166,9 +176,16 @@ def show_inspect_player() -> None:
 
     # tidy: truncate long notes
     if "notes" in df:
-        df["notes"] = df["notes"].fillna("").apply(lambda s: textwrap.shorten(str(s), width=120, placeholder="…"))
+        df["notes"] = df["notes"].fillna("").apply(
+            lambda s: textwrap.shorten(str(s), width=120, placeholder="…")
+        )
 
-    # rename headers
+    # --- Quick stats (using normalized 0–5 rating) ---
+    total_minutes = int(df["minutes"].fillna(0).sum()) if "minutes" in df else 0
+    ratings = pd.to_numeric(df.get("rating", pd.Series(dtype=float)), errors="coerce").dropna()
+    avg_rating = round(float(ratings.mean()), 2) if not ratings.empty else None
+
+    # rename headers for UI AFTER stats
     df = df.rename(
         columns={
             "report_date": "Date",
@@ -176,19 +193,14 @@ def show_inspect_player() -> None:
             "opponent": "Opponent",
             "position_played": "Pos",
             "minutes": "Min",
-            "rating": "Rating",
+            "rating": "Rating (0–5)",
             "notes": "Notes",
         }
     ).sort_values("Date", ascending=False)
 
-    # --- Quick stats ---
-    total_minutes = int(df["Min"].fillna(0).sum()) if "Min" in df else 0
-    ratings = pd.to_numeric(df.get("Rating", pd.Series(dtype=float)), errors="coerce").dropna()
-    avg_rating = round(float(ratings.mean()), 2) if not ratings.empty else None
-
     stats = f"Reports: **{len(df)}** | Total minutes: **{total_minutes}**"
     if avg_rating is not None:
-        stats += f" | Avg rating: **{avg_rating}**"
+        stats += f" | Avg rating: **{avg_rating} / 5**"
     st.caption(stats)
 
     # --- Table & exports ---
