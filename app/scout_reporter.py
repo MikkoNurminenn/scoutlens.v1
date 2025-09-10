@@ -17,7 +17,7 @@ from app.supabase_client import get_client
 from app.data_utils import list_teams, list_players_by_team  # käyttää Supabasea
 from app.time_utils import to_tz
 from app.data_sanitize import clean_jsonable
-from app.db_tables import MATCHES, SCOUT_REPORTS, SHORTLISTS
+from app.db_tables import MATCHES, REPORTS, SHORTLISTS
 
 
 bootstrap_sidebar_auto_collapse()
@@ -173,7 +173,7 @@ def list_reports(match_id: str | None = None) -> List[Dict[str, Any]]:
     client = get_client()
     if not client:
         return []
-    q = client.table(SCOUT_REPORTS).select("*")
+    q = client.table(REPORTS).select("*")
     if match_id:
         q = q.eq("match_id", match_id)
     try:
@@ -209,7 +209,7 @@ def save_report(records: List[Dict[str, Any]]) -> None:
         return
     payload = clean_jsonable(records)
     try:
-        client.table(SCOUT_REPORTS).upsert(payload, on_conflict="id").execute()
+        client.table(REPORTS).upsert(payload, on_conflict="id").execute()
     except Exception:
         st.error("❌ Save failed")
         st.code("".join(traceback.format_exc()), language="text")
@@ -221,7 +221,7 @@ def delete_reports(ids: List[str]) -> None:
     if not client:
         return
     try:
-        client.table(SCOUT_REPORTS).delete().in_("id", [str(i) for i in ids]).execute()
+        client.table(REPORTS).delete().in_("id", [str(i) for i in ids]).execute()
     except Exception:
         st.error("❌ Delete failed")
         st.code("".join(traceback.format_exc()), language="text")
@@ -231,7 +231,7 @@ def delete_reports(ids: List[str]) -> None:
 def dbg_report_count():
     client = get_client()
     try:
-        n = client.table(SCOUT_REPORTS).select("id", count="exact").execute().count
+        n = client.table(REPORTS).select("id", count="exact").execute().count
         st.caption(f"scout_reports count: {n}")
     except APIError as e:
         _warn_api_error(e, "dbg_report_count")

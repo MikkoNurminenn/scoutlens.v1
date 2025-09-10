@@ -14,7 +14,7 @@ import streamlit as st
 from postgrest.exceptions import APIError
 from app.supabase_client import get_client
 from app.time_utils import to_tz
-from app.db_tables import PLAYERS, SCOUT_REPORTS, NOTES, MATCHES
+from app.db_tables import PLAYERS, REPORTS, NOTES, MATCHES
 from app.ui import bootstrap_sidebar_auto_collapse
 
 
@@ -112,7 +112,7 @@ def _load_players() -> List[Dict[str, Any]]:
 def _load_reports() -> List[Dict[str, Any]]:
     client = get_client()
     try:
-        res = client.table(SCOUT_REPORTS).select("*").execute()
+        res = client.table(REPORTS).select("*").execute()
         return res.data or []
     except APIError as e:
         _postgrest_error_box(e)

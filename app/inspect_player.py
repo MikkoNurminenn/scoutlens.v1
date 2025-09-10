@@ -45,7 +45,7 @@ def show_inspect_player() -> None:
             sb.table("players")
             .select(
                 "id,name,position,current_club,nationality,date_of_birth,"
-                "team_name,preferred_foot,club_number,scout_rating,transfermarkt_url"
+                "preferred_foot,transfermarkt_url"
             )
             .order("name")
             .execute()
@@ -62,7 +62,7 @@ def show_inspect_player() -> None:
 
     ids = [p["id"] for p in players]
     labels = {
-        p["id"]: f"{p['name']} ({p.get('current_club') or p.get('team_name') or '—'})"
+        p["id"]: f"{p['name']} ({p.get('current_club') or '—'})"
         for p in players
     }
     default_id = st.session_state.get("inspect__player_id") or ids[0]
@@ -84,7 +84,7 @@ def show_inspect_player() -> None:
     st.subheader(player["name"])
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Position", player.get("position") or "—")
-    c2.metric("Club", player.get("current_club") or player.get("team_name") or "—")
+    c2.metric("Club", player.get("current_club") or "—")
     c3.metric("Nationality", player.get("nationality") or "—")
     c4.metric("Age", _calc_age(player.get("date_of_birth")))
 
@@ -92,10 +92,8 @@ def show_inspect_player() -> None:
         tm = player.get("transfermarkt_url")
         st.write(
             {
-                "Preferred foot": player.get("preferred_foot"),
-                "Number": player.get("club_number"),
-                "Scout rating": player.get("scout_rating"),
-                "Date of birth": player.get("date_of_birth"),
+                "Preferred foot": player.get("preferred_foot") or "—",
+                "Date of birth": player.get("date_of_birth") or "—",
                 "Transfermarkt": tm if tm else "—",
             }
         )
@@ -112,11 +110,11 @@ def show_inspect_player() -> None:
         help="Optional: filter reports between two dates",
     )
 
-    # --- Reports query (NOTE: reads attributes JSON instead of old flat cols) ---
+    # --- Reports query (reads attributes JSON) ---
     try:
         reports = (
             sb.table("reports")
-            .select("id,report_date,competition,opponent,attributes")
+            .select("id,report_date,competition,opponent,location,attributes")
             .eq("player_id", player_id)
             .order("report_date", desc=True)
             .limit(500)
@@ -138,11 +136,12 @@ def show_inspect_player() -> None:
         a = r.get("attributes") or {}
         if not isinstance(a, dict):
             a = {}
+
         tech = pd.to_numeric(a.get("technique"), errors="coerce")
-        gi = pd.to_numeric(a.get("game_intelligence"), errors="coerce")
+        gi   = pd.to_numeric(a.get("game_intelligence"), errors="coerce")
         ment = pd.to_numeric(a.get("mental"), errors="coerce")
-        ath = pd.to_numeric(a.get("athletic"), errors="coerce")
-        avg = _avg_0_5(tech, gi, ment, ath)
+        ath  = pd.to_numeric(a.get("athletic"), errors="coerce")
+        avg  = _avg_0_5(tech, gi, ment, ath)
 
         comment = (a.get("comments") or "").strip()
         if len(comment) > 120:
@@ -153,6 +152,7 @@ def show_inspect_player() -> None:
                 "Date": r.get("report_date"),
                 "Competition": r.get("competition") or "",
                 "Opponent": r.get("opponent") or "",
+                "Location": r.get("location") or "",
                 "Pos": a.get("position"),
                 "Foot": a.get("foot"),
                 "Tech": float(tech) if pd.notna(tech) else None,
@@ -176,7 +176,10 @@ def show_inspect_player() -> None:
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start, end = date_range
         if start and end:
-            df = df[(df["Date"] >= pd.to_datetime(start)) & (df["Date"] <= pd.to_datetime(end))]
+            df = df[
+                (df["Date"] >= pd.to_datetime(start)) &
+                (df["Date"] <= pd.to_datetime(end))
+            ]
 
     if df.empty:
         st.warning("No reports match the current filters.")
@@ -187,6 +190,7 @@ def show_inspect_player() -> None:
     # Quick stats
     rating_series = pd.to_numeric(df["Avg (0–5)"], errors="coerce").dropna()
     avg_rating = round(float(rating_series.mean()), 2) if not rating_series.empty else None
+
     stats = f"Reports: **{len(df)}**"
     if avg_rating is not None:
         stats += f" | Avg (Tech/GI/MENT/ATH): **{avg_rating} / 5**"
