@@ -1,15 +1,19 @@
+/* File: styles/tokens.css */
 :root {
-  /* Colors */
-  --bg-page: #0b0f1a;
-  --bg-card: #0f172a;
-  --accent-1: #6366f1;
-  --accent-2: #7c3aed;
-  --fg-strong: #e5e7eb;
-  --fg-muted: #9aa3b2;
-  --accent-cyan: #22d3ee;
-  --warning: #f97316;
-  --error: #ef4444;
-  --divider: rgba(255,255,255,0.08);
+  /* Colors – tuned to /mnt/data/login_bg.png (sunset, warm amber + deep brown) */
+  --bg-page: #241700;     /* tummin ruskea tausta -> maksimi kontrasti */
+  --bg-card: #5B2F00;     /* hieman vaaleampi ruskea kortille */
+
+  --accent-1: #DF941B;    /* meripihka (CTA) */
+  --accent-2: #A86610;    /* syvempi meripihka (hover/active) */
+
+  --fg-strong: #FEF4DD;   /* lämmin kerma; teksti/ikonit, hyvä AA dark‑taustaa vasten */
+  --fg-muted: #E0D2BE;    /* vaimennettu beige, toissijainen teksti */
+
+  --accent-cyan: #3EA8B3; /* viileä, desaturoitu teal vastapariksi lämpimälle paletille */
+  --warning: #F59E0B;     /* lämmin varoitus */
+  --error: #DA3C2B;       /* tiilenpunainen virheväri */
+  --divider: rgba(254, 244, 221, 0.12); /* lämmin, kevyt jakaja */
 
   /* Typography */
   --font-sans: 'Inter', sans-serif;
@@ -36,6 +40,11 @@
   --radius-sm: 6px;
 
   /* Shadows */
-  --shadow-card: 0 4px 16px rgba(0,0,0,0.4);
-  --shadow-hover: 0 6px 20px rgba(0,0,0,0.6);
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.6);
+}
+
+/* Optional: gradient helper for hero overlays matching the image */
+:root {
+  --overlay-sunset: linear-gradient(180deg, rgba(20, 12, 0, 0.7) 0%, rgba(20, 12, 0, 0.55) 35%, rgba(20, 12, 0, 0.3) 100%);
 }
