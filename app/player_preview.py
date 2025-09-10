@@ -5,6 +5,9 @@ import re
 
 import pandas as pd
 import streamlit as st
+from postgrest.exceptions import APIError
+
+from app.supabase_client import get_client
 
 def _inject_css_once(key: str, css_html: str):
     sskey = f"__css_injected__{key}"
@@ -18,8 +21,6 @@ from app.app_paths import file_path, DATA_DIR
 
 # ---- tiedostopolut
 PLAYERS_FP = file_path("players.json")
-REPORTS_FP = file_path("scout_reports.json")
-MATCHES_FP = file_path("matches.json")
 TEAMS_FP   = file_path("teams.json")  # fallbackia varten
 
 # ---- perus JSON-apurit
@@ -342,64 +343,88 @@ def show_player_preview():
         st.info("Player ID missing; cannot map reports.")
         return
 
-    reports = _load_json(REPORTS_FP, [])
-    matches = {m.get("id"): m for m in _load_json(MATCHES_FP, [])}
-    my_reports = [r for r in reports if str(r.get("player_id")) == player_id]
-    if not my_reports:
+
+    sb = get_client()
+    try:
+        rows = (
+            sb.table("reports")
+            .select("id,report_date,competition,match:match_id(home_team,away_team,kickoff_at),attributes")
+            .eq("player_id", player_id)
+            .order("report_date", desc=True)
+            .limit(20)
+            .execute()
+            .data
+            or []
+        )
+    except APIError as e:
+        st.error(f"Failed to load reports: {e}")
+        return
+
+    if not rows:
         st.info("No reports for this player yet. Create one in **Scout Match Reporter**.")
         return
 
-    my_reports.sort(key=lambda r: _parse_iso(r.get("created_at")), reverse=True)
-
-    for rep in my_reports:
-        m = matches.get(rep.get("match_id"), {})
+    for rep in rows:
+        m = rep.get("match") or {}
         dt = (m.get("kickoff_at") or "")[:10]
         label = f"{m.get('home_team','?')} vs {m.get('away_team','?')}  ({dt})"
+        attrs = rep.get("attributes") or {}
         with st.expander(label, expanded=False):
-            # badge-metat
             badges = (
-                f"<div class='badges'>"
-                + (f"<span class='badge'>Position: {rep.get('position')}</span>" if rep.get("position") else "")
-                + (f"<span class='badge'>Foot: {rep.get('foot')}</span>" if rep.get("foot") else "")
+                "<div class='badges'>"
+                + (f"<span class='badge'>Position: {attrs.get('position')}</span>" if attrs.get("position") else "")
+                + (f"<span class='badge'>Foot: {attrs.get('foot')}</span>" if attrs.get("foot") else "")
                 + (f"<span class='badge'>Competition: {rep.get('competition')}</span>" if rep.get("competition") else "")
-                + (f"<span class='badge'>Created: {(rep.get('created_at','')[:16]).replace('T',' ')}</span>" if rep.get("created_at") else "")
+                + (f"<span class='badge'>Date: {rep.get('report_date')}</span>" if rep.get("report_date") else "")
                 + "</div>"
             )
             st.markdown(badges, unsafe_allow_html=True)
 
-            if rep.get("general_comment"):
-                st.markdown(f"**General Comment:** {rep.get('general_comment')}")
+            comment = attrs.get("comments")
+            if comment:
+                st.markdown(f"**General Comment:** {comment}")
 
-            df_r = _ratings_to_df(rep.get("ratings"))
+            rating_items = []
+            for lbl, key in [
+                ("Technique", "technique"),
+                ("Game intelligence", "game_intelligence"),
+                ("Mental / GRIT", "mental"),
+                ("Athletic ability", "athletic"),
+            ]:
+                val = attrs.get(key)
+                if val is not None:
+                    rating_items.append({"attribute": lbl, "rating": val, "comment": ""})
+
+            df_r = _ratings_to_df(rating_items)
             if df_r.empty:
                 st.info("No attribute ratings in this report.")
                 continue
 
             df_sorted = df_r.sort_values("rating", ascending=False).reset_index(drop=True)
             avg = df_sorted["rating"].mean()
-            best_row  = df_sorted.iloc[0]
+            best_row = df_sorted.iloc[0]
             worst_row = df_sorted.iloc[-1]
 
-            # KPI-kortit
             k1, k2, k3 = st.columns(3)
             with k1:
-                st.markdown("<div class='kpi'><h4>Average</h4><div class='val'>"
-                            f"{avg:.1f}</div></div>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div class='kpi'><h4>Average</h4><div class='val'>"
+                    f"{avg:.1f}</div></div>",
+                    unsafe_allow_html=True,
+                )
             with k2:
-                st.markdown("<div class='kpi'><h4>Best</h4><div class='val'>"
-                            f"{best_row['attribute']} ({int(best_row['rating'])})</div></div>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div class='kpi'><h4>Best</h4><div class='val'>"
+                    f"{best_row['attribute']} ({int(best_row['rating'])})</div></div>",
+                    unsafe_allow_html=True,
+                )
             with k3:
-                st.markdown("<div class='kpi'><h4>Needs work</h4><div class='val'>"
-                            f"{worst_row['attribute']} ({int(worst_row['rating'])})</div></div>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div class='kpi'><h4>Needs work</h4><div class='val'>"
+                    f"{worst_row['attribute']} ({int(worst_row['rating'])})</div></div>",
+                    unsafe_allow_html=True,
+                )
 
-            # Kompaktit kommentit (vain täytetyt)
-            comments = [(r["attribute"], str(r.get("comment","")).strip()) for _, r in df_sorted.iterrows()]
-            comm_nonempty = [(a,c) for a,c in comments if c]
-            if comm_nonempty:
-                st.markdown("**Notes by area:**")
-                st.write("\n".join([f"- **{a}:** {c}" for a,c in comm_nonempty]))
-
-            # Horisontaalinen bar 1–5
             fig = px.bar(
                 df_sorted,
                 x="rating",
@@ -409,32 +434,16 @@ def show_player_preview():
                 color_continuous_scale="Blues",
                 range_x=[1, 5],
                 title=None,
-                text="rating"
+                text="rating",
             )
             fig.update_layout(
                 coloraxis_showscale=False,
-                margin=dict(l=10,r=10,t=10,b=10),
-                height=320
+                margin=dict(l=10, r=10, t=10, b=10),
+                height=320,
             )
             fig.update_traces(textposition="outside", cliponaxis=False)
             st.plotly_chart(fig, use_container_width=True)
 
-            # Taulukko
-            st.dataframe(
-                df_sorted.rename(columns={"attribute": "Attribute", "rating": "Rating", "comment": "Comment"}),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            # EI expanderia expanderin sisään → checkbox + container
-            show_json = st.checkbox(
-                "Show Ratings JSON",
-                key=f"show_json_{rep.get('id') or rep.get('created_at') or id(rep)}"
-            )
-            if show_json:
-                with st.container(border=True):
-                    json_text = json.dumps(df_r.to_dict(orient="records"), ensure_ascii=False, indent=2)
-                    st.code(json_text, language="json")
 
 # Suora ajo
 if __name__ == "__main__":

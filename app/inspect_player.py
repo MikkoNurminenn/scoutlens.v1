@@ -105,13 +105,11 @@ def show_inspect_player() -> None:
         help="Optional: filter reports between two dates",
     )
 
-    # --- Reports query (essential columns only) ---
+    # --- Reports query (attributes-based) ---
     try:
         reports = (
             sb.table("reports")
-            .select(
-                "id,report_date,competition,opponent,position_played,minutes,rating,notes"
-            )
+            .select("id,report_date,competition,opponent,location,attributes")
             .eq("player_id", player_id)
             .order("report_date", desc=True)
             .limit(500)
@@ -129,21 +127,33 @@ def show_inspect_player() -> None:
 
     # --- Data shaping & filters ---
     df = pd.DataFrame(reports)
-
-    # types
     if "report_date" in df:
         df["report_date"] = pd.to_datetime(df["report_date"], errors="coerce")
-    if "minutes" in df:
-        df["minutes"] = pd.to_numeric(df["minutes"], errors="coerce")
 
-    # --- Normalize rating to 0–5 ---
-    if "rating" in df:
-        df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
-        # If legacy 0–10 values exist, scale to 0–5
-        if pd.notna(df["rating"]).any() and (df["rating"].max(skipna=True) or 0) > 5:
-            df["rating"] = df["rating"] / 2.0
-        # clip & round
-        df["rating"] = df["rating"].clip(lower=0, upper=5).round(1)
+    # expand attributes jsonb
+    attrs = df.pop("attributes", pd.Series(dtype="object"))
+    if not attrs.empty:
+        attrs = attrs.apply(lambda a: a or {})
+        for key in [
+            "position",
+            "foot",
+            "technique",
+            "game_intelligence",
+            "mental",
+            "athletic",
+            "comments",
+        ]:
+            df[key] = attrs.apply(lambda x, k=key: x.get(k))
+
+    # numeric conversions
+    for col in ["technique", "game_intelligence", "mental", "athletic"]:
+        if col in df:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    if {"technique", "game_intelligence", "mental", "athletic"}.issubset(df.columns):
+        df["rating"] = df[["technique", "game_intelligence", "mental", "athletic"]].mean(
+            axis=1, skipna=True
+        )
+        df["rating"] = df["rating"].round(1)
 
     # text filter
     if comp_filter:
@@ -167,38 +177,42 @@ def show_inspect_player() -> None:
         "report_date",
         "competition",
         "opponent",
-        "position_played",
-        "minutes",
+        "position",
+        "foot",
+        "technique",
+        "game_intelligence",
+        "mental",
+        "athletic",
         "rating",
-        "notes",
+        "comments",
     ]
     df = df[[c for c in cols_order if c in df.columns]].copy()
 
-    # tidy: truncate long notes
-    if "notes" in df:
-        df["notes"] = df["notes"].fillna("").apply(
+    if "comments" in df:
+        df["comments"] = df["comments"].fillna("").apply(
             lambda s: textwrap.shorten(str(s), width=120, placeholder="…")
         )
 
-    # --- Quick stats (using normalized 0–5 rating) ---
-    total_minutes = int(df["minutes"].fillna(0).sum()) if "minutes" in df else 0
     ratings = pd.to_numeric(df.get("rating", pd.Series(dtype=float)), errors="coerce").dropna()
     avg_rating = round(float(ratings.mean()), 2) if not ratings.empty else None
 
-    # rename headers for UI AFTER stats
     df = df.rename(
         columns={
             "report_date": "Date",
             "competition": "Competition",
             "opponent": "Opponent",
-            "position_played": "Pos",
-            "minutes": "Min",
+            "position": "Pos",
+            "foot": "Foot",
+            "technique": "Technique",
+            "game_intelligence": "Game Intelligence",
+            "mental": "Mental",
+            "athletic": "Athletic",
             "rating": "Rating (0–5)",
-            "notes": "Notes",
+            "comments": "Comments",
         }
     ).sort_values("Date", ascending=False)
 
-    stats = f"Reports: **{len(df)}** | Total minutes: **{total_minutes}**"
+    stats = f"Reports: **{len(df)}**"
     if avg_rating is not None:
         stats += f" | Avg rating: **{avg_rating} / 5**"
     st.caption(stats)
