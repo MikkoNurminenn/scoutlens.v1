@@ -14,17 +14,6 @@ from app.supabase_client import get_client
 bootstrap_sidebar_auto_collapse()
 
 
-def _calc_age(dob_str: str | None) -> str:
-    if not dob_str:
-        return "—"
-    dob = pd.to_datetime(dob_str, errors="coerce")
-    if pd.isna(dob):
-        return "—"
-    today = date.today()
-    years = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-    return f"{years} yrs"
-
-
 def _avg_0_5(*vals) -> float | None:
     nums = [float(v) for v in vals if v is not None and pd.notna(v)]
     if not nums:
@@ -38,13 +27,12 @@ def show_inspect_player() -> None:
     st.title("🔍 Inspect Player")
     sb = get_client()
 
-    # --- Players dropdown (essential fields only) ---
+    # --- Players dropdown (ei haeta position / date_of_birth) ---
     try:
         players = (
             sb.table("players")
             .select(
-                "id,name,position,current_club,nationality,date_of_birth,"
-                "team_name,preferred_foot,transfermarkt_url"
+                "id,name,current_club,team_name,nationality,preferred_foot,transfermarkt_url"
             )
             .order("name")
             .execute()
@@ -79,20 +67,18 @@ def show_inspect_player() -> None:
     st.session_state["inspect__player_id"] = player_id
     player = next((p for p in players if p["id"] == player_id), players[0])
 
-    # --- Player header (compact)
+    # --- Player header (compact) — poistettu Position ja Age ---
     st.subheader(player["name"])
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Position", player.get("position") or "—")
-    c2.metric("Club", player.get("current_club") or player.get("team_name") or "—")
-    c3.metric("Nationality", player.get("nationality") or "—")
-    c4.metric("Age", _calc_age(player.get("date_of_birth")))
+    c1, c2 = st.columns(2)
+    c1.metric("Club", player.get("current_club") or player.get("team_name") or "—")
+    c2.metric("Nationality", player.get("nationality") or "—")
 
     with st.expander("Details"):
         tm = player.get("transfermarkt_url")
         st.write(
             {
                 "Preferred foot": player.get("preferred_foot") or "—",
-                "Date of birth": player.get("date_of_birth") or "—",
+                # "Date of birth": poistettu väliaikaisesti
                 "Transfermarkt": tm if tm else "—",
             }
         )
@@ -129,7 +115,7 @@ def show_inspect_player() -> None:
         st.info("No reports yet for this player.")
         return
 
-    # --- Build rows to MATCH Reports page: Date, Player, Club, Opponent, Competition, Pos, Foot, Tech, GI, MENT, ATH, Comments
+    # --- Rows kuten Reports: Date, Player, Club, Opponent, Competition, Pos, Foot, Tech, GI, MENT, ATH, Comments
     player_name = player.get("name") or ""
     player_club = player.get("current_club") or player.get("team_name") or ""
 
@@ -167,11 +153,9 @@ def show_inspect_player() -> None:
 
     df = pd.DataFrame(rows)
 
-    # Types & filters
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 
-    # pyöritellään numerot yhteen desimaaliin (näyttö siisti, mutta sama sisältö)
     for col in ["Tech", "GI", "MENT", "ATH"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").round(1)
@@ -191,7 +175,6 @@ def show_inspect_player() -> None:
         st.warning("No reports match the current filters.")
         return
 
-    # Järjestys kuten Reports-sivulla
     cols_order = [
         "Date", "Player", "Club", "Opponent", "Competition",
         "Pos", "Foot", "Tech", "GI", "MENT", "ATH", "Comments",
@@ -201,19 +184,18 @@ def show_inspect_player() -> None:
     st.caption(f"Reports: **{len(df)}**")
     st.dataframe(df, use_container_width=True)
 
-    # Exportit
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     json_bytes = df.to_json(orient="records", date_format="iso").encode("utf-8")
     st.download_button(
         "⬇️ Export CSV (filtered)",
         csv_bytes,
-        file_name=f"{player['name']}_reports.csv",
+        file_name=f"{player_name}_reports.csv",
         mime="text/csv",
     )
     st.download_button(
         "⬇️ Export JSON (filtered)",
         json_bytes,
-        file_name=f"{player['name']}_reports.json",
+        file_name=f"{player_name}_reports.json",
         mime="application/json",
     )
 
