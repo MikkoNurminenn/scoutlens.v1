@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import streamlit as st
-from app.theme import use_theme
+from .theme import use_theme
 
 # Ensure package imports work when running as `python app/app.py`
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,16 +30,6 @@ APP_TITLE   = "ScoutLens"
 APP_TAGLINE = "LATAM scouting toolkit"
 APP_VERSION = "0.9.1"
 
-# Page config must be first Streamlit call
-st.set_page_config(page_title=APP_TITLE, layout="wide")
-
-# Temporary cache bust during Supabase client upgrade
-try:
-    st.cache_data.clear()
-    st.cache_resource.clear()
-except Exception:
-    pass
-
 # --------- Global CSS injection ----------
 def inject_css():
     base = Path("app/styles")
@@ -49,12 +39,6 @@ def inject_css():
         if (base / f).exists()
     )
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
-
-inject_css()
-
-use_theme()
-
-login()
 
 # --------- Navigation setup ----------
 # Visible pages in the sidebar
@@ -100,46 +84,66 @@ def _on_nav_change() -> None:
     st.session_state["nav_page"] = page
     _sync_query(page)
 
-# --------- Init from URL once ----------
-if "nav_page" not in st.session_state:
-    p = st.query_params.get("p", None)
-    p = LEGACY_REMAP.get(p, p)  # remap legacy if present
-    st.session_state["nav_page"] = p if p in NAV_KEYS else NAV_KEYS[0]
-    _sync_query(st.session_state["nav_page"])
 
-# Clamp current page (handles legacy + invalid keys)
-current_page = st.session_state.get("nav_page", NAV_KEYS[0])
-current_page = LEGACY_REMAP.get(current_page, current_page)
-if current_page not in NAV_KEYS:
-    current_page = NAV_KEYS[0]
-    st.session_state["nav_page"] = current_page
+def main() -> None:
+    # Page config must be first Streamlit call
+    st.set_page_config(page_title=APP_TITLE, layout="wide")
 
-# Keep visible label in sync, safely
-desired_label = NAV_LABELS.get(current_page, NAV_LABELS[NAV_KEYS[0]])
-if st.session_state.get("nav_choice") != desired_label:
-    st.session_state["nav_choice"] = desired_label
+    # Temporary cache bust during Supabase client upgrade
+    try:
+        st.cache_data.clear()
+        st.cache_resource.clear()
+    except Exception:
+        pass
 
-# --------- Sidebar UI ----------
-with st.sidebar:
-    st.markdown("<div class='scout-brand'>⚽ ScoutLens</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='scout-sub'>{APP_TAGLINE}</div>", unsafe_allow_html=True)
-    st.markdown("<div class='nav-sep'>Navigation</div>", unsafe_allow_html=True)
+    inject_css()
+    use_theme()
+    login()
 
-    st.radio(
-        "Navigate",
-        options=LABEL_LIST,
-        key="nav_choice",
-        label_visibility="collapsed",
-        on_change=_on_nav_change,
-    )
+    # --------- Init from URL once ----------
+    if "nav_page" not in st.session_state:
+        p = st.query_params.get("p", None)
+        p = LEGACY_REMAP.get(p, p)  # remap legacy if present
+        st.session_state["nav_page"] = p if p in NAV_KEYS else NAV_KEYS[0]
+        _sync_query(st.session_state["nav_page"])
 
-    st.markdown(
-        f"<div class='sb-footer'>"
-        f"<strong>{APP_TITLE}</strong> v{APP_VERSION}<br>"
-        f"Indigo × Sky theme • Hover + selection gradients"
-        f"</div>",
-        unsafe_allow_html=True
-    )
+    # Clamp current page (handles legacy + invalid keys)
+    current_page = st.session_state.get("nav_page", NAV_KEYS[0])
+    current_page = LEGACY_REMAP.get(current_page, current_page)
+    if current_page not in NAV_KEYS:
+        current_page = NAV_KEYS[0]
+        st.session_state["nav_page"] = current_page
 
-# --------- Render current page ----------
-PAGE_FUNCS.get(current_page, lambda: st.error("Page not found."))()
+    # Keep visible label in sync, safely
+    desired_label = NAV_LABELS.get(current_page, NAV_LABELS[NAV_KEYS[0]])
+    if st.session_state.get("nav_choice") != desired_label:
+        st.session_state["nav_choice"] = desired_label
+
+    # --------- Sidebar UI ----------
+    with st.sidebar:
+        st.markdown("<div class='scout-brand'>⚽ ScoutLens</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='scout-sub'>{APP_TAGLINE}</div>", unsafe_allow_html=True)
+        st.markdown("<div class='nav-sep'>Navigation</div>", unsafe_allow_html=True)
+
+        st.radio(
+            "Navigate",
+            options=LABEL_LIST,
+            key="nav_choice",
+            label_visibility="collapsed",
+            on_change=_on_nav_change,
+        )
+
+        st.markdown(
+            f"<div class='sb-footer'>"
+            f"<strong>{APP_TITLE}</strong> v{APP_VERSION}<br>"
+            f"Indigo × Sky theme • Hover + selection gradients"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+    # --------- Render current page ----------
+    PAGE_FUNCS.get(current_page, lambda: st.error("Page not found."))()
+
+
+if __name__ == "__main__":
+    main()
