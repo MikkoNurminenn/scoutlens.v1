@@ -22,6 +22,7 @@ from .ui import bootstrap_sidebar_auto_collapse
 from app.supabase_client import get_client
 from app.db_tables import PLAYERS
 from app.services.players import insert_player
+from app.perf import track
 
 
 bootstrap_sidebar_auto_collapse()
@@ -147,6 +148,24 @@ def render_add_player_form(on_success: Callable | None = None) -> None:
 # Page
 # ---------------------------------------------------------------------------
 
+@st.cache_data(ttl=60, show_spinner=False)
+def list_latest_reports(limit: int = 50):
+    sb = get_client()
+    with track("reports:fetch"):
+        return (
+            sb.table("reports")
+            .select(
+                "id,report_date,competition,opponent,position_played,rating,"
+                "player:player_id(name,current_club),attributes"
+            )
+            .order("report_date", desc=True)
+            .limit(limit)
+            .execute()
+            .data
+            or []
+        )
+
+
 def show_reports_page() -> None:
     """Render the reports page."""
     st.markdown("## 📝 Reports")
@@ -197,6 +216,7 @@ def show_reports_page() -> None:
             }
             try:
                 sb.table("reports").insert(payload).execute()
+                list_latest_reports.clear()
                 st.toast("Report saved ✅")
                 st.rerun()
             except Exception as e:
@@ -204,19 +224,8 @@ def show_reports_page() -> None:
 
     st.divider()
 
-    sb = get_client()
     try:
-        rows = (
-            sb.table("reports")
-            .select(
-                "id,report_date,competition,opponent,position_played,rating,"
-                "player:player_id(name,current_club),attributes"
-            )
-            .order("report_date", desc=True)
-            .limit(50)
-            .execute()
-            .data
-        )
+        rows = list_latest_reports()
     except APIError as e:
         st.error(f"Supabase error: {getattr(e, 'message', e)}")
         rows = []
@@ -298,11 +307,12 @@ def show_reports_page() -> None:
                     colors.append("")
             return colors
 
-        styler = (
-            df_f.style
-            .apply(_style_vals, subset=["Tech", "GI", "MENT", "ATH"])
-            .set_properties(subset=["Comments"], **{"text-align": "left", "white-space": "pre-wrap"})
-        )
+        with track("reports:style"):
+            styler = (
+                df_f.style
+                .apply(_style_vals, subset=["Tech", "GI", "MENT", "ATH"])
+                .set_properties(subset=["Comments"], **{"text-align": "left", "white-space": "pre-wrap"})
+            )
 
         cap_col, btn_col = st.columns([3, 1])
         with cap_col:
@@ -314,6 +324,7 @@ def show_reports_page() -> None:
                 )
                 st.rerun()
 
-        st.dataframe(styler, use_container_width=True, hide_index=True, height=400)
+        with track("reports:table"):
+            st.dataframe(styler, use_container_width=True, hide_index=True, height=400)
     else:
         st.caption("No reports yet.")

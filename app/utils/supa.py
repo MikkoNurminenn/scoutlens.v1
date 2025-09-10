@@ -1,11 +1,12 @@
 from __future__ import annotations
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 import os
+from functools import lru_cache
 
 try:
     import streamlit as st
-except Exception:
-    st = None  # allow headless usage (tests / CLI)
+except Exception:  # pragma: no cover - allow headless usage (tests / CLI)
+    st = None
 
 from supabase import create_client, Client
 
@@ -39,16 +40,21 @@ def _read_supabase_config() -> Dict[str, str]:
             "or env SUPABASE_URL & SUPABASE_ANON_KEY."
         )
     return {"url": url, "anon_key": key}
+if st is not None:
 
-
-_client: Optional[Client] = None
-
-def get_client() -> Client:
-    global _client
-    if _client is None:
+    @st.cache_resource  # type: ignore[misc]
+    def get_client() -> Client:
+        """Return a cached Supabase client bound to anon key."""
         cfg = _read_supabase_config()
-        _client = create_client(cfg["url"], cfg["anon_key"])
-    return _client
+        return create_client(cfg["url"], cfg["anon_key"])
+
+else:
+
+    @lru_cache(maxsize=1)
+    def get_client() -> Client:
+        """Fallback cached client when Streamlit is unavailable."""
+        cfg = _read_supabase_config()
+        return create_client(cfg["url"], cfg["anon_key"])
 
 
 def first_row(rows: Any) -> Optional[Dict[str, Any]]:
