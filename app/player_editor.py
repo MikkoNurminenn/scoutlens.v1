@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 import traceback
+from app.ui import bootstrap_sidebar_auto_collapse
 
 # --- Supabase & data helpers ---
 from app.supabase_client import get_client
@@ -42,6 +43,9 @@ CANON_MAP = {
   "created_at":"created_at","CreatedAt":"created_at"
 }
 CANON_ORDER = ["id","name","team_name","position","date_of_birth","preferred_foot","club_number","scout_rating","transfermarkt_url","created_at"]
+
+
+bootstrap_sidebar_auto_collapse()
 
 
 def _save_master_sanitized(df: pd.DataFrame, team: str) -> None:

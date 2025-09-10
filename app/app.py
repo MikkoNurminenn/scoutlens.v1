@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import streamlit as st
+from app.ui import bootstrap_sidebar_auto_collapse
 
 st.set_page_config(
     page_title="ScoutLens",
@@ -19,27 +20,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-
-def collapse_sidebar_on_next_rerun() -> None:
-    st.session_state._collapse_sidebar = True
-    st.rerun()
-
-
-if st.session_state.get("_collapse_sidebar"):
-    st.session_state._collapse_sidebar = False
-    st.markdown(
-        """
-        <script>
-        const tryClose = () => {
-          // Streamlit header hamburger button
-          const btn = window.parent.document.querySelector('button[kind="headerNoPadding"]');
-          if (btn) { btn.click(); } else { setTimeout(tryClose, 50); }
-        };
-        tryClose();
-        </script>
-        """,
-        unsafe_allow_html=True,
-    )
+bootstrap_sidebar_auto_collapse()
 
 
 # Ensure package imports work when running as `python app/app.py`
@@ -165,9 +146,10 @@ def main() -> None:
     prev = st.session_state.get("_prev_nav")
     if prev != page:
         st.session_state["_prev_nav"] = page
+        st.session_state["_collapse_sidebar"] = True
         st.session_state["nav_page"] = page
         _sync_query(page)
-        collapse_sidebar_on_next_rerun()
+        st.stop()
 
     current_page = st.session_state.get("nav_page", NAV_KEYS[0])
 

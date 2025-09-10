@@ -17,10 +17,14 @@ from typing import Any, Dict, List, Callable
 import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
+from app.ui import bootstrap_sidebar_auto_collapse
 
 from app.supabase_client import get_client
 from app.db_tables import PLAYERS
 from app.services.players import insert_player
+
+
+bootstrap_sidebar_auto_collapse()
 
 
 POSITIONS = [
