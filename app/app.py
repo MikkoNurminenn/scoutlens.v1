@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import importlib
 import sys
+from types import ModuleType
 import traceback
 import streamlit as st
 
@@ -13,36 +14,26 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 importlib.invalidate_caches()
 
-# ---- Robust: tuo bootstrap-funktio usealla polulla, muuten no-op
-def _import_bootstrap():
-    candidates = [
-        "app.ui",                 # jos __init__.py exporttaa
-        "app.ui.sidebar",         # tyypillinen sijainti
-        "app.ui.bootstrap",       # vaihtoehtoinen
-        "app.ui.layout",          # vaihtoehtoinen
-    ]
-    for mod in candidates:
-        try:
-            m = importlib.import_module(mod)
-            fn = getattr(m, "bootstrap_sidebar_auto_collapse", None)
-            if callable(fn):
-                return fn
-        except Exception:
-            continue
-    # Fallback: no-op, mutta kerro deville
-    def _noop():
-        st.info(
-            "UI bootstrap skipped: `bootstrap_sidebar_auto_collapse` ei löytynyt "
-            "(tarkista app/ui/__init__.py export tai moduulin nimi)."
-        )
-    return _noop
 
-try:
-    bootstrap_sidebar_auto_collapse = _import_bootstrap()
-except Exception as e:
-    st.error(f"UI bootstrap import failed: {e}")
-    st.code(''.join(traceback.format_exception(type(e), e, e.__traceback__)))
-    st.stop()
+def bootstrap_sidebar_auto_collapse() -> None:
+    if st.session_state.get("_collapse_sidebar"):
+        st.session_state._collapse_sidebar = False
+        st.markdown(
+            """
+            <script>
+            const root = window.parent?.document || document;
+            const btn = root.querySelector('button[aria-label="Main menu"]')
+                      || root.querySelector('button[title="Main menu"]');
+            btn?.click();
+            </script>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+_ui_mod = ModuleType("app.ui")
+_ui_mod.bootstrap_sidebar_auto_collapse = bootstrap_sidebar_auto_collapse
+sys.modules.setdefault("app.ui", _ui_mod)
 
 st.set_page_config(page_title="ScoutLens", layout="wide", initial_sidebar_state="expanded")
 bootstrap_sidebar_auto_collapse()
