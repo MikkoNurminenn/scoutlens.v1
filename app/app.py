@@ -3,12 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 import importlib
 import sys
-from types import ModuleType
 import traceback
 import streamlit as st
 
 from app.perf import track, render_perf
 from app.ui.nav import go
+from app.ui import bootstrap_sidebar_auto_collapse
 
 # ---- Peruspolut
 ROOT = Path(__file__).resolve().parent.parent
@@ -17,29 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 importlib.invalidate_caches()
 
-
-def bootstrap_sidebar_auto_collapse() -> None:
-    if st.session_state.get("_collapse_sidebar"):
-        st.session_state._collapse_sidebar = False
-        st.markdown(
-            """
-            <script>
-            const root = window.parent?.document || document;
-            const btn = root.querySelector('button[aria-label="Main menu"]')
-                      || root.querySelector('button[title="Main menu"]');
-            btn?.click();
-            </script>
-            """,
-            unsafe_allow_html=True,
-        )
-
-
-_ui_mod = ModuleType("app.ui")
-_ui_mod.bootstrap_sidebar_auto_collapse = bootstrap_sidebar_auto_collapse
-sys.modules.setdefault("app.ui", _ui_mod)
-
 st.set_page_config(page_title="ScoutLens", layout="wide", initial_sidebar_state="expanded")
-bootstrap_sidebar_auto_collapse()
 
 # ---- Sivujen importit diagnoosilla
 def _safe_import(what: str, mod: str, attr: str):
@@ -102,6 +80,11 @@ PAGE_FUNCS = {
 }
 
 def main() -> None:
+    try:
+        bootstrap_sidebar_auto_collapse()
+    except Exception:
+        pass
+
     inject_css()
     login()
 

@@ -1,44 +1,32 @@
-"""UI helpers shared across ScoutLens pages."""
+"""Lightweight UI helpers with safe optional imports."""
 
-from __future__ import annotations
+from importlib import import_module
+from typing import Callable, Optional
 
-import streamlit as st
 
-from .sidebar import bootstrap_sidebar_auto_collapse  # tai oikea moduuli
-__all__ = ["bootstrap_sidebar_auto_collapse"]
+def _load_callable(module_name: str, attr: str) -> Optional[Callable]:
+    try:
+        module = import_module(module_name)
+        fn = getattr(module, attr, None)
+        return fn if callable(fn) else None
+    except Exception:
+        return None
+
 
 def bootstrap_sidebar_auto_collapse() -> None:
-    """If session flag is set, click the header hamburger to close sidebar once."""
-    if st.session_state.get("_collapse_sidebar"):
-        st.session_state._collapse_sidebar = False
-        st.markdown(
-            """
-            <script>
-            // Use multiple selectors because Streamlit header DOM changes occasionally
-            const selectors = [
-              'button[aria-label="Main menu"]',
-              'button[title="Main menu"]',
-              'button[kind="headerNoPadding"]',
-              'button[data-testid="baseButton-headerNoPadding"]'
-            ];
-            function findToggleBtn() {
-              const root = window.parent?.document || document;
-              for (const sel of selectors) {
-                const btn = root.querySelector(sel);
-                if (btn) return btn;
-              }
-              const header = (window.parent?.document || document).querySelector('header');
-              if (header) return header.querySelector('button');
-              return null;
-            }
-            function tryClose(attempt=0) {
-              const btn = findToggleBtn();
-              if (btn) { btn.click(); }
-              else if (attempt < 40) { setTimeout(() => tryClose(attempt + 1), 50); }
-            }
-            tryClose();
-            </script>
-            """,
-            unsafe_allow_html=True,
-        )
+    """Attempt to run an optional sidebar bootstrap without crashing."""
+    candidates = [
+        ("app.ui.sidebar", "bootstrap_sidebar_auto_collapse"),
+        ("app.ui.bootstrap", "bootstrap_sidebar_auto_collapse"),
+        ("app.ui.layout", "bootstrap_sidebar_auto_collapse"),
+    ]
+    for mod, attr in candidates:
+        fn = _load_callable(mod, attr)
+        if fn:
+            fn()
+            return
+    # no-op if nothing found
+
+
+__all__ = ["bootstrap_sidebar_auto_collapse"]
 

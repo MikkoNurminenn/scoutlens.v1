@@ -9,9 +9,9 @@ import pandas as pd
 import streamlit as st
 import json
 from postgrest.exceptions import APIError
-from .ui import bootstrap_sidebar_auto_collapse
+from app.ui import bootstrap_sidebar_auto_collapse
 
-from .supabase_client import get_client
+from app.supabase_client import get_client
 
 
 bootstrap_sidebar_auto_collapse()

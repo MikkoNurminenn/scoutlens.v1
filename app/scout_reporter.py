@@ -11,13 +11,13 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 import traceback
-from .ui import bootstrap_sidebar_auto_collapse
+from app.ui import bootstrap_sidebar_auto_collapse
 
-from .supabase_client import get_client
-from .data_utils import list_teams, list_players_by_team  # käyttää Supabasea
-from .time_utils import to_tz
-from .data_sanitize import clean_jsonable
-from .db_tables import MATCHES, SCOUT_REPORTS, SHORTLISTS
+from app.supabase_client import get_client
+from app.data_utils import list_teams, list_players_by_team  # käyttää Supabasea
+from app.time_utils import to_tz
+from app.data_sanitize import clean_jsonable
+from app.db_tables import MATCHES, SCOUT_REPORTS, SHORTLISTS
 
 
 bootstrap_sidebar_auto_collapse()

@@ -10,10 +10,10 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
-from .ui import bootstrap_sidebar_auto_collapse
+from app.ui import bootstrap_sidebar_auto_collapse
 
-from .supabase_client import get_client
-from .db_tables import REPORTS
+from app.supabase_client import get_client
+from app.db_tables import REPORTS
 
 
 bootstrap_sidebar_auto_collapse()
