@@ -12,6 +12,12 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import streamlit as st
+
+# Ensure package imports work when running as `python app/app.py`
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from app.ui import bootstrap_sidebar_auto_collapse
 
 st.set_page_config(
@@ -21,12 +27,6 @@ st.set_page_config(
 )
 
 bootstrap_sidebar_auto_collapse()
-
-
-# Ensure package imports work when running as `python app/app.py`
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 # --- Pages
 from app.reports_page import show_reports_page
