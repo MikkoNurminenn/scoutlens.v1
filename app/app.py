@@ -9,6 +9,7 @@ import streamlit as st
 from app.perf import track, render_perf
 from app.ui.nav import go
 from app.ui import bootstrap_sidebar_auto_collapse
+from app.ui.sidebar_bg import set_sidebar_background
 
 # ---- Peruspolut
 ROOT = Path(__file__).resolve().parent.parent
@@ -86,6 +87,7 @@ def main() -> None:
         pass
 
     inject_css()
+    set_sidebar_background()
     login()
 
     if "current_page" not in st.session_state:
