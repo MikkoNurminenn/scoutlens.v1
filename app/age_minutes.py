@@ -11,7 +11,7 @@ def show_age_minutes():
 
     if selected_team == "Create new team...":
         new_team = st.sidebar.text_input("New team name")
-        if st.sidebar.button("Create Team"):
+        if st.sidebar.button("Create Team", type="primary"):
             if new_team.strip():
                 selected_team = new_team.strip()
                 st.session_state["selected_team"] = selected_team
@@ -40,7 +40,7 @@ def show_age_minutes():
         loan = st.checkbox("On Loan")
         minutes = st.number_input("Minutes Played", min_value=0)
         matches = st.number_input("Matches Played", min_value=0)
-        submitted = st.form_submit_button("Add / Update Player")
+        submitted = st.form_submit_button("Add / Update Player", type="primary")
 
         if submitted:
             is_valid, msg = validate_player_input(name, df)
@@ -66,7 +66,7 @@ def show_age_minutes():
     df_sorted = df.sort_values("Name")
     st.sidebar.header("Remove Player")
     remove_name = st.sidebar.selectbox("Select player to remove", options=["-"] + df_sorted["Name"].tolist())
-    if st.sidebar.button("Remove") and remove_name != "-":
+    if st.sidebar.button("Remove", type="secondary") and remove_name != "-":
         df = df[df["Name"] != remove_name]
         save_data(df, team_name)
         st.sidebar.success(f"Removed player: {remove_name}")

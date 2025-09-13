@@ -130,14 +130,14 @@ def show_shortlists():
         sel = st.selectbox("Select", list_names or ["—"], index=0 if list_names else 0, key="sl_sel_page")
         new_nm = st.text_input("New list name", placeholder="e.g. U23 Forwards")
         c1, c2 = st.columns([1, 1])
-        if c1.button("Create"):
+        if c1.button("Create", type="primary"):
             nn = new_nm.strip()
             if nn and nn not in shortlists:
                 shortlists[nn] = []
                 _save_shortlists(shortlists)
                 st.success(f"Created '{nn}'")
                 st.cache_data.clear(); st.rerun()
-        if sel in shortlists and c2.button("Delete"):
+        if sel in shortlists and c2.button("Delete", type="secondary"):
             shortlists.pop(sel, None)
             _save_shortlists(shortlists)
             st.warning(f"Deleted '{sel}'")
@@ -146,7 +146,7 @@ def show_shortlists():
         # rename
         if sel in shortlists:
             rn = st.text_input("Rename", value=sel, key="sl_rename")
-            if rn.strip() and rn.strip() != sel and st.button("Apply rename"):
+            if rn.strip() and rn.strip() != sel and st.button("Apply rename", type="primary"):
                 shortlists[rn.strip()] = shortlists.pop(sel)
                 _save_shortlists(shortlists)
                 st.success("Renamed")
@@ -170,7 +170,7 @@ def show_shortlists():
                 key=f"sl_add_multi_{sel}",
             )
             cadd, cclear = st.columns([1, 1])
-            if cadd.button("Add selected"):
+            if cadd.button("Add selected", type="primary"):
                 added = 0
                 for n in add:
                     pid = name_to_id.get(n)
@@ -181,7 +181,7 @@ def show_shortlists():
                     _save_shortlists(shortlists)
                     st.success(f"Added {added} players")
                     st.cache_data.clear(); st.rerun()
-            if cclear.button("Clear list"):
+            if cclear.button("Clear list", type="secondary"):
                 shortlists[sel] = []
                 _save_shortlists(shortlists)
                 st.warning("Cleared")
@@ -205,7 +205,7 @@ def show_shortlists():
                     if rc3.button("⬇️", key=f"dn_{sel}_{i}", help="Move down") and i < len(items) - 1:
                         items[i + 1], items[i] = items[i], items[i + 1]
                         _save_shortlists(shortlists); st.rerun()
-                    if rc4.button("Remove", key=f"rm_{sel}_{i}"):
+                    if rc4.button("Remove", key=f"rm_{sel}_{i}", type="secondary"):
                         items.pop(i); _save_shortlists(shortlists); st.rerun()
 
                 # export

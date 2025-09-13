@@ -4,7 +4,9 @@
 .sl-kpi .value { font-size: var(--fs-32); font-weight:700; }
 
 /* Buttons */
-.stButton>button, .sl-btn {
+.stButton>button:not([kind]),
+.stButton>button[kind="primary"],
+.sl-btn-primary {
   background: var(--accent-1);
   color: var(--fg-strong);
   border: none;
@@ -14,15 +16,42 @@
   transition: background .2s ease, box-shadow .2s ease, transform .2s ease;
   cursor: pointer;
 }
-.stButton>button:hover, .sl-btn:hover {
+.stButton>button:not([kind]):hover,
+.stButton>button[kind="primary"]:hover,
+.sl-btn-primary:hover {
   background: linear-gradient(90deg,var(--accent-1),var(--accent-2));
   transform: translateY(-1px);
   box-shadow: var(--shadow-hover);
 }
-.stButton>button:focus, .sl-btn:focus {
+.stButton>button:not([kind]):focus,
+.stButton>button[kind="primary"]:focus,
+.sl-btn-primary:focus {
   outline: 2px solid var(--accent-cyan);
   outline-offset:2px;
 }
+
+.stButton>button[kind="secondary"],
+.sl-btn-secondary {
+  background: var(--bg-card);
+  color: var(--accent-1);
+  border:1px solid var(--accent-1);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-14);
+  transition: background .2s ease, box-shadow .2s ease;
+  cursor: pointer;
+}
+.stButton>button[kind="secondary"]:hover,
+.sl-btn-secondary:hover {
+  background: color-mix(in srgb, var(--accent-1) 15%, var(--bg-card));
+  box-shadow: var(--shadow-hover);
+}
+.stButton>button[kind="secondary"]:focus,
+.sl-btn-secondary:focus {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset:2px;
+}
+
 .stButton>button:disabled {
   opacity:0.5;
   cursor:not-allowed;
@@ -31,7 +60,8 @@
 }
 
 /* Anchor buttons */
-.sl-btn {
+.sl-btn-primary,
+.sl-btn-secondary {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);

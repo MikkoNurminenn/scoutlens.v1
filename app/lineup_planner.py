@@ -131,7 +131,7 @@ def show_lineup_planner():
     with st.form("add_form", clear_on_submit=True):
         pos = st.selectbox("Position", available_positions)
         player = st.selectbox("Player", available_players)
-        if st.form_submit_button("Add to Lineup"):
+        if st.form_submit_button("Add to Lineup", type="primary"):
             st.session_state.lineup[pos] = player
             save_lineup(st.session_state.lineup, session_key)
             st.success(f"Added {player} at {pos}")
@@ -140,12 +140,12 @@ def show_lineup_planner():
     lineup_df = pd.DataFrame.from_dict(st.session_state.lineup, orient='index', columns=['Player'])
     st.table(lineup_df)
 
-    if st.button("Visualize on Pitch"):
+    if st.button("Visualize on Pitch", type="primary"):
         fig = draw_lineup(st.session_state.lineup)
         if fig:
             st.pyplot(fig)
 
-    if st.button("Clear Lineup"):
+    if st.button("Clear Lineup", type="secondary"):
         st.session_state.lineup = {}
         save_lineup({}, session_key)
         st.success("Lineup cleared.")

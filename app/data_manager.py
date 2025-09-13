@@ -135,7 +135,7 @@ def show_data_manager():
         return
 
     # 3) Tallenna muutokset players.jsoniin (korvaa valitun joukkueen rivit)
-    if st.button("Save Changes", key="dm_save_players"):
+    if st.button("Save Changes", key="dm_save_players", type="primary"):
         try:
             kept = [p for p in players_all if _norm_team(p) != team]
             new_rows = []

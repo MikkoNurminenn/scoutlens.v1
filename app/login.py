@@ -234,7 +234,7 @@ def login(
         username = st.text_input("Username", autocomplete="username", placeholder="Enter your username")
         password = st.text_input("Password", type="password", autocomplete="current-password", placeholder="Enter your password")
         remember = st.checkbox("Keep me signed in (this session)", value=True)
-        submitted = st.form_submit_button("Sign in")
+        submitted = st.form_submit_button("Sign in", type="primary")
 
     if submitted:
         if len(password) < cfg.min_password_len:

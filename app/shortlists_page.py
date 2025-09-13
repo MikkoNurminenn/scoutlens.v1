@@ -81,7 +81,7 @@ def show_shortlists_page() -> None:
     # create shortlist
     with st.expander("Create new shortlist"):
         name = st.text_input("Shortlist name", key="shortlists__name")
-        if st.button("Create"):
+        if st.button("Create", type="primary"):
             if not name.strip():
                 st.warning("Name required.")
             else:
@@ -126,7 +126,7 @@ def show_shortlists_page() -> None:
     add_pid = st.selectbox(
         "Player", options=list(label_by_id.keys()), format_func=lambda x: label_by_id[x], key="shortlists__add_pid"
     )
-    if st.button("Add to shortlist"):
+    if st.button("Add to shortlist", type="primary"):
         try:
             sb.table("shortlist_items").insert({"shortlist_id": sid, "player_id": add_pid}).execute()
             list_shortlist_items.clear()
@@ -155,7 +155,7 @@ def show_shortlists_page() -> None:
                 options=[p["id"] for p in plist],
                 format_func=lambda x: next(p["name"] for p in plist if p["id"] == x),
             )
-            if st.button("Remove"):
+            if st.button("Remove", type="secondary"):
                 sb.table("shortlist_items").delete().eq("shortlist_id", sid).eq("player_id", pid_to_remove).execute()
                 list_shortlist_items.clear()
                 list_players_by_ids.clear()
