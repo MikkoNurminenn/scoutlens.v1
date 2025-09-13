@@ -194,8 +194,23 @@ def show_inspect_player() -> None:
     ]
     df = df[[c for c in cols_order if c in df.columns]].sort_values("Date", ascending=False)
 
+    def _highlight_class(v: float | None) -> str:
+        if pd.isna(v):
+            return ""
+        if v >= 4:
+            return "sl-highlight"
+        if v <= 2:
+            return "sl-highlight-error"
+        return "sl-highlight-warning"
+
+    classes = pd.DataFrame("", index=df.index, columns=df.columns)
+    for col in ["Tech", "GI", "MENT", "ATH"]:
+        if col in classes.columns:
+            classes[col] = df[col].apply(_highlight_class)
+    styler = df.style.set_td_classes(classes)
+
     st.caption(f"Reports: **{len(df)}**")
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(styler, use_container_width=True)
 
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     json_bytes = df.to_json(orient="records", date_format="iso").encode("utf-8")
