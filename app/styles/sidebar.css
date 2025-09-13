@@ -64,9 +64,9 @@ section[data-testid="stSidebar"] a:hover {
 }
 
 .sb-user {
-  margin: var(--space-4) 0 var(--space-2);
-  font-size: var(--text-sm);
-}
+    margin: var(--space-4) 0 var(--space-2);
+    font-size: var(--fs-14);
+  }
 
 /* Liikettä vähentäville käyttäjille: poista siirtymät/siirrot */
 @media (prefers-reduced-motion: reduce) {

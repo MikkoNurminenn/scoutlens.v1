@@ -178,7 +178,7 @@ def login(
           box-shadow: 0 4px 20px rgba(0,0,0,.18); padding: 22px 20px;
         }
         div[data-testid="stForm"] > div { padding: 0 !important; }
-        .form-title { color: #e2e8f0; margin: 0 0 8px 0; font-weight: 700; font-size: 1.35rem; }
+        .form-title { color: #e2e8f0; margin: 0 0 8px 0; font-weight: 700; font-size: var(--fs-20); }
         .stTextInput > div > div > input {
           background: rgba(2,6,23,.80);
           border: 1px solid rgba(255,255,255,.10);
@@ -200,14 +200,14 @@ def login(
 
         @media (min-width: 1200px) and (max-width: 2400px) and (min-aspect-ratio: 1/1.3) and (max-aspect-ratio: 5/4) {
           div[data-testid="stForm"] { max-width: 620px; padding: 28px 24px; border-radius: 16px; }
-          .form-title { font-size: 1.5rem; }
-          .stTextInput > div > div > input { font-size: 16px; padding: 12px 14px; }
-          .stButton button { font-size: 16px; padding: 12px 16px; border-radius: 14px; }
+          .form-title { font-size: var(--fs-24); }
+          .stTextInput > div > div > input { font-size: var(--fs-16); padding: 12px 14px; }
+          .stButton button { font-size: var(--fs-16); padding: 12px 16px; border-radius: 14px; }
         }
 
         @media (max-width: 540px) {
           div[data-testid="stForm"] { max-width: 94vw; padding: 18px 16px; border-radius: 10px; }
-          .form-title { font-size: 1.2rem; }
+          .form-title { font-size: var(--fs-16); }
         }
 
         @media (max-height: 520px) and (orientation: landscape) {

@@ -264,13 +264,13 @@ CORE_AREAS = [
 BADGE_CSS = """
 <style>
 .badges { display:flex; gap:.5rem; flex-wrap:wrap; }
-.badge  { padding:.25rem .6rem; border-radius:999px; font-size:.85rem; font-weight:600;
+.badge  { padding:.25rem .6rem; border-radius:999px; font-size:var(--fs-14); font-weight:600;
           background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15); }
 .kpi    { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
           padding:12px 14px; border-radius:12px; }
-.kpi h4 { margin:0 0 6px 0; font-size:.9rem; opacity:.8; }
-.kpi .val{ font-size:1.6rem; font-weight:700; }
-.small  { opacity:.8; font-size:.9rem; }
+.kpi h4 { margin:0 0 6px 0; font-size:var(--fs-14); opacity:.8; }
+.kpi .val{ font-size:var(--fs-24); font-weight:700; }
+.small  { opacity:.8; font-size:var(--fs-14); }
 </style>
 """
 

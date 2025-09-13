@@ -3,7 +3,14 @@ html, body, .stApp {
   color: var(--fg-strong);
   font-family: var(--font-sans);
   line-height: var(--lh-relaxed);
+  font-size: var(--fs-16);
 }
+
+h1 { font-size: var(--fs-32); line-height: var(--lh-tight); }
+h2 { font-size: var(--fs-28); line-height: var(--lh-tight); }
+h3 { font-size: var(--fs-24); line-height: var(--lh-tight); }
+h4 { font-size: var(--fs-20); line-height: var(--lh-tight); }
+h5 { font-size: var(--fs-16); line-height: var(--lh-tight); }
 
 .stApp [data-testid="stHeader"]{
   background: transparent;

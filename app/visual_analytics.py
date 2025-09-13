@@ -53,7 +53,7 @@ def tag_style():
         <style>
         .tag-button { background-color: #ff4d4d; color: white; border-radius: 1rem;
             padding: 0.4rem 0.8rem; margin: 0.2rem; display: inline-block;
-            font-weight: bold; font-size: 0.9rem; }
+            font-weight: bold; font-size: var(--fs-14); }
         </style>
         """, unsafe_allow_html=True
     )
