@@ -118,7 +118,7 @@ def render_add_player_form(on_success: Callable | None = None) -> None:
         current_club = st.text_input("Current Club", "")
         transfermarkt_url = st.text_input("Transfermarkt URL", "")
 
-        submitted = st.form_submit_button("Create Player", use_container_width=True)
+        submitted = st.form_submit_button("Create Player", use_container_width=True, type="primary")
         if submitted:
             if not name.strip():
                 st.error("Name is required.")
@@ -198,7 +198,7 @@ def show_reports_page() -> None:
 
             st.divider()
             attrs = render_essential_section()
-            submitted = st.form_submit_button("Save")
+            submitted = st.form_submit_button("Save", type="primary")
 
         if submitted:
             sb = get_client()
@@ -318,7 +318,7 @@ def show_reports_page() -> None:
         with cap_col:
             st.caption(f"Showing {len(df_f)} / {len(df)} reports")
         with btn_col:
-            if st.button("Clear filters", key="reports__clear_filters"):
+            if st.button("Clear filters", key="reports__clear_filters", type="secondary"):
                 st.session_state.update(
                     {"reports__f_opp": "", "reports__f_comp": "", "reports__f_ment": 1}
                 )

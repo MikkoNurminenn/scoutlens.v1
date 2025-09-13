@@ -190,9 +190,9 @@ def show_add_player_form():
 
         left, right = st.columns([1,1])
         with left:
-            save_btn = st.form_submit_button("💾 Tallenna pelaaja", use_container_width=True)
+            save_btn = st.form_submit_button("💾 Tallenna pelaaja", use_container_width=True, type="primary")
         with right:
-            save_add_btn = st.form_submit_button("💾 Tallenna ja lisää seuraava", use_container_width=True)
+            save_add_btn = st.form_submit_button("💾 Tallenna ja lisää seuraava", use_container_width=True, type="primary")
 
         # ---------------------------
         # Validation & Save

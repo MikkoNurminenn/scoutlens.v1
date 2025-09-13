@@ -102,7 +102,7 @@ def show_notes():
 
     cc1, cc2, cc3 = st.columns([1,1,2.2])
     with cc1:
-        if st.button("💾 Save note", key="notes__save"):
+        if st.button("💾 Save note", key="notes__save", type="primary"):
             t = (text or "").strip()
             tags = _clean_tags(tags_str or "")
             if t:
@@ -115,7 +115,7 @@ def show_notes():
             else:
                 st.warning("Write something first.")
     with cc2:
-        if st.button("✖️ Clear", key="notes__clear"):
+        if st.button("✖️ Clear", key="notes__clear", type="secondary"):
             st.session_state["notes__new_text"] = ""
             st.session_state["notes__new_tags"] = ""
 
@@ -138,7 +138,7 @@ def show_notes():
     with b3:
         sort_order = st.selectbox("Sort", ["Newest first", "Oldest first"], key="notes__sort")
     with b4:
-        if st.button("Reset filters", key="notes__reset"):
+        if st.button("Reset filters", key="notes__reset", type="secondary"):
             st.session_state["notes__q"] = ""
             st.session_state["notes__tags"] = []
             st.session_state["notes__sort"] = "Newest first"
@@ -196,7 +196,12 @@ def show_notes():
         picks = st.multiselect("Select notes to delete", options=ids, format_func=lambda nid: next((f"{_fmt_ts(n['created_at'])}  •  {(n['text'][:40] + '…' if len(n['text'])>40 else n['text'])}" for n in page_items if n['id']==nid), nid), key="notes__bulk")
         st.warning("Type DELETE to confirm bulk deletion.", icon="⚠️")
         confirm = st.text_input("Confirmation", key="notes__confirm", placeholder="DELETE")
-        if st.button(f"🗑️ Delete selected ({len(picks)})", disabled=(len(picks)==0 or confirm!="DELETE"), key="notes__bulk_del"):
+        if st.button(
+            f"🗑️ Delete selected ({len(picks)})",
+            disabled=(len(picks)==0 or confirm!="DELETE"),
+            key="notes__bulk_del",
+            type="secondary",
+        ):
             kept = [n for n in notes if n.get("id") not in set(picks)]
             _save_notes(kept)
             st.cache_data.clear()
@@ -219,7 +224,7 @@ def show_notes():
                     if tg:
                         st.caption(" ".join(f"`{t}`" for t in tg))
                 with top[2]:
-                    if st.button("🗑️ Delete", key=f"notes__del_{n['id']}"):
+                    if st.button("🗑️ Delete", key=f"notes__del_{n['id']}", type="secondary"):
                         kept = [m for m in notes if m.get("id") != n["id"]]
                         _save_notes(kept)
                         st.cache_data.clear()
@@ -233,7 +238,7 @@ def show_notes():
                 with st.expander("✏️ Edit"):
                     new_text = st.text_area("Edit text", value=n.get("text",""), key=f"notes__edit_text_{n['id']}", height=120)
                     new_tags = st.text_input("Edit tags (comma-separated)", value=", ".join(n.get("tags",[])), key=f"notes__edit_tags_{n['id']}")
-                    if st.button("💾 Save changes", key=f"notes__edit_save_{n['id']}"):
+                    if st.button("💾 Save changes", key=f"notes__edit_save_{n['id']}", type="primary"):
                         n["text"] = (new_text or "").strip()
                         n["tags"] = _clean_tags(new_tags or "")
                         # write back (keep ordering)

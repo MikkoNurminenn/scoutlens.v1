@@ -324,7 +324,7 @@ def show_scout_match_reporter():
         )
         comp = st.text_input("Competition (optional)", key="scout_reporter__comp")
         loc = st.text_input("Location (optional)", key="scout_reporter__loc")
-        if st.button("Add Match", key="scout_reporter__add_match_btn"):
+        if st.button("Add Match", key="scout_reporter__add_match_btn", type="primary"):
             if home and away:
                 local_dt = datetime.combine(mdate, mtime).replace(tzinfo=ZoneInfo(latam_tz))
                 kickoff_at = local_dt.isoformat()
@@ -472,7 +472,7 @@ def show_scout_match_reporter():
                 st.write(general_text.strip())
     general = general_text
 
-    if st.button("💾 Save Report", key="scout_reporter__save_report_btn"):
+    if st.button("💾 Save Report", key="scout_reporter__save_report_btn", type="primary"):
         save_report([
             {
                 "id": uuid.uuid4().hex,
@@ -665,7 +665,8 @@ def show_scout_match_reporter():
         if st.button(
             f"Delete selected ({len(selected_ids)})",
             disabled=(len(selected_ids) == 0 or confirm != "DELETE"),
-            key="scout_reporter__del_selected_btn"
+            key="scout_reporter__del_selected_btn",
+            type="secondary",
         ):
             with st.spinner("Deleting selected..."):
                 delete_reports(selected_ids)
@@ -675,7 +676,8 @@ def show_scout_match_reporter():
         if st.button(
             f"Delete filtered ({len(filtered_ids)})",
             disabled=(len(filtered_ids) == 0 or confirm != "DELETE"),
-            key="scout_reporter__del_filtered_btn"
+            key="scout_reporter__del_filtered_btn",
+            type="secondary",
         ):
             with st.spinner("Deleting filtered..."):
                 delete_reports(filtered_ids)

@@ -121,7 +121,7 @@ def main() -> None:
                 f"<div class='sb-user'>Signed in as {name}</div>",
                 unsafe_allow_html=True,
             )
-            st.button("Sign out", on_click=logout)
+            st.button("Sign out", on_click=logout, type="secondary")
 
         st.markdown(
             f"<div class='sb-footer'><strong>{APP_TITLE}</strong> v{APP_VERSION}</div>",

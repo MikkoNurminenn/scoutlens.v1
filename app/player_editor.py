@@ -443,7 +443,7 @@ def _render_shortlist_flow():
     if not shortlists:
         st.info("Ei shortlisteja vielä. Luo listat Home/Team View -sivuilla tai luo uusi tässä.")
         new_name = st.text_input("Uuden shortlistin nimi", value="default", key="pe_new_shortlist_name")
-        if st.button("Luo shortlist"):
+        if st.button("Luo shortlist", type="primary"):
             if new_name.strip():
                 shortlists[new_name.strip()] = []
                 _save_shortlists(shortlists)
@@ -505,7 +505,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
 
     # Lisää ensimmäinen rivi, jos rosteri on tyhjä
     if empty_state:
-        if st.button("➕ Create first player row", key=f"pe_first_row__{selected_team}"):
+        if st.button("➕ Create first player row", key=f"pe_first_row__{selected_team}", type="primary"):
             df_master = df_master.loc[:, ~df_master.columns.duplicated()]
             new_id = _new_player_id()
             new_row = {col: "" for col in df_master.columns}
@@ -525,7 +525,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             num_rows="dynamic",
             key=f"pe_full_editor__{selected_team}"
         )
-        if st.button("💾 Save table", key=f"pe_save_table__{selected_team}"):
+        if st.button("💾 Save table", key=f"pe_save_table__{selected_team}", type="primary"):
             df_master.loc[:, edit_cols] = table_edit.loc[:, edit_cols].values
 
             # numerot (except PlayerID)
@@ -548,7 +548,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
 
     # Lisää uusi rivi -osio
     with st.expander("➕ Add New Player", expanded=False):
-        if st.button("Add row", key=f"pe_add_row__{selected_team}"):
+        if st.button("Add row", key=f"pe_add_row__{selected_team}", type="primary"):
             df_master = df_master.loc[:, ~df_master.columns.duplicated()]
             new_id = _new_player_id()
             new_row = {col: "" for col in df_master.columns}
@@ -637,7 +637,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         if problems:
             st.info(" | ".join(problems))
 
-        if st.button("💾 Save Basic Info", key=f"{selected_team}_{pid_str}_save_basic"):
+        if st.button("💾 Save Basic Info", key=f"{selected_team}_{pid_str}_save_basic", type="primary"):
             idxs = df_master[df_master["PlayerID"] == pid_str].index
             if not idxs.empty:
                 idx = idxs[0]
@@ -662,11 +662,12 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 key=f"{pid_str}_nav_report",
                 on_click=go,
                 args=("Reports",),
+                type="primary",
             )
 
         st.markdown("---")
         st.markdown("### 📄 Save THIS player to storage")
-        if st.button("⬇️ Save THIS player", key=f"{selected_team}_{pid_str}_push_this"):
+        if st.button("⬇️ Save THIS player", key=f"{selected_team}_{pid_str}_push_this", type="primary"):
             player_data = {
                 "id": pid_str,
                 "name": _as_str(name_val),
@@ -718,7 +719,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         st.session_state[tags_key] = tag_str
         st.caption("Vinkki: muutama iskevä tagi (esim. 'Press-resistance, Pace, Leader').")
 
-        if st.button("💾 Save tags", key=f"{selected_team}_{pid_str}_save_tags"):
+        if st.button("💾 Save tags", key=f"{selected_team}_{pid_str}_save_tags", type="primary"):
             tags = [t.strip() for t in tag_str.split(",") if t.strip()]
             client = get_client()
             if client:
@@ -760,7 +761,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                         use_container_width=True,
                         key=f"{selected_team}_{pid_str}_stats_new"
                     )
-                    if st.button("💾 Create Season Stats", key=f"{selected_team}_{pid_str}_stats_create"):
+                    if st.button("💾 Create Season Stats", key=f"{selected_team}_{pid_str}_stats_create", type="primary"):
                         merged = pd.concat([stats_df, edited_stats], ignore_index=True)
                         save_seasonal_stats(merged, selected_team)
                         st.success("Season stats created.")
@@ -771,7 +772,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                         use_container_width=True,
                         key=f"{selected_team}_{pid_str}_stats_edit"
                     )
-                    if st.button("💾 Save Season Stats", key=f"{selected_team}_{pid_str}_stats_save"):
+                    if st.button("💾 Save Season Stats", key=f"{selected_team}_{pid_str}_stats_save", type="primary"):
                         mask = stats_df[name_col] == selected_name
                         stats_df.loc[mask, :] = edited_stats.values
                         save_seasonal_stats(stats_df, selected_team)
@@ -802,7 +803,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         st.subheader("🗑️ Actions")
         a1, a2, a3 = st.columns(3)
         with a1:
-            if st.button("Duplicate row", key=f"{selected_team}_{pid_str}_dup"):
+            if st.button("Duplicate row", key=f"{selected_team}_{pid_str}_dup", type="primary"):
                 copy = df_master[df_master["PlayerID"]==pid_str].iloc[0].copy()
                 copy["PlayerID"] = _new_player_id()
                 copy["Name"] = f"{copy.get('Name','')} (copy)"
@@ -812,7 +813,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 st.success("Row duplicated.")
         with a2:
             new_team = st.selectbox("Move to team", options=[""] + list_teams(), index=0, key=f"{selected_team}_{pid_str}_move_team")
-            if new_team and st.button("Move now", key=f"{selected_team}_{pid_str}_move_now"):
+            if new_team and st.button("Move now", key=f"{selected_team}_{pid_str}_move_now", type="primary"):
                 if new_team == selected_team:
                     st.warning("Same team selected.")
                 else:
@@ -836,7 +837,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         with a3:
             st.warning("Type DELETE to confirm deletion from master file", icon="⚠️")
             conf = st.text_input("Confirmation", key=f"{selected_team}_{pid_str}_del_conf", placeholder="DELETE")
-            if st.button("Delete row from master", key=f"{selected_team}_{pid_str}_del_row", disabled=(conf != "DELETE")):
+            if st.button("Delete row from master", key=f"{selected_team}_{pid_str}_del_row", disabled=(conf != "DELETE"), type="secondary"):
                 df_master = df_master[df_master["PlayerID"] != pid_str]
                 _save_master_sanitized(df_master, selected_team)
                 st.cache_data.clear()
@@ -846,13 +847,13 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         st.subheader("Remove from storage")
         st.caption("Siivoa taustavarastoa sotkematta master-tiedostoa.")
         conf2 = st.text_input("Type REMOVE to confirm", key=f"{selected_team}_{pid_str}_del_store_conf", placeholder="REMOVE")
-        if st.button("Remove by PlayerID", key=f"{selected_team}_{pid_str}_del_store_byid", disabled=(conf2 != "REMOVE")):
+        if st.button("Remove by PlayerID", key=f"{selected_team}_{pid_str}_del_store_byid", disabled=(conf2 != "REMOVE"), type="secondary"):
             n = remove_from_players_storage_by_ids([str(pid_str)])
             if n:
                 clear_players_cache()
             st.success(f"Removed {n} record(s) by id.")
 
-        if st.button("Remove by (name, team) pair", key=f"{selected_team}_{pid_str}_del_store_bykey", disabled=(conf2 != "REMOVE")):
+        if st.button("Remove by (name, team) pair", key=f"{selected_team}_{pid_str}_del_store_bykey", disabled=(conf2 != "REMOVE"), type="secondary"):
             nm = selected_name.strip(); tm = _as_str(selected_team)
             ids = []
             client = get_client()

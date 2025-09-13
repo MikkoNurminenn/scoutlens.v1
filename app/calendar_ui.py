@@ -186,9 +186,9 @@ def _form(default: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
 
     c1, c2 = st.columns(2)
     with c1:
-        save = st.button("Save", use_container_width=True)
+        save = st.button("Save", use_container_width=True, type="primary")
     with c2:
-        cancel = st.button("Cancel", use_container_width=True)
+        cancel = st.button("Cancel", use_container_width=True, type="secondary")
 
     if cancel:
         st.session_state[K_MODE] = None
@@ -294,12 +294,12 @@ def _card(m: Dict[str, Any], tz: str):
 
     c1, c2, _ = st.columns([1, 1, 2])
     with c1:
-        if st.button(f"Edit {m['id']}", key=f"edit_{m['id']}", use_container_width=True):
+        if st.button(f"Edit {m['id']}", key=f"edit_{m['id']}", use_container_width=True, type="primary"):
             st.session_state[K_MODE] = "edit"
             st.session_state[K_EDIT] = m["id"]
             st.rerun()
     with c2:
-        if st.button(f"Delete {m['id']}", key=f"del_{m['id']}", use_container_width=True):
+        if st.button(f"Delete {m['id']}", key=f"del_{m['id']}", use_container_width=True, type="secondary"):
             _delete(m["id"])
             st.success("Deleted.")
             st.rerun()
@@ -310,11 +310,11 @@ def show_calendar():
 
     t1, t2, t3 = st.columns([0.3, 0.3, 0.4])
     with t1:
-        if st.button("↻ Reload", help="Clear cache and reload", use_container_width=True):
+        if st.button("↻ Reload", help="Clear cache and reload", use_container_width=True, type="secondary"):
             _bust()
             st.rerun()
     with t2:
-        if st.button("➕ Add match", use_container_width=True):
+        if st.button("➕ Add match", use_container_width=True, type="primary"):
             st.session_state[K_MODE] = "add"
             st.session_state[K_EDIT] = None
     with t3:

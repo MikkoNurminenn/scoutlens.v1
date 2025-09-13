@@ -240,7 +240,7 @@ def show_home():
             placeholder="Observations, ideas, follow-ups…",
             height=100,
         )
-        if st.button("Save note", use_container_width=True):
+        if st.button("Save note", use_container_width=True, type="primary"):
             _append_note(text)
             st.success("Saved.")
             st.cache_data.clear()  # nollaa _load_notes cache
