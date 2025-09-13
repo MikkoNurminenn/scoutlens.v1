@@ -68,7 +68,7 @@ def show_inspect_player() -> None:
     player = next((p for p in players if p["id"] == player_id), players[0])
 
     # --- Player header (compact) — poistettu Position ja Age ---
-    st.subheader(player["name"])
+    header = st.empty()
     c1, c2 = st.columns(2)
     c1.metric("Club", player.get("current_club") or player.get("team_name") or "—")
     c2.metric("Nationality", player.get("nationality") or "—")
@@ -108,10 +108,12 @@ def show_inspect_player() -> None:
             or []
         )
     except APIError as e:
+        header.subheader(f"{player['name']} — Avg —")
         st.error(f"Failed to load reports: {e}")
         return
 
     if not reports:
+        header.subheader(f"{player['name']} — Avg —")
         st.info("No reports yet for this player.")
         return
 
@@ -170,6 +172,17 @@ def show_inspect_player() -> None:
                 (df["Date"] >= pd.to_datetime(start)) &
                 (df["Date"] <= pd.to_datetime(end))
             ]
+    avg_cols: dict[str, float | None] = {}
+    for col in ["Tech", "GI", "MENT", "ATH"]:
+        if col in df.columns:
+            mean_val = df[col].dropna().mean()
+            avg_cols[col] = round(float(mean_val), 1) if pd.notna(mean_val) else None
+        else:
+            avg_cols[col] = None
+
+    overall_avg = _avg_0_5(*(v for v in avg_cols.values() if v is not None))
+    overall_avg_str = f"{overall_avg:.1f}" if overall_avg is not None else "—"
+    header.subheader(f"{player['name']} — Avg {overall_avg_str}")
 
     if df.empty:
         st.warning("No reports match the current filters.")
