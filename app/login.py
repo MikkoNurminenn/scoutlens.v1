@@ -121,9 +121,9 @@ def _clear_failures() -> None:
 # ============================
 def logout() -> None:
     _ensure_auth_state()
-    st.session_state["auth"]["authenticated"] = False
-    st.session_state["auth"]["user"] = None
-    st.rerun()
+    auth = st.session_state["auth"]
+    auth["authenticated"] = False
+    auth["user"] = None
 
 def login(
     title: str = "ScoutLens",
