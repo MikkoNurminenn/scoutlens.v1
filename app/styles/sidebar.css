@@ -63,6 +63,11 @@ section[data-testid="stSidebar"] a:hover {
   color: color-mix(in srgb, var(--fg-strong) 85%, var(--accent-1) 15%);
 }
 
+.sb-user {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-sm);
+}
+
 /* Liikettä vähentäville käyttäjille: poista siirtymät/siirrot */
 @media (prefers-reduced-motion: reduce) {
   section[data-testid="stSidebar"] [role="radiogroup"] > label {

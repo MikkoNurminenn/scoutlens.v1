@@ -42,6 +42,7 @@ show_inspect_player = _safe_import("inspect player", "app.inspect_player", "show
 show_shortlists_page= _safe_import("shortlists",     "app.shortlists_page","show_shortlists_page")
 show_export_page    = _safe_import("export",         "app.export_page",    "show_export_page")
 login               = _safe_import("login",          "app.login",          "login")
+logout              = _safe_import("logout",         "app.login",          "logout")
 
 APP_TITLE   = "ScoutLens"
 APP_TAGLINE = "LATAM scouting toolkit"
@@ -111,6 +112,16 @@ def main() -> None:
             label_visibility="collapsed",
             on_change=lambda: go(st.session_state["_nav_radio"]),
         )
+
+        auth = st.session_state.get("auth", {})
+        user = auth.get("user")
+        if auth.get("authenticated") and user:
+            name = user.get("name") or user.get("username", "")
+            st.markdown(
+                f"<div class='sb-user'>Signed in as {name}</div>",
+                unsafe_allow_html=True,
+            )
+            st.button("Sign out", on_click=logout)
 
         st.markdown(
             f"<div class='sb-footer'><strong>{APP_TITLE}</strong> v{APP_VERSION}</div>",
