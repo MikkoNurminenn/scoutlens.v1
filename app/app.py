@@ -40,6 +40,7 @@ def _safe_import(what: str, mod: str, attr: str):
 show_reports_page   = _safe_import("reports page",   "app.reports_page",   "show_reports_page")
 show_inspect_player = _safe_import("inspect player", "app.inspect_player", "show_inspect_player")
 show_shortlists_page= _safe_import("shortlists",     "app.shortlists_page","show_shortlists_page")
+show_player_management_page = _safe_import("player management", "app.player_management", "show_player_management_page")
 show_export_page    = _safe_import("export",         "app.export_page",    "show_export_page")
 login               = _safe_import("login",          "app.login",          "login")
 logout              = _safe_import("logout",         "app.login",          "logout")
@@ -60,11 +61,12 @@ def inject_css():
         st.markdown(f"<style>{'\n'.join(parts)}</style>", unsafe_allow_html=True)
 
 # --------- Nav
-NAV_KEYS = ["Reports", "Inspect Player", "Shortlists", "Export"]
+NAV_KEYS = ["Reports", "Inspect Player", "Shortlists", "Players", "Export"]
 NAV_LABELS = {
     "Reports": "📝 Reports",
     "Inspect Player": "🔍 Inspect Player",
     "Shortlists": "⭐ Shortlists",
+    "Players": "👤 Players",
     "Export": "⬇️ Export",
 }
 LEGACY_REMAP = {
@@ -78,6 +80,7 @@ PAGE_FUNCS = {
     "Reports": show_reports_page,
     "Inspect Player": show_inspect_player,
     "Shortlists": show_shortlists_page,
+    "Players": show_player_management_page,
     "Export": show_export_page,
 }
 
