@@ -4,9 +4,8 @@ import streamlit as st
 
 
 def go(page: str) -> None:
-    """Switch to the given page and trigger a rerun."""
+    """Switch to the given page by updating session state."""
     st.session_state["current_page"] = page
-    st.rerun()
 
 
 __all__ = ["go"]
