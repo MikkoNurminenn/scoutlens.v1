@@ -290,27 +290,23 @@ def show_reports_page() -> None:
 
         if "Foot" in df_f.columns:
             df_f["Foot"] = df_f["Foot"].fillna("").astype(str).str.capitalize()
+        def _highlight_class(v: float | None) -> str:
+            if pd.isna(v):
+                return ""
+            if v >= 4:
+                return "sl-highlight"
+            if v <= 2:
+                return "sl-highlight-error"
+            return "sl-highlight-warning"
 
-        def _style_vals(s: pd.Series) -> list[str]:
-            colors: list[str] = []
-            for v in s:
-                if pd.isna(v):
-                    colors.append("")
-                elif isinstance(v, (int, float)):
-                    if v >= 4:
-                        colors.append("background-color: rgba(0, 200, 120, 0.15)")
-                    elif v <= 2:
-                        colors.append("background-color: rgba(255, 80, 80, 0.15)")
-                    else:
-                        colors.append("")
-                else:
-                    colors.append("")
-            return colors
+        classes = pd.DataFrame("", index=df_f.index, columns=df_f.columns)
+        for col in ["Tech", "GI", "MENT", "ATH"]:
+            if col in classes.columns:
+                classes[col] = df_f[col].apply(_highlight_class)
 
         with track("reports:style"):
             styler = (
-                df_f.style
-                .apply(_style_vals, subset=["Tech", "GI", "MENT", "ATH"])
+                df_f.style.set_td_classes(classes)
                 .set_properties(subset=["Comments"], **{"text-align": "left", "white-space": "pre-wrap"})
             )
 

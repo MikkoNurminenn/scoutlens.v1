@@ -99,3 +99,27 @@
   border-color:var(--accent-1);
   box-shadow:0 0 0 1px var(--accent-1);
 }
+
+/* Highlights */
+.sl-highlight,
+.sl-highlight-warning,
+.sl-highlight-error {
+  padding: var(--space-1) var(--space-2);
+  border-left:4px solid;
+  border-radius:var(--radius-sm);
+}
+
+.sl-highlight {
+  border-color:var(--accent-cyan);
+  background:color-mix(in srgb, var(--accent-cyan) 20%, transparent);
+}
+
+.sl-highlight-warning {
+  border-color:var(--warning);
+  background:color-mix(in srgb, var(--warning) 20%, transparent);
+}
+
+.sl-highlight-error {
+  border-color:var(--error);
+  background:color-mix(in srgb, var(--error) 20%, transparent);
+}
