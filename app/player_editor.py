@@ -4,9 +4,9 @@
 
 Fixes:
 - Resolved merge conflicts in `remove_from_players_storage_by_ids`.
-- Uses row-per-membership `shortlists` table with `player_id` for cleanup.
+- Uses row-per-membership `shortlist_items` table with `player_id` for cleanup (with legacy fallback).
 - Cleans up `player_notes` before deleting players.
-- Removed stray ``KORJAA TÄÄ`` that caused a SyntaxError.
+- Removed stray tokens that caused a SyntaxError.
 - Minor defensive guards; no functional changes to UI.
 """
 from __future__ import annotations
@@ -366,8 +366,9 @@ def upsert_player_storage(player: dict) -> str:
 def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     """Remove players and dependent rows in a safe order.
 
-    Assumes `shortlists_items` has one row per membership with a ``player_id``
+    Assumes `shortlist_items` has one row per membership with a ``player_id``
     column, and player notes reside in ``player_notes`` with ``player_id``.
+    Falls back to legacy schemas where necessary.
     """
     client = get_client()
     if not client:
@@ -379,21 +380,35 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
         # Delete dependents first to avoid FK violations
         client.table("reports").delete().in_("player_id", ids).execute()
 
-        resp = (
-            client.table("shortlists_items")
-            .select("shortlist_id, player_id")
-            .in_("player_id", ids)
-            .execute()
-        )
-        data = getattr(resp, "data", None) or []
-        by_shortlist: Dict[str, List[str]] = {}
-        for row in data:
-            sid = row.get("shortlist_id")
-            pid = row.get("player_id")
-            if sid is not None and pid is not None:
-                by_shortlist.setdefault(str(sid), []).append(str(pid))
-        for sid, pids in by_shortlist.items():
-            remove_players_from_shortlist(client=client, shortlist_id=sid, player_ids=pids)
+        # Normalized schema: one row per membership in `shortlist_items`
+        try:
+            client.table("shortlist_items").delete().in_("player_id", ids).execute()
+        except APIError as e:
+            # Fallbacks for legacy schemas
+            msg = getattr(e, "message", "")
+            code = getattr(e, "code", "")
+            if "shortlist_items" in msg or code in {"42703", "42P01"}:
+                # 1) Older table name `shortlists_items`
+                try:
+                    client.table("shortlists_items").delete().in_("player_id", ids).execute()
+                except Exception:
+                    pass
+                # 2) Legacy array-based `shortlists.player_ids`
+                try:
+                    res = (
+                        client.table("shortlists").select("id, player_ids").execute()
+                    )
+                    for row in res.data or []:
+                        plist = row.get("player_ids") or []
+                        if any(pid in ids for pid in plist):
+                            new_ids = [pid for pid in plist if pid not in ids]
+                            client.table("shortlists").update({"player_ids": new_ids}).eq(
+                                "id", row.get("id")
+                            ).execute()
+                except Exception:
+                    pass
+            else:
+                raise
 
         client.table("player_notes").delete().in_("player_id", ids).execute()
         client.table("players").delete().in_("id", ids).execute()
@@ -1103,4 +1118,5 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                     clear_players_cache()
                 st.success(f"Removed {n} record(s) by (name, team).")
             else:
+                # Nothing matched in storage — avoid SyntaxError from stray text.
                 st.info("No records matched (name, team) in storage.")

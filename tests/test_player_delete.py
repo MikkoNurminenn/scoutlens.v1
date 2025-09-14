@@ -1,7 +1,9 @@
 # tests/test_player_editor.py
 import pytest
+from types import SimpleNamespace
 
 from app import player_editor
+from postgrest.exceptions import APIError
 
 
 def test_remove_from_players_storage_by_ids_cascades(monkeypatch):
@@ -91,3 +93,58 @@ def test_remove_from_players_storage_by_ids_cascades(monkeypatch):
     ]
     for f in forbidden:
         assert f not in calls
+
+
+def test_remove_from_players_storage_by_ids_fallback(monkeypatch):
+    calls = []
+
+    class Table:
+        def __init__(self, name):
+            self.name = name
+            self._data = []
+
+        def delete(self):
+            calls.append((self.name, "delete"))
+            return self
+
+        def in_(self, column, values):
+            calls.append((self.name, "in", column, list(values)))
+            return self
+
+        def select(self, cols):
+            calls.append((self.name, "select", cols))
+            if self.name == "shortlists":
+                self._data = [{"id": "sl1", "player_ids": ["a"]}]
+            return self
+
+        def contains(self, column, values):
+            calls.append((self.name, "contains", column, list(values)))
+            return self
+
+        def update(self, data):
+            calls.append((self.name, "update", data))
+            return self
+
+        def eq(self, column, value):
+            calls.append((self.name, "eq", column, value))
+            return self
+
+        def execute(self):
+            calls.append((self.name, "execute"))
+            if self.name == "shortlist_items":
+                raise APIError({"message": "column shortlists.player_id does not exist", "code": "42703"})
+            return SimpleNamespace(data=self._data)
+
+    class Client:
+        def table(self, name):
+            calls.append((name, "table"))
+            return Table(name)
+
+    monkeypatch.setattr(player_editor, "get_client", lambda: Client())
+
+    n = player_editor.remove_from_players_storage_by_ids(["a"])
+    assert n == 1
+
+    # Fallback path hits shortlists operations
+    assert ("shortlists", "select", "id, player_ids") in calls
+    assert ("shortlists", "update", {"player_ids": []}) in calls
