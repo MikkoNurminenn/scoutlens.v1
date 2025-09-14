@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
+from tools.db_delete_helpers import DeleteError, remove_players_from_shortlist
 
 from app.ui import bootstrap_sidebar_auto_collapse
 
@@ -365,8 +366,8 @@ def upsert_player_storage(player: dict) -> str:
 def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     """Remove players and dependent rows in a safe order.
 
-    Assumes `shortlist_items` has one row per membership with a `player_id`
-    column, and player notes reside in `player_notes` with `player_id`.
+    Assumes `shortlists_items` has one row per membership with a ``player_id``
+    column, and player notes reside in ``player_notes`` with ``player_id``.
     """
     client = get_client()
     if not client:
@@ -377,9 +378,29 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     try:
         # Delete dependents first to avoid FK violations
         client.table("reports").delete().in_("player_id", ids).execute()
-        client.table("shortlist_items").delete().in_("player_id", ids).execute()
+
+        resp = (
+            client.table("shortlists_items")
+            .select("shortlist_id, player_id")
+            .in_("player_id", ids)
+            .execute()
+        )
+        data = getattr(resp, "data", None) or []
+        by_shortlist: Dict[str, List[str]] = {}
+        for row in data:
+            sid = row.get("shortlist_id")
+            pid = row.get("player_id")
+            if sid is not None and pid is not None:
+                by_shortlist.setdefault(str(sid), []).append(str(pid))
+        for sid, pids in by_shortlist.items():
+            remove_players_from_shortlist(client=client, shortlist_id=sid, player_ids=pids)
+
         client.table("player_notes").delete().in_("player_id", ids).execute()
         client.table("players").delete().in_("id", ids).execute()
+    except DeleteError as e:
+        st.error("❌ Shortlist delete failed")
+        st.code(str(e), language="text")
+        raise
     except APIError as e:  # pragma: no cover - network
         st.error("❌ Delete failed")
         st.code(getattr(e, "message", e), language="text")
