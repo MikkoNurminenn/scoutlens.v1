@@ -298,7 +298,19 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     try:
         # Delete dependent rows first to avoid FK violations
         client.table("reports").delete().in_("player_id", ids).execute()
-        client.table("shortlists").delete().in_("player_id", ids).execute()
+        # Remove ids from any shortlists referencing them
+        res = (
+            client
+            .table("shortlists")
+            .select("id, player_ids")
+            .contains("player_ids", ids)
+            .execute()
+        )
+        for row in (getattr(res, "data", None) or []):
+            existing = [str(pid) for pid in (row.get("player_ids") or [])]
+            new_list = [pid for pid in existing if pid not in ids]
+            if len(new_list) != len(existing):
+                client.table("shortlists").update({"player_ids": new_list}).eq("id", row["id"]).execute()
         client.table("notes").delete().in_("player_id", ids).execute()
         client.table("players").delete().in_("id", ids).execute()
     except Exception:
