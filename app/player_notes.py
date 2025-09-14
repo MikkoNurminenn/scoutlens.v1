@@ -7,7 +7,7 @@ from postgrest.exceptions import APIError
 from app.supabase_client import get_client
 
 
-TABLE = "player_notes"
+TABLE = "notes"
 
 
 def get_player_notes(player_id: str) -> List[Dict[str, Any]]:
