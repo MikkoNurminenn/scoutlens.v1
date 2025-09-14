@@ -207,7 +207,11 @@ def show_inspect_player() -> None:
     for col in ["Tech", "GI", "MENT", "ATH"]:
         if col in classes.columns:
             classes[col] = df[col].apply(_highlight_class)
-    styler = df.style.set_td_classes(classes)
+    styler = (
+        df.style
+        .set_td_classes(classes)
+        .format({col: "{:.1f}" for col in ["Tech", "GI", "MENT", "ATH"]})
+    )
 
     st.caption(f"Reports: **{len(df)}**")
     st.dataframe(styler, use_container_width=True)
