@@ -11,6 +11,8 @@
   --warning: #F59E0B;
   --error: #DA3C2B;
   --divider: rgba(36, 23, 0, 0.12);
+  --skeleton-highlight: rgba(36, 23, 0, 0.06);
+  --table-row-alt: rgba(36, 23, 0, 0.02);
 
   /* Typography */
   --font-sans: 'Inter', sans-serif;

@@ -14,6 +14,8 @@
   --warning: #F59E0B;     /* lämmin varoitus */
   --error: #DA3C2B;       /* tiilenpunainen virheväri */
   --divider: rgba(254, 244, 221, 0.12); /* lämmin, kevyt jakaja */
+  --skeleton-highlight: rgba(254, 244, 221, 0.06);
+  --table-row-alt: rgba(254, 244, 221, 0.02);
 
   /* Typography */
   --font-sans: 'Inter', sans-serif;

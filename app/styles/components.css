@@ -87,14 +87,14 @@
 }
 
 /* Table wrapper */
-.sl-table .stDataFrame, .sl-table .stTable {
-  border:1px solid var(--divider);
-  border-radius:var(--radius-md);
-  overflow:hidden;
-}
-.sl-table thead tr { position:sticky; top:0; background:var(--bg-card); }
-.sl-table tbody tr:nth-child(even){ background:rgba(255,255,255,0.02); }
-.sl-table tbody tr:hover{ background:color-mix(in srgb, var(--accent-1) 10%, transparent); }
+  .sl-table .stDataFrame, .sl-table .stTable {
+    border:1px solid var(--divider);
+    border-radius:var(--radius-md);
+    overflow:hidden;
+  }
+  .sl-table thead tr { position:sticky; top:0; background:var(--bg-card); }
+  .sl-table tbody tr:nth-child(even){ background:var(--table-row-alt); }
+  .sl-table tbody tr:hover{ background:color-mix(in srgb, var(--accent-1) 10%, transparent); }
 
 /* Badge link */
 .sl-badge-link {
