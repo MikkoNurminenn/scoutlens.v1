@@ -41,6 +41,7 @@ def build_sidebar(
     app_version: str,
     go: Callable[[str], None],
     logout: Callable[[], None],
+    inject_css: Callable[[], None] | None = None,
 ) -> None:
     """Render the application sidebar."""
 
@@ -62,6 +63,16 @@ def build_sidebar(
             key="_nav_radio",
             label_visibility="collapsed",
             on_change=lambda: go(st.session_state["_nav_radio"]),
+        )
+
+        theme_options = ["dark", "light"]
+        current_theme = st.session_state.get("theme", "dark")
+        st.selectbox(
+            "Theme",
+            options=theme_options,
+            index=theme_options.index(current_theme),
+            key="theme",
+            on_change=inject_css,
         )
 
         auth = st.session_state.get("auth", {})

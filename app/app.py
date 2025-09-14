@@ -84,8 +84,10 @@ APP_VERSION = "0.9.1"
 
 def inject_css():
     styles_dir = ROOT / "app" / "styles"
+    theme = st.session_state.get("theme", "dark")
+    token_file = f"tokens_{theme}.css"
     parts = []
-    for name in ["tokens.css", "layout.css", "components.css", "sidebar.css", "animations.css"]:
+    for name in [token_file, "layout.css", "components.css", "sidebar.css", "animations.css"]:
         p = styles_dir / name
         if p.exists():
             parts.append(p.read_text(encoding="utf-8"))
@@ -132,6 +134,9 @@ def main() -> None:
     except Exception:
         pass
 
+    if "theme" not in st.session_state:
+        st.session_state["theme"] = "dark"
+
     inject_css()
     set_sidebar_background()
     login()
@@ -152,6 +157,7 @@ def main() -> None:
         app_version=APP_VERSION,
         go=go,
         logout=logout,
+        inject_css=inject_css,
     )
 
     page_func = PAGE_FUNCS.get(current, lambda: st.error("Page not found."))
