@@ -294,8 +294,13 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     client = get_client()
     if not client:
         return 0
+    ids = [str(i) for i in ids]
     try:
-        client.table("players").delete().in_("id", [str(i) for i in ids]).execute()
+        # Delete dependent rows first to avoid FK violations
+        client.table("reports").delete().in_("player_id", ids).execute()
+        client.table("shortlists").delete().in_("player_id", ids).execute()
+        client.table("notes").delete().in_("player_id", ids).execute()
+        client.table("players").delete().in_("id", ids).execute()
     except Exception:
         st.error("❌ Delete failed")
         st.code("".join(traceback.format_exc()), language="text")
