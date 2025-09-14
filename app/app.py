@@ -84,8 +84,7 @@ APP_VERSION = "0.9.1"
 
 def inject_css():
     styles_dir = ROOT / "app" / "styles"
-    theme = st.session_state.get("theme", "dark")
-    token_file = f"tokens_{theme}.css"
+    token_file = "tokens_dark.css"
     parts = []
     for name in [token_file, "layout.css", "components.css", "sidebar.css", "animations.css"]:
         p = styles_dir / name
@@ -141,9 +140,6 @@ def main() -> None:
         bootstrap_sidebar_auto_collapse()
     except Exception:
         pass
-
-    if "theme" not in st.session_state:
-        st.session_state["theme"] = "dark"
 
     login()
 
