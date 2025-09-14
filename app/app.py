@@ -27,7 +27,20 @@ if not _spec or not getattr(_spec, "origin", None):
     )
     st.stop()
 
-# ---- Sivujen importit diagnoosilla
+# ---- Delay all local imports until after bootstrapping
+track = importlib.import_module("app.perf").__getattribute__("track")
+render_perf = importlib.import_module("app.perf").__getattribute__("render_perf")
+go = importlib.import_module("app.ui.nav").__getattribute__("go")
+bootstrap_sidebar_auto_collapse = importlib.import_module("app.ui").__getattribute__(
+    "bootstrap_sidebar_auto_collapse"
+)
+set_sidebar_background = importlib.import_module("app.ui.sidebar_bg").__getattribute__(
+    "set_sidebar_background"
+)
+
+st.set_page_config(page_title="ScoutLens", layout="wide", initial_sidebar_state="expanded")
+
+# ---- Page imports (Streamlit-safe wrapper)
 
 def _safe_import(what: str, mod: str, attr: str):
     """Import attribute with on-screen diagnostics (Streamlit-safe)."""
@@ -35,7 +48,7 @@ def _safe_import(what: str, mod: str, attr: str):
         m = importlib.import_module(mod)
         v = getattr(m, attr)
         return v
-    except Exception as e:
+    except Exception as e:  # why: surface exact failure to the UI for non-dev users
         st.error(f"ImportError while importing {what} from {mod}.{attr}: {e}")
         st.code(
             "Debug info:\n"
@@ -47,28 +60,20 @@ def _safe_import(what: str, mod: str, attr: str):
         )
         st.stop()
 
-# ---- Delay all local imports until after bootstrapping
-track            = _safe_import("perf.track",         "app.perf",           "track")
-render_perf      = _safe_import("perf.render_perf",  "app.perf",           "render_perf")
-go               = _safe_import("nav.go",            "app.ui.nav",         "go")
-bootstrap_sidebar_auto_collapse = _safe_import(
-    "ui.bootstrap_sidebar_auto_collapse", "app.ui", "bootstrap_sidebar_auto_collapse"
+show_reports_page = _safe_import("reports page", "app.reports_page", "show_reports_page")
+show_inspect_player = _safe_import("inspect player", "app.inspect_player", "show_inspect_player")
+show_shortlists_page = _safe_import("shortlists", "app.shortlists_page", "show_shortlists_page")
+show_player_management_page = _safe_import(
+    "player management", "app.player_management", "show_player_management_page"
 )
-set_sidebar_background = _safe_import(
-    "ui.set_sidebar_background", "app.ui.sidebar_bg", "set_sidebar_background"
+show_shortlist_management_page = _safe_import(
+    "shortlist management", "app.shortlist_management", "show_shortlist_management_page"
 )
+show_export_page = _safe_import("export", "app.export_page", "show_export_page")
+login = _safe_import("login", "app.login", "login")
+logout = _safe_import("logout", "app.login", "logout")
 
-st.set_page_config(page_title="ScoutLens", layout="wide", initial_sidebar_state="expanded")
-
-show_reports_page            = _safe_import("reports page",        "app.reports_page",     "show_reports_page")
-show_inspect_player          = _safe_import("inspect player",      "app.inspect_player",   "show_inspect_player")
-show_shortlists_page         = _safe_import("shortlists",          "app.shortlists_page",  "show_shortlists_page")
-show_player_management_page  = _safe_import("player management",   "app.player_management", "show_player_management_page")
-show_export_page             = _safe_import("export",              "app.export_page",      "show_export_page")
-login                        = _safe_import("login",               "app.login",            "login")
-logout                       = _safe_import("logout",              "app.login",            "logout")
-
-APP_TITLE   = "ScoutLens"
+APP_TITLE = "ScoutLens"
 APP_TAGLINE = "LATAM scouting toolkit"
 APP_VERSION = "0.9.1"
 
@@ -85,11 +90,19 @@ def inject_css():
         st.markdown(f"<style>{'\n'.join(parts)}</style>", unsafe_allow_html=True)
 
 # --------- Nav
-NAV_KEYS = ["Reports", "Inspect Player", "Shortlists", "Players", "Export"]
+NAV_KEYS = [
+    "Reports",
+    "Inspect Player",
+    "Shortlists",
+    "Manage Shortlists",
+    "Players",
+    "Export",
+]
 NAV_LABELS = {
     "Reports": "📝 Reports",
     "Inspect Player": "🔍 Inspect Player",
     "Shortlists": "⭐ Shortlists",
+    "Manage Shortlists": "🗑️ Manage Shortlists",
     "Players": "👤 Players",
     "Export": "⬇️ Export",
 }
@@ -104,6 +117,7 @@ PAGE_FUNCS = {
     "Reports": show_reports_page,
     "Inspect Player": show_inspect_player,
     "Shortlists": show_shortlists_page,
+    "Manage Shortlists": show_shortlist_management_page,
     "Players": show_player_management_page,
     "Export": show_export_page,
 }
