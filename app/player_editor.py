@@ -22,6 +22,7 @@ from uuid import uuid4
 import numpy as np
 import pandas as pd
 import streamlit as st
+from postgrest.exceptions import APIError
 
 from app.ui import bootstrap_sidebar_auto_collapse
 
@@ -364,8 +365,8 @@ def upsert_player_storage(player: dict) -> str:
 def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     """Remove players and dependent rows in a safe order.
 
-    Assumes `shortlists` has one row per membership with a `player_id` column,
-    and player notes reside in `player_notes` with `player_id`.
+    Assumes `shortlist_items` has one row per membership with a `player_id`
+    column, and player notes reside in `player_notes` with `player_id`.
     """
     client = get_client()
     if not client:
@@ -376,9 +377,13 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     try:
         # Delete dependents first to avoid FK violations
         client.table("reports").delete().in_("player_id", ids).execute()
-        client.table("shortlists").delete().in_("player_id", ids).execute()
+        client.table("shortlist_items").delete().in_("player_id", ids).execute()
         client.table("player_notes").delete().in_("player_id", ids).execute()
         client.table("players").delete().in_("id", ids).execute()
+    except APIError as e:  # pragma: no cover - network
+        st.error("❌ Delete failed")
+        st.code(getattr(e, "message", e), language="text")
+        raise
     except Exception:
         st.error("❌ Delete failed")
         st.code("".join(traceback.format_exc()), language="text")
