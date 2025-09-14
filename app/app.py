@@ -1,27 +1,36 @@
-# app/app.py
+# file: app/app.py
 from __future__ import annotations
 from pathlib import Path
 import importlib
+import importlib.util
 import sys
 import traceback
 import streamlit as st
 
-from app.perf import track, render_perf
-from app.ui.nav import go
-from app.ui import bootstrap_sidebar_auto_collapse
-from app.ui.sidebar_bg import set_sidebar_background
-
-# ---- Peruspolut
+# ---- Peruspolut (MUST run before any local imports)
 ROOT = Path(__file__).resolve().parent.parent
 PKG_DIR = ROOT / "app"
 if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+    sys.path.insert(0, str(ROOT))  # why: ensure local package wins over site-packages
+try:
+    (PKG_DIR / "__init__.py").touch(exist_ok=True)  # why: mark as package if missing
+except OSError:
+    pass
 importlib.invalidate_caches()
 
-st.set_page_config(page_title="ScoutLens", layout="wide", initial_sidebar_state="expanded")
+# ---- Import resolver guard (avoid 3rd‑party package named "app")
+_spec = importlib.util.find_spec("app")
+if not _spec or not getattr(_spec, "origin", None):
+    st.error(
+        "Cannot resolve local package 'app'. Check repo layout and permissions.\n"
+        f"ROOT={ROOT}\nPKG_DIR={PKG_DIR}\nsys.path[0:3]={sys.path[:3]}"
+    )
+    st.stop()
 
 # ---- Sivujen importit diagnoosilla
+
 def _safe_import(what: str, mod: str, attr: str):
+    """Import attribute with on-screen diagnostics (Streamlit-safe)."""
     try:
         m = importlib.import_module(mod)
         v = getattr(m, attr)
@@ -33,23 +42,38 @@ def _safe_import(what: str, mod: str, attr: str):
             f"ROOT={ROOT}\n"
             f"PKG_DIR exists={PKG_DIR.exists()} files={', '.join(sorted(p.name for p in PKG_DIR.glob('*')))}\n"
             f"sys.path[0:3]={sys.path[:3]}\n"
+            f"Resolved 'app' origin={getattr(_spec, 'origin', None)}\n"
             f"Traceback:\n{''.join(traceback.format_exception(type(e), e, e.__traceback__))}"
         )
         st.stop()
 
-show_reports_page   = _safe_import("reports page",   "app.reports_page",   "show_reports_page")
-show_inspect_player = _safe_import("inspect player", "app.inspect_player", "show_inspect_player")
-show_shortlists_page= _safe_import("shortlists",     "app.shortlists_page","show_shortlists_page")
-show_player_management_page = _safe_import("player management", "app.player_management", "show_player_management_page")
-show_export_page    = _safe_import("export",         "app.export_page",    "show_export_page")
-login               = _safe_import("login",          "app.login",          "login")
-logout              = _safe_import("logout",         "app.login",          "logout")
+# ---- Delay all local imports until after bootstrapping
+track            = _safe_import("perf.track",         "app.perf",           "track")
+render_perf      = _safe_import("perf.render_perf",  "app.perf",           "render_perf")
+go               = _safe_import("nav.go",            "app.ui.nav",         "go")
+bootstrap_sidebar_auto_collapse = _safe_import(
+    "ui.bootstrap_sidebar_auto_collapse", "app.ui", "bootstrap_sidebar_auto_collapse"
+)
+set_sidebar_background = _safe_import(
+    "ui.set_sidebar_background", "app.ui.sidebar_bg", "set_sidebar_background"
+)
+
+st.set_page_config(page_title="ScoutLens", layout="wide", initial_sidebar_state="expanded")
+
+show_reports_page            = _safe_import("reports page",        "app.reports_page",     "show_reports_page")
+show_inspect_player          = _safe_import("inspect player",      "app.inspect_player",   "show_inspect_player")
+show_shortlists_page         = _safe_import("shortlists",          "app.shortlists_page",  "show_shortlists_page")
+show_player_management_page  = _safe_import("player management",   "app.player_management", "show_player_management_page")
+show_export_page             = _safe_import("export",              "app.export_page",      "show_export_page")
+login                        = _safe_import("login",               "app.login",            "login")
+logout                       = _safe_import("logout",              "app.login",            "logout")
 
 APP_TITLE   = "ScoutLens"
 APP_TAGLINE = "LATAM scouting toolkit"
 APP_VERSION = "0.9.1"
 
 # --------- CSS
+
 def inject_css():
     styles_dir = ROOT / "app" / "styles"
     parts = []
@@ -83,6 +107,7 @@ PAGE_FUNCS = {
     "Players": show_player_management_page,
     "Export": show_export_page,
 }
+
 
 def main() -> None:
     try:
@@ -128,13 +153,14 @@ def main() -> None:
 
         st.markdown(
             f"<div class='sb-footer'><strong>{APP_TITLE}</strong> v{APP_VERSION}</div>",
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
     page_func = PAGE_FUNCS.get(current, lambda: st.error("Page not found."))
     with track(f"page:{current}"):
         page_func()
     render_perf()
+
 
 if __name__ == "__main__":
     main()
