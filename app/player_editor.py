@@ -377,7 +377,33 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     try:
         # Delete dependents first to avoid FK violations
         client.table("reports").delete().in_("player_id", ids).execute()
-        client.table("shortlist_items").delete().in_("player_id", ids).execute()
+
+        # Normalized schema: one row per membership in `shortlist_items`
+        try:
+            client.table("shortlist_items").delete().in_("player_id", ids).execute()
+        except APIError as e:
+            # Fallback for legacy array-based `shortlists.player_ids` schema
+            msg = getattr(e, "message", "")
+            if "shortlists" in msg or getattr(e, "code", "") in {"42703", "42P01"}:
+                try:
+                    res = (
+                        client.table("shortlists")
+                        .select("id, player_ids")
+                        .contains("player_ids", ids)
+                        .execute()
+                    )
+                    for row in res.data or []:
+                        pid_list = [
+                            pid for pid in (row.get("player_ids") or []) if pid not in ids
+                        ]
+                        client.table("shortlists").update({"player_ids": pid_list}).eq(
+                            "id", row.get("id")
+                        ).execute()
+                except Exception:
+                    pass
+            else:
+                raise
+
         client.table("player_notes").delete().in_("player_id", ids).execute()
         client.table("players").delete().in_("id", ids).execute()
     except APIError as e:  # pragma: no cover - network
