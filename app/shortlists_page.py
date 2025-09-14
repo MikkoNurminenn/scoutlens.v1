@@ -111,6 +111,17 @@ def show_shortlists_page() -> None:
     )
     st.session_state["shortlists__sid"] = sid
 
+    if st.button("Delete shortlist", type="secondary"):
+        try:
+            sb.table("shortlist_items").delete().eq("shortlist_id", sid).execute()
+            sb.table("shortlists").delete().eq("id", sid).execute()
+            list_shortlists.clear()
+            list_shortlist_items.clear()
+            st.toast("Shortlist deleted ✅")
+            st.rerun()
+        except APIError as e:  # pragma: no cover - UI error handling
+            st.error(f"Failed to delete shortlist: {e}")
+
     # add players
     st.subheader("Add players")
     try:
