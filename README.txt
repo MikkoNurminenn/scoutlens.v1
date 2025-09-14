@@ -39,3 +39,7 @@ PY
 ```
 
 Replace `'data'` with your bucket name and adjust file paths as needed.
+
+## Migrations
+
+- `006_shortlists_refactor.sql` drops `player_ids` from `public.shortlists` and adds a normalized `public.shortlist_items` table with a unique `(shortlist_id, player_id)` constraint.
