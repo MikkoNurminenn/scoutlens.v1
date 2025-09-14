@@ -1,0 +1,49 @@
+/* File: styles/tokens_light.css */
+:root {
+  /* Light theme colors */
+  --bg-page: #FEF4DD;
+  --bg-card: #FFFFFF;
+  --accent-1: #A85A00;
+  --accent-2: #823D00;
+  --fg-strong: #241700;
+  --fg-muted: #5B2F00;
+  --accent-cyan: #3EA8B3;
+  --warning: #F59E0B;
+  --error: #DA3C2B;
+  --divider: rgba(36, 23, 0, 0.12);
+
+  /* Typography */
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --fs-12: 0.75rem;
+  --fs-14: 0.875rem;
+  --fs-16: 1rem;
+  --fs-20: 1.25rem;
+  --fs-24: 1.5rem;
+  --fs-28: 1.75rem;
+  --fs-32: 2rem;
+  --lh-tight: 1.4;
+  --lh-relaxed: 1.6;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Radius */
+  --radius-lg: 16px;
+  --radius-md: 14px;
+  --radius-sm: 6px;
+
+  /* Shadows */
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.15);
+  --shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+/* Optional: gradient helper for hero overlays */
+:root {
+  --overlay-sunset: linear-gradient(180deg, rgba(254, 244, 221, 0.7) 0%, rgba(254, 244, 221, 0.55) 35%, rgba(254, 244, 221, 0.3) 100%);
+}
