@@ -4,9 +4,9 @@
 
 Fixes:
 - Resolved merge conflicts in `remove_from_players_storage_by_ids`.
-- Uses row-per-membership `shortlists` table with `player_id` for cleanup.
+- Uses row-per-membership `shortlist_items` table with `player_id` for cleanup (with legacy fallback).
 - Cleans up `player_notes` before deleting players.
-- Removed stray ``KORJAA TÄÄ`` that caused a SyntaxError.
+- Removed stray tokens that caused a SyntaxError.
 - Minor defensive guards; no functional changes to UI.
 """
 from __future__ import annotations
@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
+from tools.db_delete_helpers import DeleteError, remove_players_from_shortlist
 
 from app.ui import bootstrap_sidebar_auto_collapse
 
@@ -365,8 +366,9 @@ def upsert_player_storage(player: dict) -> str:
 def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     """Remove players and dependent rows in a safe order.
 
-    Assumes `shortlist_items` has one row per membership with a `player_id`
-    column, and player notes reside in `player_notes` with `player_id`.
+    Assumes `shortlist_items` has one row per membership with a ``player_id``
+    column, and player notes reside in ``player_notes`` with ``player_id``.
+    Falls back to legacy schemas where necessary.
     """
     client = get_client()
     if not client:
@@ -382,23 +384,27 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
         try:
             client.table("shortlist_items").delete().in_("player_id", ids).execute()
         except APIError as e:
-            # Fallback for legacy array-based `shortlists.player_ids` schema
+            # Fallbacks for legacy schemas
             msg = getattr(e, "message", "")
-            if "shortlists" in msg or getattr(e, "code", "") in {"42703", "42P01"}:
+            code = getattr(e, "code", "")
+            if "shortlist_items" in msg or code in {"42703", "42P01"}:
+                # 1) Older table name `shortlists_items`
+                try:
+                    client.table("shortlists_items").delete().in_("player_id", ids).execute()
+                except Exception:
+                    pass
+                # 2) Legacy array-based `shortlists.player_ids`
                 try:
                     res = (
-                        client.table("shortlists")
-                        .select("id, player_ids")
-                        .contains("player_ids", ids)
-                        .execute()
+                        client.table("shortlists").select("id, player_ids").execute()
                     )
                     for row in res.data or []:
-                        pid_list = [
-                            pid for pid in (row.get("player_ids") or []) if pid not in ids
-                        ]
-                        client.table("shortlists").update({"player_ids": pid_list}).eq(
-                            "id", row.get("id")
-                        ).execute()
+                        plist = row.get("player_ids") or []
+                        if any(pid in ids for pid in plist):
+                            new_ids = [pid for pid in plist if pid not in ids]
+                            client.table("shortlists").update({"player_ids": new_ids}).eq(
+                                "id", row.get("id")
+                            ).execute()
                 except Exception:
                     pass
             else:
@@ -406,6 +412,10 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
 
         client.table("player_notes").delete().in_("player_id", ids).execute()
         client.table("players").delete().in_("id", ids).execute()
+    except DeleteError as e:
+        st.error("❌ Shortlist delete failed")
+        st.code(str(e), language="text")
+        raise
     except APIError as e:  # pragma: no cover - network
         st.error("❌ Delete failed")
         st.code(getattr(e, "message", e), language="text")
@@ -1108,4 +1118,5 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                     clear_players_cache()
                 st.success(f"Removed {n} record(s) by (name, team).")
             else:
+                # Nothing matched in storage — avoid SyntaxError from stray text.
                 st.info("No records matched (name, team) in storage.")
