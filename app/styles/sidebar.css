@@ -18,6 +18,26 @@ section[data-testid="stSidebar"] > div:first-child {
   display: none;
 }
 
+section[data-testid="stSidebar"][aria-expanded="true"] {
+  min-width: 300px;
+  max-width: 300px;
+}
+
+section[data-testid="stSidebar"][aria-expanded="true"] > div:first-child {
+  min-width: 300px;
+  max-width: 300px;
+}
+
+section[data-testid="stSidebar"][aria-expanded="false"],
+section[data-testid="stSidebar"][aria-expanded="false"] > div:first-child {
+  min-width: 0;
+  max-width: 0;
+}
+
+[data-testid="stSidebarResizer"] {
+  display: none;
+}
+
 section[data-testid="stSidebar"] .block-container {
   padding: var(--space-5) var(--space-4);
 }
