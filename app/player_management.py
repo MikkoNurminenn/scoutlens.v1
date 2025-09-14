@@ -3,25 +3,9 @@
 from __future__ import annotations
 
 import streamlit as st
-from postgrest.exceptions import APIError
 
 from app.ui import bootstrap_sidebar_auto_collapse
-from app.supabase_client import get_client
-from tools.db_delete_helpers import remove_players_from_storage_by_ids
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def list_players():
-    sb = get_client()
-    return (
-        sb.table("players")
-        .select("id,name,position,current_club")
-        .order("name")
-        .execute()
-        .data
-        or []
-    )
-
+from app.ui.players_delete import players_delete_panel
 
 bootstrap_sidebar_auto_collapse()
 
@@ -34,36 +18,7 @@ def show_player_management_page() -> None:
         st.info("Sign in to delete players.")
         return
 
-    try:
-        players = list_players()
-    except APIError as e:  # pragma: no cover - UI error handling
-        st.error(f"Failed to load players: {e}")
-        return
-
-    if not players:
-        st.info("No players available.")
-        return
-
-    label_by_id = {
-        p["id"]: f"{p['name']} – {p.get('position') or '—'} ({p.get('current_club') or '—'})"
-        for p in players
-    }
-    selected_ids = st.multiselect(
-        "Players to delete",
-        options=list(label_by_id.keys()),
-        format_func=lambda x: label_by_id[x],
-        key="player_mgmt__ids",
-    )
-
-    if st.button("Delete selected", type="secondary", disabled=not selected_ids):
-        try:
-            remove_players_from_storage_by_ids(get_client(), selected_ids)
-            list_players.clear()
-            st.success("Deleted selected players.")
-            st.rerun()
-        except Exception as e:  # pragma: no cover - UI error handling
-            st.error(f"Failed to delete players: {e}")
+    players_delete_panel()
 
 
 __all__ = ["show_player_management_page"]
-
