@@ -9,6 +9,7 @@
 
   --fg-strong: #FEF4DD;   /* lämmin kerma; teksti/ikonit, hyvä AA dark‑taustaa vasten */
   --fg-muted: #E0D2BE;    /* vaimennettu beige, toissijainen teksti */
+  --fg-on-accent: #241700; /* tumma teksti meripihkataustalla */
 
   --accent-cyan: #3EA8B3; /* viileä, desaturoitu teal vastapariksi lämpimälle paletille */
   --warning: #F59E0B;     /* lämmin varoitus */
