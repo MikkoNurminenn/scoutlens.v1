@@ -10,6 +10,10 @@ section[data-testid="stSidebar"] {
 section[data-testid="stSidebar"] .block-container {
   padding: var(--space-5) var(--space-4);
 }
+section[data-testid="stSidebar"] .block-container img {
+  width: 100%;
+  margin-bottom: var(--space-4);
+}
 
 section[data-testid="stSidebar"] [role="radiogroup"] > label {
   border: 1px solid var(--divider);
