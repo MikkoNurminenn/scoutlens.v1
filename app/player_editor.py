@@ -299,7 +299,7 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
         # Delete dependent rows first to avoid FK violations
         client.table("reports").delete().in_("player_id", ids).execute()
         client.table("shortlists").delete().in_("player_id", ids).execute()
-        client.table("notes").delete().in_("player_id", ids).execute()
+        client.table("player_notes").delete().in_("player_id", ids).execute()
         client.table("players").delete().in_("id", ids).execute()
     except Exception:
         st.error("❌ Delete failed")

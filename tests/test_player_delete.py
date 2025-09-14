@@ -29,9 +29,9 @@ def test_remove_from_players_storage_by_ids_cascades(monkeypatch):
     assert n == 2
 
     table_calls = [c for c in calls if c[1] == "table"]
-    assert [c[0] for c in table_calls] == ["reports", "shortlists", "notes", "players"]
+    assert [c[0] for c in table_calls] == ["reports", "shortlists", "player_notes", "players"]
     assert ("reports", "in", "player_id", ["a", "b"]) in calls
     assert ("shortlists", "in", "player_id", ["a", "b"]) in calls
-    assert ("notes", "in", "player_id", ["a", "b"]) in calls
+    assert ("player_notes", "in", "player_id", ["a", "b"]) in calls
     assert ("players", "in", "id", ["a", "b"]) in calls
     assert calls[-1] == ("players", "execute")
