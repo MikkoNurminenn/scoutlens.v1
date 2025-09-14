@@ -4,13 +4,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 import json
 from pathlib import Path
+from postgrest.exceptions import APIError
 
-from app.app_paths import file_path, DATA_DIR
+from app.app_paths import file_path
 from app.data_utils import list_teams, load_master
+from app.supabase_client import get_client
 
 # ---------- JSON-polut ----------
-PLAYERS_FP    = file_path("players.json")
-SHORTLISTS_FP = file_path("shortlists.json")
+PLAYERS_FP = file_path("players.json")
 
 # ---------- apurit ----------
 def _load_json(fp: Path, default):
@@ -21,12 +22,28 @@ def _load_json(fp: Path, default):
         pass
     return default
 
-def list_shortlists_json():
-    return sorted(_load_json(SHORTLISTS_FP, {}).keys())
+@st.cache_data(ttl=60, show_spinner=False)
+def list_shortlists() -> list[dict]:
+    sb = get_client()
+    return (
+        sb.table("shortlists")
+        .select("id,name")
+        .execute()
+        .data
+        or []
+    )
 
-def get_shortlist_members_json(name: str):
-    sl = _load_json(SHORTLISTS_FP, {})
-    return [str(x) for x in sl.get(name, [])]
+@st.cache_data(ttl=60, show_spinner=False)
+def list_shortlist_members(sid: str) -> list[dict]:
+    sb = get_client()
+    return (
+        sb.table("shortlist_items")
+        .select("player_id")
+        .eq("shortlist_id", sid)
+        .execute()
+        .data
+        or []
+    )
 
 def get_all_players_map_id_to_name():
     """Palauttaa dictin: {player_id(str): name(str)} players.jsonista."""
@@ -93,22 +110,35 @@ def show_visual_analytics():
                 df["CurrentClub"] = df["Team"]
             return df
 
-        # Shortlist mode (JSON)
-        sl_names = list_shortlists_json()
-        if not sl_names:
+        # Shortlist mode (Supabase)
+        try:
+            shortlists = list_shortlists()
+        except APIError as e:  # pragma: no cover - UI error handling
+            st.error(f"Failed to load shortlists: {e}")
+            return None
+        if not shortlists:
             st.info("No shortlists available.")
             return None
-        sel = st.selectbox("Shortlist", sl_names)
-        if not sel:
+        sid = st.selectbox(
+            "Shortlist",
+            options=[s["id"] for s in shortlists],
+            format_func=lambda x: next(s["name"] for s in shortlists if s["id"] == x),
+        )
+        if not sid:
             return None
-        pids = set(get_shortlist_members_json(sel))
+        try:
+            items = list_shortlist_members(sid)
+        except APIError as e:  # pragma: no cover - UI error handling
+            st.error(f"Failed to load shortlist members: {e}")
+            return None
+        pids = {str(row.get("player_id")) for row in items if row.get("player_id")}
         if not pids:
             st.info("Selected shortlist is empty.")
             return None
 
         # id -> name map players.jsonista
         id_to_name = get_all_players_map_id_to_name()
-        names = [id_to_name.get(str(pid)) for pid in pids if str(pid) in id_to_name and id_to_name.get(str(pid))]
+        names = [id_to_name.get(pid) for pid in pids if id_to_name.get(pid)]
         if not names:
             st.info("No matching players for this shortlist in players.json.")
             return None
