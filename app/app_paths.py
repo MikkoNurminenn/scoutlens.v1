@@ -24,7 +24,6 @@ def file_path(name: str) -> Path:
 PLAYERS_FP = file_path("players.json")
 MATCHES_FP = file_path("matches.json")
 SCOUT_REPORTS_FP = file_path("scout_reports.json")
-SHORTLISTS_FP = file_path("shortlists.json")
 NOTES_FP = file_path("notes.json")
 
 PLAYER_PHOTOS_DIR = DATA_DIR / "player_photos"
@@ -35,8 +34,7 @@ for fp, default in [
     (PLAYERS_FP, []),
     (MATCHES_FP, []),
     (SCOUT_REPORTS_FP, []),
-    (SHORTLISTS_FP, {}),
-    (NOTES_FP, [])
+    (NOTES_FP, []),
 ]:
     if not fp.exists():
         fp.write_text(json.dumps(default), encoding="utf-8")
