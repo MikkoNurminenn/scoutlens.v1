@@ -141,6 +141,7 @@ def main() -> None:
     current = st.session_state.get("current_page", NAV_KEYS[0])
 
     with st.sidebar:
+        st.sidebar.image(str(ROOT / "assets" / "logo.png"), use_container_width=True)
         st.markdown("<div class='scout-brand'>⚽ ScoutLens</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='scout-sub'>{APP_TAGLINE}</div>", unsafe_allow_html=True)
         st.markdown("<div class='nav-sep'>Navigation</div>", unsafe_allow_html=True)
