@@ -4,7 +4,7 @@
 
 Fixes:
 - Resolved merge conflicts in `remove_from_players_storage_by_ids`.
-- Uses row-per-membership `shortlists` table with `player_id` for cleanup.
+- Uses row-per-membership `shortlist_items` table with `player_id` for cleanup.
 - Cleans up `player_notes` before deleting players.
 - Removed stray ``KORJAA TÄÄ`` that caused a SyntaxError.
 - Minor defensive guards; no functional changes to UI.
@@ -364,7 +364,7 @@ def upsert_player_storage(player: dict) -> str:
 def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     """Remove players and dependent rows in a safe order.
 
-    Assumes `shortlists` has one row per membership with a `player_id` column,
+    Assumes `shortlist_items` has one row per membership with a `player_id` column,
     and player notes reside in `player_notes` with `player_id`.
     """
     client = get_client()
@@ -376,7 +376,7 @@ def remove_from_players_storage_by_ids(ids: List[str]) -> int:
     try:
         # Delete dependents first to avoid FK violations
         client.table("reports").delete().in_("player_id", ids).execute()
-        client.table("shortlists").delete().in_("player_id", ids).execute()
+        client.table("shortlist_items").delete().in_("player_id", ids).execute()
         client.table("player_notes").delete().in_("player_id", ids).execute()
         client.table("players").delete().in_("id", ids).execute()
     except Exception:
