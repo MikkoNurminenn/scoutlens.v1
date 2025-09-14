@@ -37,6 +37,9 @@ bootstrap_sidebar_auto_collapse = importlib.import_module("app.ui").__getattribu
 set_sidebar_background = importlib.import_module("app.ui.sidebar_bg").__getattribute__(
     "set_sidebar_background"
 )
+build_sidebar = importlib.import_module("app.ui.sidebar").__getattribute__(
+    "build_sidebar"
+)
 
 st.set_page_config(page_title="ScoutLens", layout="wide", initial_sidebar_state="expanded")
 
@@ -140,36 +143,16 @@ def main() -> None:
 
     current = st.session_state.get("current_page", NAV_KEYS[0])
 
-    with st.sidebar:
-        st.sidebar.image(str(ROOT / "assets" / "logo.png"), use_container_width=True)
-        st.markdown("<div class='scout-brand'>⚽ ScoutLens</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='scout-sub'>{APP_TAGLINE}</div>", unsafe_allow_html=True)
-        st.markdown("<div class='nav-sep'>Navigation</div>", unsafe_allow_html=True)
-
-        st.radio(
-            "Navigate",
-            options=NAV_KEYS,
-            index=NAV_KEYS.index(current),
-            format_func=lambda k: NAV_LABELS.get(k, k),
-            key="_nav_radio",
-            label_visibility="collapsed",
-            on_change=lambda: go(st.session_state["_nav_radio"]),
-        )
-
-        auth = st.session_state.get("auth", {})
-        user = auth.get("user")
-        if auth.get("authenticated") and user:
-            name = user.get("name") or user.get("username", "")
-            st.markdown(
-                f"<div class='sb-user'>Signed in as {name}</div>",
-                unsafe_allow_html=True,
-            )
-            st.button("Sign out", on_click=logout, type="secondary")
-
-        st.markdown(
-            f"<div class='sb-footer'><strong>{APP_TITLE}</strong> v{APP_VERSION}</div>",
-            unsafe_allow_html=True,
-        )
+    build_sidebar(
+        current=current,
+        nav_keys=NAV_KEYS,
+        nav_labels=NAV_LABELS,
+        app_title=APP_TITLE,
+        app_tagline=APP_TAGLINE,
+        app_version=APP_VERSION,
+        go=go,
+        logout=logout,
+    )
 
     page_func = PAGE_FUNCS.get(current, lambda: st.error("Page not found."))
     with track(f"page:{current}"):
