@@ -15,7 +15,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
-from tools.db_delete_helpers import remove_players_from_storage_by_ids
 
 from app.ui import bootstrap_sidebar_auto_collapse
 
@@ -1011,47 +1010,3 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 st.cache_data.clear()
                 st.success("Row deleted from master.")
 
-        st.markdown("---")
-        st.subheader("Remove from storage")
-        st.caption("Siivoa taustavarastoa sotkematta master-tiedostoa.")
-        conf2 = st.text_input(
-            "Type REMOVE to confirm", key=f"{selected_team}_{pid_str}_del_store_conf", placeholder="REMOVE"
-        )
-        if st.button(
-            "Remove by PlayerID",
-            key=f"{selected_team}_{pid_str}_del_store_byid",
-            disabled=(conf2 != "REMOVE"),
-            type="secondary",
-        ):
-            client = get_client()
-            ids = [str(pid_str)]
-            if client:
-                remove_players_from_storage_by_ids(client, ids)
-                clear_players_cache()
-            st.success(f"Removed {len(ids) if client else 0} record(s) by id.")
-
-        if st.button(
-            "Remove by (name, team) pair",
-            key=f"{selected_team}_{pid_str}_del_store_bykey",
-            disabled=(conf2 != "REMOVE"),
-            type="secondary",
-        ):
-            nm = selected_name.strip()
-            tm = _as_str(selected_team)
-            ids: List[str] = []
-            client = get_client()
-            players = client.table("players").select("*").execute().data if client else []
-            for p in players or []:
-                if (p.get("name", "").strip() == nm) and (p.get("team_name", "").strip() == tm):
-                    ids.append(str(p.get("id")))
-            if ids:
-                client = get_client()
-                if client:
-                    remove_players_from_storage_by_ids(client, ids)
-                    clear_players_cache()
-                st.success(
-                    f"Removed {len(ids) if client else 0} record(s) by (name, team)."
-                )
-            else:
-                # Nothing matched in storage — avoid SyntaxError from stray text.
-                st.info("No records matched (name, team) in storage.")
