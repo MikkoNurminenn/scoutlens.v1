@@ -91,8 +91,16 @@ def inject_css():
         p = styles_dir / name
         if p.exists():
             parts.append(p.read_text(encoding="utf-8"))
+    # remove previously injected theme block if present
+    st.markdown(
+        "<script>var e=document.getElementById('sl-theme'); if (e) e.remove();</script>",
+        unsafe_allow_html=True,
+    )
     if parts:
-        st.markdown(f"<style>{'\n'.join(parts)}</style>", unsafe_allow_html=True)
+        st.markdown(
+            f"<style id='sl-theme'>{'\n'.join(parts)}</style>",
+            unsafe_allow_html=True,
+        )
 
 # --------- Nav
 NAV_KEYS = [
