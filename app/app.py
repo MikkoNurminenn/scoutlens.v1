@@ -145,8 +145,6 @@ def main() -> None:
     if "theme" not in st.session_state:
         st.session_state["theme"] = "dark"
 
-    inject_css()
-    set_sidebar_background()
     login()
 
     if "current_page" not in st.session_state:
@@ -165,8 +163,10 @@ def main() -> None:
         app_version=APP_VERSION,
         go=go,
         logout=logout,
-        inject_css=inject_css,
     )
+
+    inject_css()
+    set_sidebar_background()
 
     page_func = PAGE_FUNCS.get(current, lambda: st.error("Page not found."))
     with track(f"page:{current}"):
