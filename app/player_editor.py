@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 # app/ui/player_editor_fixed.py
-"""Player editor backed by Supabase (clean).
-
-Fixes:
-- Resolved merge conflicts in `remove_from_players_storage_by_ids`.
-- Uses row-per-membership `shortlist_items` table with `player_id` for cleanup (with legacy fallback).
-- Cleans up `player_notes` before deleting players.
-- Removed stray tokens that caused a SyntaxError.
-- Minor defensive guards; no functional changes to UI.
-"""
+"""Player editor backed by Supabase (clean)."""
 from __future__ import annotations
 
 import math
@@ -23,7 +15,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
-from tools.db_delete_helpers import DeleteError, remove_players_from_shortlist
+from tools.db_delete_helpers import remove_players_from_storage_by_ids
 
 from app.ui import bootstrap_sidebar_auto_collapse
 
@@ -363,68 +355,6 @@ def upsert_player_storage(player: dict) -> str:
     return pid
 
 
-def remove_from_players_storage_by_ids(ids: List[str]) -> int:
-    """Remove players and dependent rows in a safe order.
-
-    Assumes `shortlist_items` has one row per membership with a ``player_id``
-    column, and player notes reside in ``player_notes`` with ``player_id``.
-    Falls back to legacy schemas where necessary.
-    """
-    client = get_client()
-    if not client:
-        return 0
-    ids = [str(i) for i in ids if str(i).strip()]
-    if not ids:
-        return 0
-    try:
-        # Delete dependents first to avoid FK violations
-        client.table("reports").delete().in_("player_id", ids).execute()
-
-        # Normalized schema: one row per membership in `shortlist_items`
-        try:
-            client.table("shortlist_items").delete().in_("player_id", ids).execute()
-        except APIError as e:
-            # Fallbacks for legacy schemas
-            msg = getattr(e, "message", "")
-            code = getattr(e, "code", "")
-            if "shortlist_items" in msg or code in {"42703", "42P01"}:
-                # 1) Older table name `shortlists_items`
-                try:
-                    client.table("shortlists_items").delete().in_("player_id", ids).execute()
-                except Exception:
-                    pass
-                # 2) Legacy array-based `shortlists.player_ids`
-                try:
-                    res = (
-                        client.table("shortlists").select("id, player_ids").execute()
-                    )
-                    for row in res.data or []:
-                        plist = row.get("player_ids") or []
-                        if any(pid in ids for pid in plist):
-                            new_ids = [pid for pid in plist if pid not in ids]
-                            client.table("shortlists").update({"player_ids": new_ids}).eq(
-                                "id", row.get("id")
-                            ).execute()
-                except Exception:
-                    pass
-            else:
-                raise
-
-        client.table("player_notes").delete().in_("player_id", ids).execute()
-        client.table("players").delete().in_("id", ids).execute()
-    except DeleteError as e:
-        st.error("❌ Shortlist delete failed")
-        st.code(str(e), language="text")
-        raise
-    except APIError as e:  # pragma: no cover - network
-        st.error("❌ Delete failed")
-        st.code(getattr(e, "message", e), language="text")
-        raise
-    except Exception:
-        st.error("❌ Delete failed")
-        st.code("".join(traceback.format_exc()), language="text")
-        raise
-    return len(ids)
 
 
 def _save_photo_and_link_storage(player_id: str, filename: str, content: bytes) -> Path:
@@ -1093,10 +1023,12 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             disabled=(conf2 != "REMOVE"),
             type="secondary",
         ):
-            n = remove_from_players_storage_by_ids([str(pid_str)])
-            if n:
+            client = get_client()
+            ids = [str(pid_str)]
+            if client:
+                remove_players_from_storage_by_ids(client, ids)
                 clear_players_cache()
-            st.success(f"Removed {n} record(s) by id.")
+            st.success(f"Removed {len(ids) if client else 0} record(s) by id.")
 
         if st.button(
             "Remove by (name, team) pair",
@@ -1113,10 +1045,13 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 if (p.get("name", "").strip() == nm) and (p.get("team_name", "").strip() == tm):
                     ids.append(str(p.get("id")))
             if ids:
-                n = remove_from_players_storage_by_ids(ids)
-                if n:
+                client = get_client()
+                if client:
+                    remove_players_from_storage_by_ids(client, ids)
                     clear_players_cache()
-                st.success(f"Removed {n} record(s) by (name, team).")
+                st.success(
+                    f"Removed {len(ids) if client else 0} record(s) by (name, team)."
+                )
             else:
                 # Nothing matched in storage — avoid SyntaxError from stray text.
                 st.info("No records matched (name, team) in storage.")

@@ -7,7 +7,7 @@ from postgrest.exceptions import APIError
 
 from app.ui import bootstrap_sidebar_auto_collapse
 from app.supabase_client import get_client
-from app.player_editor import remove_from_players_storage_by_ids
+from tools.db_delete_helpers import remove_players_from_storage_by_ids
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -57,7 +57,7 @@ def show_player_management_page() -> None:
 
     if st.button("Delete selected", type="secondary", disabled=not selected_ids):
         try:
-            remove_from_players_storage_by_ids(selected_ids)
+            remove_players_from_storage_by_ids(get_client(), selected_ids)
             list_players.clear()
             st.success("Deleted selected players.")
             st.rerun()
