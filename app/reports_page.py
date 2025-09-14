@@ -288,6 +288,10 @@ def show_reports_page() -> None:
                 df_f[col] = None
         df_f = df_f[order]
 
+        for col in ["Tech", "GI", "MENT", "ATH"]:
+            if col in df_f.columns:
+                df_f[col] = pd.to_numeric(df_f[col], errors="coerce").round(1)
+
         if "Foot" in df_f.columns:
             df_f["Foot"] = df_f["Foot"].fillna("").astype(str).str.capitalize()
         def _highlight_class(v: float | None) -> str:
@@ -307,7 +311,11 @@ def show_reports_page() -> None:
         with track("reports:style"):
             styler = (
                 df_f.style.set_td_classes(classes)
-                .set_properties(subset=["Comments"], **{"text-align": "left", "white-space": "pre-wrap"})
+                .format({col: "{:.1f}" for col in ["Tech", "GI", "MENT", "ATH"]})
+                .set_properties(
+                    subset=["Comments"],
+                    **{"text-align": "left", "white-space": "pre-wrap"},
+                )
             )
 
         cap_col, btn_col = st.columns([3, 1])
