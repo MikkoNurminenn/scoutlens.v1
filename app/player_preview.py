@@ -6,6 +6,11 @@ import re
 import pandas as pd
 import streamlit as st
 
+from app.player_notes import (
+    get_player_notes,
+    add_player_note,
+    delete_player_note,
+)
 def _inject_css_once(key: str, css_html: str):
     sskey = f"__css_injected__{key}"
     if not st.session_state.get(sskey):
@@ -333,6 +338,35 @@ def show_player_preview():
                 tags = [t.strip() for t in tags.split(",") if t.strip()]
             if isinstance(tags, list) and tags:
                 st.write("**Tags:** " + ", ".join(tags))
+
+    st.markdown("---")
+
+    # Quick notes
+    st.subheader("🗒️ Quick notes")
+    note_key = f"pp_note_{player_id}"
+    note_text = st.text_area("Write a note", key=note_key, height=100)
+    if st.button("Save note", key=f"pp_save_{player_id}"):
+        txt = (note_text or "").strip()
+        if txt:
+            add_player_note(player_id, txt)
+            st.success("Saved.")
+            st.session_state[note_key] = ""
+            st.experimental_rerun()
+        else:
+            st.warning("Write something first.")
+
+    notes = get_player_notes(player_id)
+    if not notes:
+        st.caption("No notes yet.")
+    else:
+        for n in notes:
+            cols = st.columns([4, 1])
+            ts = (n.get("created_at", "") or "")[:16].replace("T", " ")
+            cols[0].markdown(f"**{ts}** — {n.get('text','')}")
+            nid = n.get("id")
+            if cols[1].button("Delete", key=f"pp_del_{nid}"):
+                delete_player_note(str(nid))
+                st.experimental_rerun()
 
     st.markdown("---")
 
