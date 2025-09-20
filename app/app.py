@@ -75,6 +75,9 @@ show_shortlist_management_page = _safe_import(
 show_export_page = _safe_import("export", "app.export_page", "show_export_page")
 login = _safe_import("login", "app.login", "login")
 logout = _safe_import("logout", "app.login", "logout")
+show_quick_notes_page = _safe_import(
+    "notes", "app.quick_notes_page", "show_quick_notes_page"
+)
 
 APP_TITLE = "ScoutLens"
 APP_TAGLINE = "LATAM scouting toolkit"
@@ -108,6 +111,7 @@ NAV_KEYS = [
     "Shortlists",
     "Manage Shortlists",
     "Players",
+    "Notes",
     "Export",
 ]
 NAV_LABELS = {
@@ -116,6 +120,7 @@ NAV_LABELS = {
     "Shortlists": "⭐ Shortlists",
     "Manage Shortlists": "🗑️ Manage Shortlists",
     "Players": "👤 Players",
+    "Notes": "🗒️ Notes",
     "Export": "⬇️ Export",
 }
 LEGACY_REMAP = {
@@ -131,6 +136,7 @@ PAGE_FUNCS = {
     "Shortlists": show_shortlists_page,
     "Manage Shortlists": show_shortlist_management_page,
     "Players": show_player_management_page,
+    "Notes": show_quick_notes_page,
     "Export": show_export_page,
 }
 
