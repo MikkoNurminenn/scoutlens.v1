@@ -75,13 +75,19 @@ def show_quick_notes_page() -> None:
 
     sel_id_key = PAGE_KEY + "player_id"
     sel_label_key = PAGE_KEY + "player_label"
+    pending_search_key = PAGE_KEY + "pending_search"
     st.session_state.setdefault(sel_id_key, None)
     st.session_state.setdefault(sel_label_key, None)
+    st.session_state.setdefault(pending_search_key, None)
 
     st.subheader("Player")
     col_search, col_add = st.columns([3, 1])
 
     with col_search:
+        pending_search = st.session_state.get(pending_search_key)
+        if pending_search:
+            st.session_state[PAGE_KEY + "search"] = pending_search
+            st.session_state[pending_search_key] = None
         query = st.text_input(
             "Search by name",
             key=PAGE_KEY + "search",
@@ -139,7 +145,7 @@ def show_quick_notes_page() -> None:
                             st.session_state[sel_label_key] = (
                                 f"{name} ({current_club or '—'})"
                             )
-                            st.session_state[PAGE_KEY + "search"] = name
+                            st.session_state[pending_search_key] = name
                             st.rerun()
 
     player_id = st.session_state.get(sel_id_key)
