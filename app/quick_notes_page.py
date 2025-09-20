@@ -93,7 +93,7 @@ def show_quick_notes_page() -> None:
             key=PAGE_KEY + "search",
             placeholder="Type player name…",
         )
-        results = _search_players(query) if query else []
+        results = _search_players(query)
         labels = [f"{p['name']} ({p.get('current_club') or '—'})" for p in results]
         id_by_label = {label: player["id"] for label, player in zip(labels, results)}
 
