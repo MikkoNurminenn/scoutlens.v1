@@ -57,12 +57,13 @@ def build_sidebar(
     """Render the application sidebar (English-only, tidy header, no stray boxes)."""
 
     root = Path(__file__).resolve().parents[2]
+    nav_options = list(nav_keys)
+    nav_display = {key: nav_labels.get(key, key) for key in nav_options}
 
-    # --- CSS: font stack & logo sizing, hide/relocate alerts only in sidebar ---
+    # Keep font stack + logo sizing. Removed nonstandard :contains() alert-hiding CSS.
     st.markdown(
         """
         <style>
-          /* 1) Älä pidä FA:ta yleisessä fonttipinossa; käytä sitä vain ikoni-pseudoille */
           section[data-testid="stSidebar"]{
             font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           }
@@ -70,16 +71,12 @@ def build_sidebar(
             display:block; margin:0 auto; width:100%; max-width:180px; height:auto; border-radius:18px;
             box-shadow:0 22px 38px rgba(12,20,44,.45);
           }
-          /* A) VAIN deprekka-boksi piiloon sivupalkista (turvallisempi kuin kaikkien .stAlertien piilottaminen) */
-          section[data-testid="stSidebar"] .stAlert:has(code:contains("use_column_width")){
-            display:none !important;
-          }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # B) Vaihtoehto: siirrä sidebarin alertit footerin alle (näkyvät mutta eivät riko headeriä)
+    # Keep: move any Streamlit alerts to the bottom so header/nav eivät rikkoudu.
     st.markdown(
         """
         <script>
@@ -87,11 +84,11 @@ def build_sidebar(
           const doc = window.parent?.document ?? document;
           const sb = doc.querySelector('section[data-testid="stSidebar"]');
           if (!sb) return;
-          const shell = sb.querySelector('.sidebar-shell');
-          const footer = sb.querySelector('.sb-footer')?.parentElement || shell;
+          const shell = sb.querySelector('.sidebar-shell') || sb;
+          const footer = sb.querySelector('.sb-footer')?.parentElement || shell.lastElementChild || shell;
           sb.querySelectorAll('.stAlert').forEach(alert => {
             const blk = alert.closest('[data-testid="stVerticalBlock"]') || alert;
-            footer?.after(blk); // siirretään alas
+            footer?.after(blk);
           });
         })();
         </script>
@@ -100,21 +97,16 @@ def build_sidebar(
     )
 
     with st.sidebar:
-        nav_options = list(nav_keys)
-        nav_display = {key: nav_labels.get(key, key) for key in nav_options}
-
         st.markdown("<div class='sidebar-shell'>", unsafe_allow_html=True)
+
+        # ---------- HEADER (one wrapper; no extra/empty divs) ----------
         st.markdown("<div class='sidebar-header'>", unsafe_allow_html=True)
+
         st.markdown("<div class='sidebar-logo'>", unsafe_allow_html=True)
-
-        # ✅ FIX: ei enää deprecation-varoitusta
         st.image(str(root / "assets" / "logo.png"), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)  # /sidebar-logo
 
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        tagline_html = (
-            f"<div class='scout-sub'>{escape(app_tagline)}</div>" if app_tagline else ""
-        )
+        tagline_html = f"<div class='scout-sub'>{escape(app_tagline)}</div>" if app_tagline else ""
         st.markdown(
             f"""
             <div class='sidebar-title'>
@@ -124,9 +116,10 @@ def build_sidebar(
             """,
             unsafe_allow_html=True,
         )
-        st.markdown("</div>", unsafe_allow_html=True)
 
-        # --- Navigation (pidetään radio toistaiseksi, koska sulla on jo CSS sille) ---
+        st.markdown("</div>", unsafe_allow_html=True)  # /sidebar-header
+
+        # ---------- NAV (one wrapper; no extra/empty divs) ----------
         st.markdown("<div class='sidebar-nav'>", unsafe_allow_html=True)
         st.markdown("<div class='nav-title'>Navigation</div>", unsafe_allow_html=True)
 
@@ -139,9 +132,10 @@ def build_sidebar(
             label_visibility="collapsed",
             on_change=lambda: go(st.session_state["_nav_radio"]),
         )
-        st.markdown("</div>", unsafe_allow_html=True)
 
-        # Päivitä ikonit labelin data-atribuuttiin
+        st.markdown("</div>", unsafe_allow_html=True)  # /sidebar-nav
+
+        # ---------- ICONS for radio labels ----------
         icon_map = {key: nav_icons.get(key, "") for key in nav_options}
         st.markdown(
             """
@@ -163,7 +157,7 @@ def build_sidebar(
             unsafe_allow_html=True,
         )
 
-        # --- Profile & sign out (ennallaan) ---
+        # ---------- PROFILE ----------
         auth = st.session_state.get("auth", {})
         user = auth.get("user")
         if auth.get("authenticated") and user:
@@ -190,6 +184,7 @@ def build_sidebar(
                         src=escape(avatar_url), alt=escape(display_name)
                     )
                 )
+
             st.markdown(
                 """
                 <div class='sidebar-profile-card'>
@@ -208,10 +203,12 @@ def build_sidebar(
                 ),
                 unsafe_allow_html=True,
             )
+
             st.markdown("<div class='sidebar-signout'>", unsafe_allow_html=True)
             st.button("Sign out", on_click=logout, type="secondary", key="sidebar-signout")
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)  # /sidebar-signout
 
+        # ---------- FOOTER ----------
         st.markdown(
             """
             <div class='sb-footer'>
@@ -221,4 +218,8 @@ def build_sidebar(
             """.format(title=escape(app_title), version=escape(app_version)),
             unsafe_allow_html=True,
         )
-        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)  # /sidebar-shell
+
+
+__all__ = ["bootstrap_sidebar_auto_collapse", "build_sidebar"]
