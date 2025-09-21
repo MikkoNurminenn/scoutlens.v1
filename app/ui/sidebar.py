@@ -88,31 +88,32 @@ def build_sidebar(
         st.markdown("</div>", unsafe_allow_html=True)
 
         icon_map = {key: nav_icons.get(key, "") for key in nav_options}
-        st.markdown(
-            """
+        icon_script = """
             <script>
             (function() {
-              const ICON_MAP = {icon_map};
+              const ICON_MAP = __ICON_MAP__;
               const rootDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-              if (!rootDoc) {{
+              if (!rootDoc) {
                 return;
-              }}
+              }
               const labels = rootDoc.querySelectorAll('section[data-testid="stSidebar"] [role="radiogroup"] > label');
-              labels.forEach((label) => {{
+              labels.forEach((label) => {
                 const input = label.querySelector('input');
-                if (!input) {{
+                if (!input) {
                   return;
-                }}
+                }
                 const icon = ICON_MAP[input.value] || '';
-                if (icon) {{
+                if (icon) {
                   label.setAttribute('data-icon', icon);
-                }} else {{
+                } else {
                   label.removeAttribute('data-icon');
-                }}
-              }});
+                }
+              });
             })();
             </script>
-            """.format(icon_map=json.dumps(icon_map)),
+            """
+        st.markdown(
+            icon_script.replace("__ICON_MAP__", json.dumps(icon_map)),
             unsafe_allow_html=True,
         )
 
