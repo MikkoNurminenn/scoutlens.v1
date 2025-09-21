@@ -1,25 +1,33 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+from typing import Any
 
-import streamlit as st
-from supabase import create_client
+from app.supabase_client import get_client
 
 
-def _client():
-    """Create a Supabase client using service role credentials."""
-    creds = st.secrets.get("supabase", {})
-    url = creds.get("url")
-    key = creds.get("service_role")
-    if not url or not key:
-        raise RuntimeError("Supabase credentials not configured")
-    return create_client(url, key)
+def _ensure_authenticated_session(client: Any) -> None:
+    """Ensure the Supabase client has an authenticated session before writes."""
+    auth = getattr(client, "auth", None)
+    if auth is None:
+        raise PermissionError("Supabase client auth not initialised; sign in required.")
+
+    session = None
+    get_session = getattr(auth, "get_session", None)
+    if callable(get_session):
+        session = get_session()
+    else:  # pragma: no cover - defensive for older client versions
+        session = getattr(auth, "session", None)
+
+    if not session or getattr(session, "access_token", None) in (None, ""):
+        raise PermissionError("Supabase session missing. Sign in before syncing.")
 
 
 def push_json(table: str, local_fp: Path) -> tuple[bool, str]:
     """Read a local JSON file and upsert rows into a Supabase table."""
     try:
-        sb = _client()
+        sb = get_client()
+        _ensure_authenticated_session(sb)
         payload = json.loads(local_fp.read_text(encoding="utf-8"))
         if isinstance(payload, dict):
             payload = [payload]
@@ -32,7 +40,7 @@ def push_json(table: str, local_fp: Path) -> tuple[bool, str]:
 def pull_json(table: str, local_fp: Path) -> tuple[bool, str]:
     """Fetch rows from a Supabase table and write them to a local JSON file."""
     try:
-        sb = _client()
+        sb = get_client()
         res = sb.table(table).select("*").execute()
         data = res.data if hasattr(res, "data") else res
         local_fp.parent.mkdir(parents=True, exist_ok=True)

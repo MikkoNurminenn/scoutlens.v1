@@ -12,7 +12,7 @@ You can verify the package imports with:
 
 ### Supabase Sync
 
-Configure a `[supabase]` block in your Streamlit secrets to enable optional Supabase storage. Functions in `app/sync_utils.py` and `app/teams_store.py` will then read and write data to your Supabase tables.
+Configure a `[supabase]` block in your Streamlit secrets to enable optional Supabase storage. Functions in `app/sync_utils.py` and `app/teams_store.py` will then read data (and write when an authenticated session is active) to your Supabase tables.
 
 #### Developer Setup
 
@@ -26,19 +26,17 @@ url = "https://<project>.supabase.co"
 anon_key = "<public-anon-key>"
 ```
 
-The application reads and writes JSON data to Supabase storage through `app/sync_utils.py`. Example usage of the utilities:
+`app/sync_utils.py` now reuses the shared anon Supabase client and will only perform writes when the current Streamlit session has authenticated through Supabase Auth. Reads continue to work for public tables. For admin/CLI tasks that require the service role key, use `scripts/supabase_admin_sync.py` outside the Streamlit runtime:
 
 ```bash
-python - <<'PY'
-from pathlib import Path
-from sync_utils import push_json, pull_json
+export SUPABASE_URL="https://<project>.supabase.co"
+export SUPABASE_SERVICE_ROLE_KEY="<private-service-role-key>"
 
-push_json('data', 'players.json', Path('local_players.json'))
-pull_json('data', 'players.json', Path('downloaded_players.json'))
-PY
+python scripts/supabase_admin_sync.py pull players ./backup/players.json
+python scripts/supabase_admin_sync.py push players ./backup/players.json
 ```
 
-Replace `'data'` with your bucket name and adjust file paths as needed.
+Replace `players` with the target table name and adjust file paths as needed.
 
 ## Migrations
 

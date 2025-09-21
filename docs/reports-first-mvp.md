@@ -98,6 +98,8 @@ url = "https://gqiaicnmnoxmqwbeyflp.supabase.co"
 anon_key = "<KEEP FROM SECRETS>"
 ```
 
+> The Streamlit runtime only uses the anon key. Admin tooling that needs the service role key now lives in `scripts/supabase_admin_sync.py` and should be executed outside the deployed app with `SUPABASE_SERVICE_ROLE_KEY` set in the environment.
+
 Python client:
 
 ```python
