@@ -283,7 +283,7 @@ def show_player_preview():
     with c1:
         photo = _find_photo_for(row)
         if photo and photo.exists():
-            st.image(str(photo), use_container_width=True)
+            st.image(str(photo), use_column_width=True)
         else:
             st.info("No photo. You can upload one below.")
 
