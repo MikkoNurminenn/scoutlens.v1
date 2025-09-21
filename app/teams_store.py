@@ -1,67 +1,55 @@
 # file: app/teams_store.py
-"""Minimal team store shim for Streamlit app.
-
-Provides `add_team` and `list_teams` to satisfy imports from `app.player_editor`.
-Data is persisted to `app/data/teams.json` as a simple JSON array.
-This is a safe fallback when a dedicated backend module is missing/renamed.
-
-If you later wire a real DB (e.g., Supabase), replace the internals while
-keeping the same public functions.
-"""
+"""Minimal team store shim backed by Supabase."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-import json
 import threading
-import time
 import uuid
 
-# --- paths
-ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = ROOT / "app" / "data"
-TEAMS_FILE = DATA_DIR / "teams.json"
+try:  # pragma: no cover - optional UI feedback when Streamlit available
+    import streamlit as st
+except Exception:  # pragma: no cover - running headless
+    st = None  # type: ignore
+
+from postgrest.exceptions import APIError
+
+from app.supabase_client import get_client
+
 _LOCK = threading.Lock()
 
 
-# --- helpers
-
-def _read() -> List[Dict[str, Any]]:
-    if not TEAMS_FILE.exists():
-        return []
-    try:
-        return json.loads(TEAMS_FILE.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        # why: keep app running even if file is corrupted; start fresh
-        return []
+def _notify_error(msg: str) -> None:
+    if st is not None:
+        st.error(msg)
+    else:
+        print(msg)
 
 
-def _write(items: List[Dict[str, Any]]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    TEAMS_FILE.write_text(
-        json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+def _sanitize_team_payload(team: Dict[str, Any]) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    for key, value in team.items():
+        if value in (None, ""):
+            continue
+        payload[key] = value
+    return payload
 
-
-# --- public API (keep names/signatures as imported elsewhere)
 
 def list_teams() -> List[Dict[str, Any]]:
-    """Return all teams as a list of dicts.
-
-    Format: {"id": str, "name": str, ...}
-    """
-    with _LOCK:
-        return _read()
+    """Return all teams stored in Supabase ordered by name."""
+    client = get_client()
+    if not client:
+        return []
+    try:
+        res = client.table("teams").select("*").order("name").execute()
+    except APIError as err:  # pragma: no cover - UI feedback
+        _notify_error(f"Failed to load teams: {getattr(err, 'message', str(err))}")
+        return []
+    return [dict(row) for row in (res.data or [])]
 
 
 def add_team(*args: Any, **kwargs: Any) -> Dict[str, Any]:
-    """Add or upsert a team.
+    """Add or upsert a team row in Supabase."""
 
-    Accepts either a single dict positional argument or keyword fields.
-    Ensures a stable "id" (uuid4) and unique name constraint.
-    Returns the stored team dict.
-    """
-    # Accept {..} or fields
     if len(args) == 1 and isinstance(args[0], dict):
         team: Dict[str, Any] = dict(args[0])
     else:
@@ -71,28 +59,40 @@ def add_team(*args: Any, **kwargs: Any) -> Dict[str, Any]:
     if not name or not isinstance(name, str):
         raise ValueError("add_team requires a 'name' string field")
 
-    team.setdefault("id", str(uuid.uuid4()))
-    team.setdefault("created_at", int(time.time()))
+    payload = _sanitize_team_payload(team)
+    payload["name"] = name.strip()
+    payload.setdefault("id", str(team.get("id") or uuid.uuid4()))
+
+    client = get_client()
+    if not client:
+        raise RuntimeError("Supabase client is not configured")
 
     with _LOCK:
-        items = _read()
-        # unique by name (case-insensitive)
-        lower = name.strip().casefold()
-        existing_idx = next(
-            (i for i, t in enumerate(items) if str(t.get("name", "")).strip().casefold() == lower),
-            None,
-        )
-        if existing_idx is None:
-            items.append(team)
-        else:
-            # merge (upsert) preserving original id
-            existing = dict(items[existing_idx])
-            team["id"] = existing.get("id", team["id"])  # preserve
-            existing.update(team)
-            items[existing_idx] = existing
-            team = items[existing_idx]
-        _write(items)
-        return team
+        try:
+            try:
+                client.table("teams").upsert(payload, on_conflict="name").execute()
+            except TypeError:
+                client.table("teams").upsert(payload).execute()
+        except APIError as err:
+            _notify_error(f"Failed to save team: {getattr(err, 'message', str(err))}")
+            raise
+
+        try:
+            res = (
+                client.table("teams")
+                .select("*")
+                .eq("name", payload["name"])
+                .limit(1)
+                .execute()
+            )
+            stored = dict(res.data[0]) if res.data else payload
+        except APIError as err:  # pragma: no cover - fallback to payload
+            _notify_error(f"Failed to load saved team: {getattr(err, 'message', str(err))}")
+            stored = payload
+
+    if st is not None:
+        st.cache_data.clear()
+    return stored
 
 
 __all__ = ["add_team", "list_teams"]
