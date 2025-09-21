@@ -16,16 +16,32 @@ def bootstrap_sidebar_auto_collapse() -> None:
         """
         <script>
         (function() {
-          const collapseBtn = window.parent.document.querySelector(
-            '[data-testid="stSidebarCollapseButton"]'
-          );
+          const rootWindow = window.parent || window;
+          if (!rootWindow || rootWindow.__scoutlensSidebarAutoCollapseInit) {
+            return;
+          }
+
+          rootWindow.__scoutlensSidebarAutoCollapseInit = true;
+
+          const collapseSelector = '[data-testid="stSidebarCollapseButton"]';
+          const sidebarSelector = 'section[data-testid="stSidebar"]';
+
           function autoCollapse() {
-            if (window.innerWidth < 768 && collapseBtn) {
+            const collapseBtn = rootWindow.document.querySelector(collapseSelector);
+            const sidebar = rootWindow.document.querySelector(sidebarSelector);
+
+            if (!collapseBtn || !sidebar) {
+              return;
+            }
+
+            const isExpanded = sidebar.getAttribute('aria-expanded');
+            if (rootWindow.innerWidth < 768 && isExpanded !== 'false') {
               collapseBtn.click();
             }
           }
-          window.addEventListener('load', autoCollapse);
-          window.addEventListener('resize', autoCollapse);
+
+          rootWindow.addEventListener('load', autoCollapse);
+          rootWindow.addEventListener('resize', autoCollapse);
         })();
         </script>
         """,
