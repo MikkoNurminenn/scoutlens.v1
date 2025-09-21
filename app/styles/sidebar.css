@@ -32,14 +32,14 @@ section[data-testid="stSidebar"] .block-container {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  min-height: 100vh;
+  min-height: calc(100vh - 3.25rem);
 }
 
 .sidebar-shell {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  min-height: calc(100vh - 3rem);
+  min-height: 100%;
 }
 
 .sidebar-header {
