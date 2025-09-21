@@ -7,7 +7,12 @@ from typing import Dict
 import streamlit as st
 from supabase import AuthApiError, AuthError
 
-from app.supabase_client import get_client, sign_in as supabase_sign_in, sign_out as supabase_sign_out
+from app.supabase_client import (
+    get_client,
+    session_value,
+    sign_in as supabase_sign_in,
+    sign_out as supabase_sign_out,
+)
 from app.ui import bootstrap_sidebar_auto_collapse
 from app.ui.login_bg import set_login_background
 
@@ -95,7 +100,7 @@ def login(
     _ensure_auth_state()
     client = get_client()
     session = client.auth.get_session()
-    if session and getattr(session, "access_token", None):
+    if session and session_value(session, "access_token"):
         return
 
     _inject_login_styles(background_opacity)
@@ -154,7 +159,7 @@ def login(
             st.stop()
 
         session = getattr(response, "session", None)
-        if not session or not getattr(session, "access_token", None):
+        if not session or not session_value(session, "access_token"):
             st.error("Supabase did not return a valid session. Please try again.")
             st.stop()
 

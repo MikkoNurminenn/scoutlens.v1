@@ -9,10 +9,32 @@ from supabase import AuthError
 
 from app.utils.supa import get_client as _get_cached_client
 
-__all__ = ["get_client", "sign_in", "sign_out"]
+__all__ = ["get_client", "sign_in", "sign_out", "session_value"]
 
 _AUTH_STATE_KEY = "auth"
 _SESSION_STATE_KEY = "supabase_session"
+
+
+def session_value(session: Any, key: str) -> Any:
+    """Safely retrieve values from Supabase session objects or dicts."""
+
+    if session is None:
+        return None
+
+    if hasattr(session, key):
+        return getattr(session, key)
+
+    if isinstance(session, dict):
+        return session.get(key)
+
+    getter = getattr(session, "get", None)
+    if callable(getter):  # pragma: no cover - defensive for mapping-like sessions
+        try:
+            return getter(key)
+        except Exception:
+            return None
+
+    return None
 
 
 def _ensure_auth_state() -> Dict[str, Any]:
@@ -60,8 +82,8 @@ def _serialize_user(user: Any) -> Optional[Dict[str, Any]]:
 
 def _store_session(session: Any, user: Any | None = None) -> None:
     """Persist access and refresh tokens plus user metadata in session state."""
-    access_token = getattr(session, "access_token", None)
-    refresh_token = getattr(session, "refresh_token", None)
+    access_token = session_value(session, "access_token")
+    refresh_token = session_value(session, "refresh_token")
     session_data: Dict[str, str] = {}
     if access_token:
         session_data["access_token"] = access_token
@@ -71,7 +93,7 @@ def _store_session(session: Any, user: Any | None = None) -> None:
         st.session_state[_SESSION_STATE_KEY] = session_data
     auth = _ensure_auth_state()
     auth["authenticated"] = True
-    auth["user"] = _serialize_user(user or getattr(session, "user", None))
+    auth["user"] = _serialize_user(user or session_value(session, "user"))
     auth.pop("last_error", None)
 
 
@@ -91,7 +113,7 @@ def _apply_saved_session(client) -> None:
     """Sync Supabase client auth with tokens stored in session state."""
     stored = st.session_state.get(_SESSION_STATE_KEY)
     current = client.auth.get_session()
-    current_access = getattr(current, "access_token", None) if current else None
+    current_access = session_value(current, "access_token") if current else None
 
     if stored:
         access_token = stored.get("access_token")
@@ -105,13 +127,13 @@ def _apply_saved_session(client) -> None:
                 return
             session = getattr(response, "session", None)
             user = getattr(response, "user", None)
-            if session and getattr(session, "access_token", None):
+            if session and session_value(session, "access_token"):
                 _store_session(session, user)
                 return
 
     current = client.auth.get_session()
-    if current and getattr(current, "access_token", None):
-        _store_session(current, getattr(current, "user", None))
+    if current and session_value(current, "access_token"):
+        _store_session(current, session_value(current, "user"))
         return
 
     if stored:
@@ -132,7 +154,7 @@ def sign_in(email: str, password: str):
     response = get_client().auth.sign_in_with_password({"email": email, "password": password})
     session = getattr(response, "session", None)
     user = getattr(response, "user", None)
-    if session and getattr(session, "access_token", None):
+    if session and session_value(session, "access_token"):
         _store_session(session, user)
     else:
         _clear_session_state()

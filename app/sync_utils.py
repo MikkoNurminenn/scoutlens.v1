@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.supabase_client import get_client
+from app.supabase_client import get_client, session_value
 
 
 def _ensure_authenticated_session(client: Any) -> None:
@@ -19,7 +19,7 @@ def _ensure_authenticated_session(client: Any) -> None:
     else:  # pragma: no cover - defensive for older client versions
         session = getattr(auth, "session", None)
 
-    if not session or getattr(session, "access_token", None) in (None, ""):
+    if not session or session_value(session, "access_token") in (None, ""):
         raise PermissionError("Supabase session missing. Sign in before syncing.")
 
 
