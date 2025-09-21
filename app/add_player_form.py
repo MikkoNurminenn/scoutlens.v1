@@ -1,5 +1,4 @@
 # add_player_form.py
-import json
 import re
 import unicodedata
 import uuid
@@ -7,28 +6,49 @@ from datetime import date
 from pathlib import Path
 
 import streamlit as st
-import pandas as pd  # NEW
 
-from app.app_paths import file_path, DATA_DIR
-from app.data_utils import (
-    load_master, save_master
-)
+from postgrest.exceptions import APIError
 
-PLAYERS_FP = file_path("players.json")
+from app.app_paths import DATA_DIR
+from app.supabase_client import get_client
 
 # ---------------------------
 # Helpers
 # ---------------------------
-def _load_players() -> list:
+def _fetch_team_players(team: str) -> list[dict]:
+    client = get_client()
+    if not client or not team:
+        return []
     try:
-        if PLAYERS_FP.exists():
-            return json.loads(PLAYERS_FP.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return []
+        res = (
+            client.table("players")
+            .select("id,name,date_of_birth,team_name,club_number")
+            .eq("team_name", team)
+            .execute()
+        )
+    except APIError as err:  # pragma: no cover - UI error handling
+        st.error(f"Failed to load players from Supabase: {getattr(err, 'message', str(err))}")
+        return []
+    return [dict(row) for row in (res.data or [])]
 
-def _save_players(data: list) -> None:
-    PLAYERS_FP.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def _resolve_team(team: str) -> dict | None:
+    client = get_client()
+    if not client or not team:
+        return None
+    try:
+        res = (
+            client.table("teams")
+            .select("id,name")
+            .eq("name", team)
+            .limit(1)
+            .execute()
+        )
+    except APIError as err:  # pragma: no cover
+        st.error(f"Failed to resolve team in Supabase: {getattr(err, 'message', str(err))}")
+        return None
+    rows = res.data or []
+    return dict(rows[0]) if rows else None
 
 def _norm_name(s: str) -> str:
     s = (s or "").strip()
@@ -48,82 +68,12 @@ def _age_from_dob(d: date) -> int:
 def _foot_label_to_value(lbl: str) -> str:
     return {"Oikea": "Right", "Vasen": "Left", "Molemmat": "Both", "": ""}.get(lbl, lbl)
 
-def _normalize_nat(v) -> str:  # NEW
-    if v is None:
-        return ""
-    if isinstance(v, (list, tuple, set)):
-        return ", ".join(str(x).strip() for x in v if str(x).strip())
-    return str(v).strip()
-
-def _next_free_id(existing_ids):  # NEW
-    existing = set(int(x) for x in existing_ids if pd.notna(x))
-    idx = 1
-    while idx in existing:
-        idx += 1
-    return idx
-
-def _ensure_min_master(df: pd.DataFrame) -> pd.DataFrame:  # NEW
-    cols = [
-        "PlayerID","Name","Nationality","DateOfBirth",
-        "PreferredFoot","ClubNumber","Position","ScoutRating"
-    ]
-    for c in cols:
-        if c not in df.columns:
-            df[c] = 0 if c in ("PlayerID","ClubNumber","ScoutRating") else ""
-    return df
-
-def _push_to_master(team: str, record: dict) -> None:  # NEW
-    """
-    Synkkaa lomakkeesta lisätty pelaaja myös tiimin masteriin,
-    jotta Player Editor näkee sen heti.
-    Matchaa rivin (Name, DateOfBirth) perusteella — jos löytyy, päivittää rivin;
-    muuten lisää uuden ja antaa vapaan PlayerID:n.
-    """
-    df = load_master(team)
-    if df is None or df.empty:
-        df = pd.DataFrame(columns=[
-            "PlayerID","Name","Nationality","DateOfBirth",
-            "PreferredFoot","ClubNumber","Position","ScoutRating"
-        ])
-
-    df = _ensure_min_master(df)
-
-    name = _norm_name(record.get("name",""))
-    dob  = (record.get("date_of_birth") or "").split("T")[0]
-    nat  = _normalize_nat(record.get("nationality",""))
-    foot = record.get("preferred_foot","") or ""
-    num  = int(record.get("club_number") or 0)
-    pos  = record.get("primary_position") or record.get("position") or ""
-    sr   = int(record.get("scout_rating") or 0)
-
-    # Etsi olemassa oleva rivi (sama nimi + DOB)
-    mask = (df["Name"].astype(str).str.strip().str.lower() == name.lower()) & \
-           (df["DateOfBirth"].astype(str).str.strip() == dob)
-    if mask.any():
-        idx = df.index[mask][0]
-        df.at[idx, "Nationality"]   = nat
-        df.at[idx, "PreferredFoot"] = foot
-        df.at[idx, "ClubNumber"]    = num
-        df.at[idx, "Position"]      = pos
-        # Päivitä ScoutRating vain jos olemassa (ei pakko)
-        if "ScoutRating" in df.columns:
-            df.at[idx, "ScoutRating"] = sr
-    else:
-        # Uusi rivi
-        next_id = _next_free_id(pd.to_numeric(df["PlayerID"], errors="coerce").fillna(0).astype(int).tolist())
-        new_row = {
-            "PlayerID": next_id,
-            "Name": name,
-            "Nationality": nat,
-            "DateOfBirth": dob,
-            "PreferredFoot": foot,
-            "ClubNumber": num,
-            "Position": pos,
-            "ScoutRating": sr,
-        }
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-
-    save_master(df, team)
+def _push_to_master(team: str, record: dict) -> None:  # legacy helper retained
+    """Clear cached data so new Supabase rows appear instantly in editors."""
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
 
 POSITIONS_PRIMARY = [
     "GK","RB","RWB","CB","LB","LWB","DM","CM","AM","RW","LW","ST"
@@ -140,16 +90,15 @@ def show_add_player_form():
         st.warning("Valitse ensin joukkue sivupalkista (⚽ Team & Season).")
         return
 
-    players = _load_players()
-    existing_team = [p for p in players if (p.get("team_name") or p.get("Team") or p.get("team")) == team]
+    existing_team = _fetch_team_players(team)
     existing_numbers = sorted({
         int(p.get("club_number") or 0)
         for p in existing_team
-        if str(p.get("club_number","")).isdigit()
+        if str(p.get("club_number", "")).isdigit()
     })
 
     with st.container():
-        st.caption(f"Data: {PLAYERS_FP}")
+        st.caption("Data source: Supabase · players table")
         st.markdown(f"**Joukkue:** {team}")
 
     with st.form("add_player_form", clear_on_submit=False):
@@ -213,10 +162,16 @@ def show_add_player_form():
             if weight and (weight < 40 or weight > 120):
                 st.warning("Paino näyttää poikkeavalta. Tarkista yksikkö (kg).")
 
-            # Duplikaatti: sama nimi + DOB samassa joukkueessa (players.json)
-            dup = next((p for p in existing_team
-                        if _norm_name(p.get("name") or p.get("Name","")) == nm
-                        and (p.get("date_of_birth") or p.get("DateOfBirth","")).split("T")[0] == dob.isoformat()), None)
+            # Duplikaatti: sama nimi + DOB samassa joukkueessa
+            dup = next(
+                (
+                    p
+                    for p in existing_team
+                    if _norm_name(p.get("name") or p.get("Name", "")) == nm
+                    and str(p.get("date_of_birth") or "").split("T")[0] == dob.isoformat()
+                ),
+                None,
+            )
             if dup:
                 errors.append("Sama nimi ja syntymäpäivä löytyy jo tästä joukkueesta.")
 
@@ -229,22 +184,43 @@ def show_add_player_form():
                     st.error(e)
                 return
 
-            # Rakenna tietue
+            client = get_client()
+            if not client:
+                st.error("Supabase client is not configured.")
+                return
+
+            team_row = _resolve_team(team)
+            team_id = team_row.get("id") if team_row else None
+            if team_id is None:
+                try:
+                    inserted = client.table("teams").insert({"name": team}).execute()
+                    team_data = inserted.data or []
+                    if team_data:
+                        team_id = team_data[0].get("id")
+                except APIError:
+                    # If insert fails (likely due to unique constraint), try loading again
+                    team_row = _resolve_team(team)
+                    team_id = team_row.get("id") if team_row else None
+
+            # Rakenna tietue Supabaseen
             rec_id = uuid.uuid4().hex
+            secondary_positions = [p for p in secondary_pos if p]
+            tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
             record = {
                 "id": rec_id,
                 "name": nm,
                 "team_name": team,
+                "team_id": team_id,
                 "date_of_birth": dob.isoformat(),
-                "nationality": (nationality or "").strip(),
-                "height": int(height or 0),
-                "weight": int(weight or 0),
-                "preferred_foot": _foot_label_to_value(preferred_foot_ui),
-                "club_number": int(club_number or 0),
+                "nationality": (nationality or "").strip() or None,
+                "height": int(height) if height else None,
+                "weight": int(weight) if weight else None,
+                "preferred_foot": _foot_label_to_value(preferred_foot_ui) or None,
+                "club_number": int(club_number) if club_number else None,
                 "primary_position": primary_pos,
-                "secondary_positions": secondary_pos,
-                "notes": (notes or "").strip(),
-                "tags": [t.strip() for t in (tags or "").split(",") if t.strip()],
+                "secondary_positions": secondary_positions or None,
+                "notes": (notes or "").strip() or None,
+                "tags": tag_list or None,
             }
 
             # Tallenna kuva (jos annettu)
@@ -257,12 +233,12 @@ def show_add_player_form():
                 out_path.write_bytes(photo.read())
                 record["photo_path"] = str(out_path)
 
-            # 1) Kirjoita players.json
-            players = _load_players()
-            players.append(record)
-            _save_players(players)
+            try:
+                client.table("players").insert(record).execute()
+            except APIError as err:
+                st.error(f"Failed to save player to Supabase: {getattr(err, 'message', str(err))}")
+                return
 
-            # 2) Puske myös masteriin → näkyy heti Player Editorissa
             _push_to_master(team, record)
 
             st.success(f"Pelaaja '{nm}' lisätty joukkueeseen {team}.")

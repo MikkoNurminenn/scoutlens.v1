@@ -1,6 +1,6 @@
 # app_paths.py — yhtenäinen datapolku local/Cloud
 from pathlib import Path
-import os, json
+import os
 
 APP_NAME = "ScoutLens"
 CLOUD = os.getenv("SCOUTLENS_CLOUD", "0") == "1"
@@ -17,24 +17,12 @@ else:
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+
 def file_path(name: str) -> Path:
     return DATA_DIR / name
 
-# Predefined file paths and directories
-PLAYERS_FP = file_path("players.json")
-MATCHES_FP = file_path("matches.json")
-SCOUT_REPORTS_FP = file_path("scout_reports.json")
-NOTES_FP = file_path("notes.json")
 
+# Player photos and export artefacts can still live locally, but the
+# primary data source (players, teams, matches, reports, notes) is Supabase.
 PLAYER_PHOTOS_DIR = DATA_DIR / "player_photos"
 PLAYER_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
-
-# Luo oletustiedostot jos puuttuu (turvallinen ajaa aina)
-for fp, default in [
-    (PLAYERS_FP, []),
-    (MATCHES_FP, []),
-    (SCOUT_REPORTS_FP, []),
-    (NOTES_FP, []),
-]:
-    if not fp.exists():
-        fp.write_text(json.dumps(default), encoding="utf-8")
