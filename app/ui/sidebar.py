@@ -56,7 +56,7 @@ def build_sidebar(
         st.markdown("<div class='sidebar-shell'>", unsafe_allow_html=True)
         st.markdown("<div class='sidebar-header'>", unsafe_allow_html=True)
         st.markdown("<div class='sidebar-logo'>", unsafe_allow_html=True)
-        st.image(str(root / "assets" / "logo.png"), use_container_width=True)
+        st.image(str(root / "assets" / "logo.png"), use_column_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
         tagline_html = (
