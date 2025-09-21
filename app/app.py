@@ -115,13 +115,22 @@ NAV_KEYS = [
     "Export",
 ]
 NAV_LABELS = {
-    "Reports": "📝 Reports",
-    "Inspect Player": "🔍 Inspect Player",
-    "Shortlists": "⭐ Shortlists",
-    "Manage Shortlists": "🗑️ Manage Shortlists",
-    "Players": "👤 Players",
-    "Notes": "🗒️ Quick notes",
-    "Export": "⬇️ Export",
+    "Reports": "Reports",
+    "Inspect Player": "Inspect Player",
+    "Shortlists": "Shortlists",
+    "Manage Shortlists": "Manage Shortlists",
+    "Players": "Players",
+    "Notes": "Quick notes",
+    "Export": "Export",
+}
+NAV_ICONS = {
+    "Reports": "\uf201",
+    "Inspect Player": "\uf002",
+    "Shortlists": "\uf0ca",
+    "Manage Shortlists": "\uf0ad",
+    "Players": "\uf0c0",
+    "Notes": "\uf249",
+    "Export": "\uf56e",
 }
 LEGACY_REMAP = {
     "home": "Reports",
@@ -160,6 +169,7 @@ def main() -> None:
         current=current,
         nav_keys=NAV_KEYS,
         nav_labels=NAV_LABELS,
+        nav_icons=NAV_ICONS,
         app_title=APP_TITLE,
         app_tagline=APP_TAGLINE,
         app_version=APP_VERSION,
