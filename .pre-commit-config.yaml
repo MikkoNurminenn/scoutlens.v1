@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: no-sidebar-outside-sidebar-module
+        name: Prevent stray st.sidebar usage
+        entry: tools/no_sidebar_outside_hook.py
+        language: system
+        types: [python]
+        pass_filenames: false
