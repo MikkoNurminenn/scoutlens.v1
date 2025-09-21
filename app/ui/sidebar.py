@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from html import escape
 from pathlib import Path
-from typing import Callable, Dict, Iterable
+from typing import Callable, Dict, Iterable, List
 import streamlit as st
 
 
@@ -57,7 +57,7 @@ def build_sidebar(
     """Render the application sidebar (English-only, tidy header, no stray boxes)."""
 
     root = Path(__file__).resolve().parents[2]
-    nav_options = list(nav_keys)
+    nav_options: List[str] = list(nav_keys)
     nav_display = {key: nav_labels.get(key, key) for key in nav_options}
 
     # Keep font stack + logo sizing. Removed nonstandard :contains() alert-hiding CSS.
@@ -80,14 +80,17 @@ def build_sidebar(
     st.markdown(
         """
         <script>
-        (function(){
+        (function relocateAlerts(){
           const doc = window.parent?.document ?? document;
           const sb = doc.querySelector('section[data-testid="stSidebar"]');
           if (!sb) return;
           const shell = sb.querySelector('.sidebar-shell') || sb;
           const footer = sb.querySelector('.sb-footer')?.parentElement || shell.lastElementChild || shell;
-          sb.querySelectorAll('.stAlert').forEach(alert => {
+          const alerts = sb.querySelectorAll('.stAlert');
+          if (!alerts.length) return;
+          alerts.forEach(alert => {
             const blk = alert.closest('[data-testid="stVerticalBlock"]') || alert;
+            if (!blk) return;
             footer?.after(blk);
           });
         })();
@@ -120,42 +123,44 @@ def build_sidebar(
         st.markdown("</div>", unsafe_allow_html=True)  # /sidebar-header
 
         # ---------- NAV (one wrapper; no extra/empty divs) ----------
-        st.markdown("<div class='sidebar-nav'>", unsafe_allow_html=True)
-        st.markdown("<div class='nav-title'>Navigation</div>", unsafe_allow_html=True)
+        if nav_options:
+            st.markdown("<div class='sidebar-nav'>", unsafe_allow_html=True)
+            st.markdown("<div class='nav-title'>Navigation</div>", unsafe_allow_html=True)
 
-        st.radio(
-            "Navigate",
-            options=nav_options,
-            index=nav_options.index(current) if current in nav_options else 0,
-            format_func=lambda key: nav_display.get(key, key),
-            key="_nav_radio",
-            label_visibility="collapsed",
-            on_change=lambda: go(st.session_state["_nav_radio"]),
-        )
+            st.radio(
+                "Navigate",
+                options=nav_options,
+                index=nav_options.index(current) if current in nav_options else 0,
+                format_func=lambda key: nav_display.get(key, key),
+                key="_nav_radio",
+                label_visibility="collapsed",
+                on_change=lambda: go(st.session_state["_nav_radio"]),
+            )
 
-        st.markdown("</div>", unsafe_allow_html=True)  # /sidebar-nav
+            st.markdown("</div>", unsafe_allow_html=True)  # /sidebar-nav
 
         # ---------- ICONS for radio labels ----------
-        icon_map = {key: nav_icons.get(key, "") for key in nav_options}
-        st.markdown(
-            """
-            <script>
-            (function() {
-              const ICON_MAP = __ICON_MAP__;
-              const rootDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-              const labels = rootDoc.querySelectorAll('section[data-testid="stSidebar"] [role="radiogroup"] > label');
-              labels.forEach((label) => {
-                const input = label.querySelector('input');
-                if (!input) return;
-                const icon = ICON_MAP[input.value] || '';
-                if (icon) label.setAttribute('data-icon', icon);
-                else label.removeAttribute('data-icon');
-              });
-            })();
-            </script>
-            """.replace("__ICON_MAP__", json.dumps(icon_map)),
-            unsafe_allow_html=True,
-        )
+        if nav_options:
+            icon_map = {key: nav_icons.get(key, "") for key in nav_options}
+            st.markdown(
+                """
+                <script>
+                (function attachIcons() {
+                  const ICON_MAP = __ICON_MAP__;
+                  const rootDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                  const labels = rootDoc.querySelectorAll('section[data-testid="stSidebar"] [role="radiogroup"] > label');
+                  labels.forEach((label) => {
+                    const input = label.querySelector('input');
+                    if (!input) return;
+                    const icon = ICON_MAP[input.value] || '';
+                    if (icon) label.setAttribute('data-icon', icon);
+                    else label.removeAttribute('data-icon');
+                  });
+                })();
+                </script>
+                """.replace("__ICON_MAP__", json.dumps(icon_map)),
+                unsafe_allow_html=True,
+            )
 
         # ---------- PROFILE ----------
         auth = st.session_state.get("auth", {})
