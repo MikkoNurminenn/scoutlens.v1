@@ -1,31 +1,20 @@
-/* File: styles/sidebar.css */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css");
 
-/* Sidebar navigation */
 section[data-testid="stSidebar"] {
-  background: linear-gradient(180deg, var(--bg-page), var(--bg-card));
-  color: var(--fg-strong);
-  box-shadow: inset -1px 0 0 var(--divider);
+  background: radial-gradient(circle at 20% 0%, rgba(46, 67, 110, 0.68) 0%, rgba(17, 24, 39, 0.96) 58%, rgba(9, 12, 24, 0.98) 100%), #0b1526;
+  color: #f4f7ff;
+  font-family: "Inter", "Font Awesome 6 Free", "Font Awesome 6 Brands", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   min-width: 300px;
-  max-width: 300px;
+  max-width: 320px;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-section[data-testid="stSidebar"] > div:first-child {
-  min-width: 300px;
-  max-width: 300px;
-}
-
-[data-testid="stSidebarResizer"] {
-  display: none;
-}
-
-section[data-testid="stSidebar"][aria-expanded="true"] {
-  min-width: 300px;
-  max-width: 300px;
-}
-
+section[data-testid="stSidebar"] > div:first-child,
+section[data-testid="stSidebar"][aria-expanded="true"],
 section[data-testid="stSidebar"][aria-expanded="true"] > div:first-child {
   min-width: 300px;
-  max-width: 300px;
+  max-width: 320px;
 }
 
 section[data-testid="stSidebar"][aria-expanded="false"],
@@ -39,87 +28,308 @@ section[data-testid="stSidebar"][aria-expanded="false"] > div:first-child {
 }
 
 section[data-testid="stSidebar"] .block-container {
-  padding: var(--space-5) var(--space-4);
+  padding: 1.5rem 1.25rem 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: 100vh;
 }
-section[data-testid="stSidebar"] .block-container img {
+
+.sidebar-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: calc(100vh - 3rem);
+}
+
+.sidebar-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.15rem 1.15rem 1.25rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  box-shadow: 0 20px 35px rgba(8, 13, 31, 0.35);
+  backdrop-filter: blur(14px);
+}
+
+.sidebar-logo img {
   width: 100%;
-  margin-bottom: var(--space-4);
+  border-radius: 18px;
+  box-shadow: 0 22px 38px rgba(12, 20, 44, 0.45);
+}
+
+.sidebar-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.scout-brand {
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f8fbff;
+  text-shadow: 0 10px 25px rgba(10, 14, 28, 0.6);
+}
+
+.scout-sub {
+  font-size: 0.95rem;
+  color: rgba(230, 237, 255, 0.75);
+  font-weight: 500;
+}
+
+.sidebar-nav {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.1rem 1rem;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(15, 21, 36, 0.72);
+  box-shadow: 0 24px 45px rgba(7, 11, 24, 0.32);
+  backdrop-filter: blur(18px);
+}
+
+.nav-title {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.32em;
+  font-weight: 600;
+  color: rgba(226, 234, 255, 0.55);
+}
+
+section[data-testid="stSidebar"] [role="radiogroup"] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
 
 section[data-testid="stSidebar"] [role="radiogroup"] > label {
-  border: 1px solid var(--divider);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  background: transparent;
-  transition: background .2s ease, transform .2s ease, border-color .2s ease, box-shadow .2s ease;
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  color: var(--fg-strong);
+  gap: 0.5rem;
+  padding: 0.8rem 1.1rem 0.8rem 3.1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(236, 242, 255, 0.82);
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease,
+    box-shadow 0.25s ease, transform 0.25s ease;
+  cursor: pointer;
+  overflow: hidden;
 }
 
-/* hover: lämmin amber‑wash + kevyt liike */
+section[data-testid="stSidebar"] [role="radiogroup"] > label::before {
+  content: attr(data-icon);
+  position: absolute;
+  left: 1.15rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: "Font Awesome 6 Free";
+  font-weight: 900;
+  font-size: 1.05rem;
+  color: rgba(218, 225, 255, 0.7);
+  transition: color 0.25s ease, transform 0.25s ease;
+}
+
 section[data-testid="stSidebar"] [role="radiogroup"] > label:hover {
-  background: color-mix(in srgb, var(--accent-1) 10%, transparent);
-  transform: translateX(2px);
+  transform: translateX(4px);
+  background: rgba(88, 128, 255, 0.12);
+  border-color: rgba(120, 160, 255, 0.35);
+  color: rgba(250, 253, 255, 0.95);
+  box-shadow: 0 16px 30px rgba(16, 28, 66, 0.35);
 }
 
-/* checked: enemmän amberia + lämmin reuna */
+section[data-testid="stSidebar"] [role="radiogroup"] > label:hover::before {
+  color: rgba(250, 253, 255, 0.85);
+  transform: translateY(-50%) scale(1.08);
+}
+
 section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) {
-  background: color-mix(in srgb, var(--accent-1) 18%, transparent);
-  border-color: color-mix(in srgb, var(--accent-1) 45%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-1) 50%, transparent),
-              inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 40%, transparent);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(59, 130, 246, 0.85));
+  border-color: rgba(166, 191, 255, 0.85);
+  color: #ffffff;
+  box-shadow: 0 18px 40px rgba(18, 35, 76, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 
 section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked)::before {
+  color: #ffffff;
+  transform: translateY(-50%) scale(1.12);
+}
+
+section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked)::after {
   content: "";
   position: absolute;
-  left: 0; top: 0; bottom: 0; width: 3px;
-  background: linear-gradient(180deg, var(--accent-1), var(--accent-2));
-  border-top-left-radius: var(--radius-md);
-  border-bottom-left-radius: var(--radius-md);
+  inset: 0;
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.28), 0 0 25px rgba(101, 168, 255, 0.45);
+  pointer-events: none;
 }
 
-/* Näppäimistö: selkeä mutta lämmin fokusrengas */
 section[data-testid="stSidebar"] [role="radiogroup"] > label:focus-within {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fg-strong) 25%, transparent),
-              0 0 0 4px color-mix(in srgb, var(--accent-1) 45%, transparent);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.55), 0 0 0 5px rgba(96, 165, 250, 0.3);
 }
 
-/* Linkit sivupalkissa noudattavat teeman kontrastia */
 section[data-testid="stSidebar"] a {
-  color: var(--fg-strong);
+  color: inherit;
   text-decoration: none;
 }
+
 section[data-testid="stSidebar"] a:hover {
-  color: color-mix(in srgb, var(--fg-strong) 85%, var(--accent-1) 15%);
+  color: #ffffff;
 }
 
-.sb-user {
-    margin: var(--space-4) 0 var(--space-2);
-    font-size: var(--fs-14);
+.sidebar-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-top: auto;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(18, 24, 40, 0.78);
+  box-shadow: 0 20px 35px rgba(7, 12, 26, 0.38);
+}
+
+.profile-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5b8def, #3b5bdb);
+  box-shadow: 0 12px 25px rgba(59, 91, 219, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-avatar::after {
+  content: attr(data-initials);
+}
+
+.profile-avatar.has-image::after {
+  content: "";
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+.profile-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.profile-name {
+  font-weight: 600;
+  color: #f9fbff;
+}
+
+.profile-email {
+  font-size: 0.8rem;
+  color: rgba(222, 229, 255, 0.65);
+}
+
+.sidebar-signout {
+  margin-top: 0.75rem;
+}
+
+section[data-testid="stSidebar"] .sidebar-signout div[data-testid="baseButton-secondary"] > button,
+section[data-testid="stSidebar"] .sidebar-signout button {
+  width: 100%;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 113, 113, 0.6);
+  background: rgba(248, 113, 113, 0.12);
+  color: rgba(252, 165, 165, 0.95);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease,
+    transform 0.2s ease;
+}
+
+section[data-testid="stSidebar"] .sidebar-signout div[data-testid="baseButton-secondary"] > button:hover,
+section[data-testid="stSidebar"] .sidebar-signout button:hover {
+  background: rgba(248, 113, 113, 0.2);
+  color: #ffe4e6;
+  border-color: rgba(248, 113, 113, 0.8);
+  transform: translateY(-1px);
+}
+
+section[data-testid="stSidebar"] .sidebar-signout div[data-testid="baseButton-secondary"] > button:active,
+section[data-testid="stSidebar"] .sidebar-signout button:active {
+  transform: translateY(0);
+}
+
+.sb-footer {
+  margin-top: 1.25rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(220, 228, 255, 0.6);
+}
+
+.sb-footer-title {
+  font-weight: 600;
+}
+
+.sb-version {
+  font-weight: 500;
+}
+
+@media (max-width: 900px) {
+  section[data-testid="stSidebar"],
+  section[data-testid="stSidebar"] > div:first-child,
+  section[data-testid="stSidebar"][aria-expanded="true"],
+  section[data-testid="stSidebar"][aria-expanded="true"] > div:first-child {
+    min-width: 260px;
+    max-width: 260px;
   }
 
-/* Liikettä vähentäville käyttäjille: poista siirtymät/siirrot */
+  section[data-testid="stSidebar"] .block-container {
+    padding: 1.25rem 1rem 1.5rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  section[data-testid="stSidebar"] [role="radiogroup"] > label {
-    transition: background .2s ease;
+  section[data-testid="stSidebar"] [role="radiogroup"] > label,
+  section[data-testid="stSidebar"] [role="radiogroup"] > label::before,
+  section[data-testid="stSidebar"] [role="radiogroup"] > label::after,
+  section[data-testid="stSidebar"] .sidebar-signout button,
+  section[data-testid="stSidebar"] .sidebar-signout div[data-testid="baseButton-secondary"] > button {
+    transition: none;
     transform: none;
   }
 }
 
-/* Fallback, jos color-mix ei ole tuettu */
-@supports not (color: color-mix(in srgb, #000 0%, #000 0%)) {
-  /* #DF941B = var(--accent-1) */
-  section[data-testid="stSidebar"] [role="radiogroup"] > label:hover {
-    background: rgba(223, 148, 27, 0.10);
-  }
-  section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) {
-    background: rgba(223, 148, 27, 0.18);
-    border-color: rgba(223, 148, 27, 0.45);
-    box-shadow: 0 0 0 1px rgba(223, 148, 27, 0.5), inset 0 0 0 1px rgba(168, 102, 16, 0.4); /* #A86610 = var(--accent-2) */
+@supports not (backdrop-filter: blur(4px)) {
+  .sidebar-header,
+  .sidebar-nav,
+  .sidebar-profile-card {
+    background: rgba(18, 24, 40, 0.88);
   }
 }
