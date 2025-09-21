@@ -41,7 +41,7 @@ build_sidebar = importlib.import_module("app.ui.sidebar").__getattribute__(
     "build_sidebar"
 )
 
-st.set_page_config(page_title="ScoutLens", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="expanded")
 
 # ---- Page imports (Streamlit-safe wrapper)
 
@@ -120,7 +120,7 @@ NAV_LABELS = {
     "Shortlists": "⭐ Shortlists",
     "Manage Shortlists": "🗑️ Manage Shortlists",
     "Players": "👤 Players",
-    "Notes": "🗒️ Notes",
+    "Notes": "🗒️ Quick notes",
     "Export": "⬇️ Export",
 }
 LEGACY_REMAP = {
