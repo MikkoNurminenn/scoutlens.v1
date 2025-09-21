@@ -28,7 +28,7 @@ section[data-testid="stSidebar"][aria-expanded="false"] > div:first-child {
 }
 
 section[data-testid="stSidebar"] .block-container {
-  padding: 1.5rem 1.25rem 1.75rem;
+  padding: 0 1.25rem 1.75rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -311,7 +311,7 @@ section[data-testid="stSidebar"] .sidebar-signout button:active {
   }
 
   section[data-testid="stSidebar"] .block-container {
-    padding: 1.25rem 1rem 1.5rem;
+    padding: 0 1rem 1.5rem;
   }
 }
 
