@@ -147,14 +147,42 @@ def build_sidebar(
                 (function attachIcons() {
                   const ICON_MAP = __ICON_MAP__;
                   const rootDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-                  const labels = rootDoc.querySelectorAll('section[data-testid="stSidebar"] [role="radiogroup"] > label');
-                  labels.forEach((label) => {
-                    const input = label.querySelector('input');
-                    if (!input) return;
-                    const icon = ICON_MAP[input.value] || '';
-                    if (icon) label.setAttribute('data-icon', icon);
-                    else label.removeAttribute('data-icon');
-                  });
+
+                  function applyIcons() {
+                    const container = rootDoc.querySelector('section[data-testid="stSidebar"]');
+                    if (!container) return;
+                    const labels = container.querySelectorAll('[role="radiogroup"] > label');
+                    labels.forEach((label) => {
+                      const input = label.querySelector('input');
+                      if (!input) return;
+                      const iconChar = ICON_MAP[input.value] || '';
+                      let iconSpan = label.querySelector('.sb-nav-icon');
+                      if (!iconChar) {
+                        if (iconSpan) iconSpan.remove();
+                        return;
+                      }
+                      if (!iconSpan) {
+                        iconSpan = rootDoc.createElement('span');
+                        iconSpan.className = 'sb-nav-icon';
+                        iconSpan.setAttribute('aria-hidden', 'true');
+                        label.appendChild(iconSpan);
+                      }
+                      iconSpan.textContent = iconChar;
+                    });
+                  }
+
+                  applyIcons();
+
+                  const observer = new MutationObserver(() => applyIcons());
+                  function observeSidebar() {
+                    const container = rootDoc.querySelector('section[data-testid="stSidebar"]');
+                    if (!container) {
+                      setTimeout(observeSidebar, 120);
+                      return;
+                    }
+                    observer.observe(container, { childList: true, subtree: true });
+                  }
+                  observeSidebar();
                 })();
                 </script>
                 """.replace("__ICON_MAP__", json.dumps(icon_map)),
