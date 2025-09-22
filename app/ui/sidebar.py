@@ -128,7 +128,18 @@ def build_sidebar(
         st.markdown(header_html, unsafe_allow_html=True)
 
         if nav_options:
-            st.markdown("<div class='sb-nav-title'>Navigation</div>", unsafe_allow_html=True)
+            st.markdown(
+                """
+                <div class='sb-nav-title'>
+                  <span class='sb-nav-badge' aria-hidden='true'>
+                    <span class='sb-nav-badge-pulse'></span>
+                  </span>
+                  <span class='sb-nav-text'>Navigation</span>
+                  <span class='sb-nav-underline' aria-hidden='true'></span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             st.radio(
                 "Navigate",
                 options=nav_options,
