@@ -7,7 +7,7 @@ import json
 from functools import lru_cache
 from html import escape
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List
+from typing import Callable, Dict, Iterable, List, Optional
 
 import streamlit as st
 
@@ -18,18 +18,13 @@ def bootstrap_sidebar_auto_collapse() -> None:
         """
         <script>
         (function() {
-          // Guard against multiple inits
           const w = window;
           if (w.__sl_sb_auto_collapse_init) return;
           w.__sl_sb_auto_collapse_init = true;
 
-          // Safe parent document access
           function getDoc() {
-            try {
-              return (w.parent && w.parent.document) ? w.parent.document : w.document;
-            } catch (e) {
-              return w.document; // cross-origin fallback
-            }
+            try { return (w.parent && w.parent.document) ? w.parent.document : w.document; }
+            catch (e) { return w.document; }
           }
 
           let raf = 0;
@@ -49,7 +44,6 @@ def bootstrap_sidebar_auto_collapse() -> None:
             raf = requestAnimationFrame(autoCollapse);
           }
 
-          // Init + cleanup
           w.addEventListener('load', autoCollapse, { once: true });
           w.addEventListener('resize', onResize);
 
@@ -75,13 +69,15 @@ def build_sidebar(
     app_version: str,
     go: Callable[[str], None],
     logout: Callable[[], None],
+    logo_path: Optional[str] = None,
 ) -> None:
-    """Render the application sidebar with a minimal wrapper structure."""
+    """Render Streamlit sidebar with robust DOM integration and icon support."""
 
     root = Path(__file__).resolve().parents[2]
     nav_options: List[str] = list(nav_keys)
     nav_display = {key: nav_labels.get(key, key) for key in nav_options}
 
+    # Minimal baseline styles that won't fight your main CSS
     st.markdown(
         """
         <style>
@@ -92,13 +88,12 @@ def build_sidebar(
             display:block; margin:0 auto; width:100%; max-width:180px; height:auto; border-radius:18px;
             box-shadow:0 22px 38px rgba(12,20,44,.45);
           }
-          .sb-nav-icon{ margin-left:auto; }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # Safened alert relocation (no-op if elements missing or cross-origin)
+    # Move alerts to the bottom of the sidebar (safe no-op if not found)
     st.markdown(
         """
         <script>
@@ -124,7 +119,10 @@ def build_sidebar(
         unsafe_allow_html=True,
     )
 
-    logo_data_uri = _get_logo_data_uri(str(root / "assets" / "logo.png"))
+    if not logo_path:
+        logo_path = str(root / "assets" / "logo.png")
+
+    logo_data_uri = _get_logo_data_uri(logo_path)
     tagline_html = f"<div class='sb-tagline'>{escape(app_tagline)}</div>" if app_tagline else ""
     logo_html = (
         f"<div class='sb-logo'><img src=\"{logo_data_uri}\" alt=\"{escape(app_title)} logo\" loading=\"lazy\"/></div>"
@@ -172,7 +170,6 @@ def build_sidebar(
 
         if nav_options:
             icon_map = {key: nav_icons.get(key, "") for key in nav_options}
-            # ensure_ascii=False keeps emoji/codepoints readable in JS
             st.markdown(
                 """
                 <script>
@@ -193,20 +190,24 @@ def build_sidebar(
                     labels.forEach((label) => {
                       const input = label.querySelector('input');
                       if (!input) return;
-                      const iconChar = ICON_MAP[input.value] || '';
+
+                      const spec = ICON_MAP[input.value] || ''; // "fa-solid fa-house" TAI "🏠"
                       let iconSpan = label.querySelector('.sb-nav-icon');
 
-                      if (!iconChar) {
+                      if (!spec) {
                         if (iconSpan) iconSpan.remove();
                       } else {
                         if (!iconSpan) {
                           iconSpan = rootDoc.createElement('span');
                           iconSpan.className = 'sb-nav-icon';
-                          iconSpan.setAttribute('aria-hidden', 'true'); // decorative
-                          // push to end for consistent layout
+                          iconSpan.setAttribute('aria-hidden', 'true'); // dekoratiivinen
                           label.appendChild(iconSpan);
                         }
-                        iconSpan.textContent = iconChar;
+                        if (/\\bfa-/.test(spec)) {
+                          iconSpan.innerHTML = '<i class="' + spec + '"></i>';
+                        } else {
+                          iconSpan.textContent = spec;
+                        }
                       }
 
                       label.classList.add('sb-nav-item');
@@ -220,22 +221,16 @@ def build_sidebar(
                     });
                   }
 
-                  // Initial pass
+                  // Init + re-apply on mutations (Streamlit re-render)
                   applyIcons();
-
-                  // Observe sidebar changes (Streamlit re-renders)
                   const observer = new MutationObserver(() => applyIcons());
-                  function observeSidebar() {
-                    const container = rootDoc.querySelector('section[data-testid="stSidebar"]');
-                    if (!container) {
-                      setTimeout(observeSidebar, 120);
-                      return;
-                    }
-                    observer.observe(container, { childList: true, subtree: true });
-                  }
-                  observeSidebar();
 
-                  // Cleanup on unload to avoid leaks
+                  (function observeSidebar() {
+                    const container = rootDoc.querySelector('section[data-testid="stSidebar"]');
+                    if (!container) return setTimeout(observeSidebar, 120);
+                    observer.observe(container, { childList: true, subtree: true });
+                  })();
+
                   window.addEventListener('beforeunload', () => {
                     try { observer.disconnect(); } catch(e) {}
                   });
@@ -289,7 +284,6 @@ def build_sidebar(
             )
 
             st.markdown(profile_html, unsafe_allow_html=True)
-            # type="secondary" is valid in recent Streamlit; safe default if older
             st.button("Sign out", on_click=logout, type="secondary", key="sidebar-signout")
 
         footer_html = (
@@ -313,7 +307,7 @@ def _get_logo_data_uri(path_str: str) -> str:
         data = path.read_bytes()
     except OSError:
         return ""
-    # Minimal type sniffing by extension
+
     mime = "image/png"
     suffix = path.suffix.lower()
     if suffix in (".jpg", ".jpeg"):
