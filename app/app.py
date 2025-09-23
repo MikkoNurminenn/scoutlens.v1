@@ -1,6 +1,7 @@
 # file: app/app.py
 from __future__ import annotations
 from pathlib import Path
+import re
 import importlib
 import importlib.util
 import sys
@@ -88,19 +89,31 @@ APP_VERSION = "0.9.1"
 def inject_css():
     styles_dir = ROOT / "app" / "styles"
     token_file = "tokens_dark.css"
-    parts = []
+    css_imports = []
+    css_blocks = []
     for name in [token_file, "layout.css", "components.css", "sidebar.css", "animations.css"]:
         p = styles_dir / name
         if p.exists():
-            parts.append(p.read_text(encoding="utf-8"))
-    # remove previously injected theme block if present
+            text = p.read_text(encoding="utf-8")
+            imports = re.findall(r"@import[^;]+;", text)
+            if imports:
+                css_imports.extend(imports)
+                text = re.sub(r"@import[^;]+;", "", text)
+            css_blocks.append(text.strip())
+    # remove previously injected theme blocks if present
     st.markdown(
-        "<script>var e=document.getElementById('sl-theme'); if (e) e.remove();</script>",
+        "<script>['sl-theme','sl-theme-imports'].forEach(id=>{const el=document.getElementById(id); if(el) el.remove();});</script>",
         unsafe_allow_html=True,
     )
-    if parts:
+    if css_imports:
         st.markdown(
-            f"<style id='sl-theme'>{'\n'.join(parts)}</style>",
+            f"<style id='sl-theme-imports'>{'\n'.join(css_imports)}</style>",
+            unsafe_allow_html=True,
+        )
+    css_body = "\n".join(block for block in css_blocks if block)
+    if css_body:
+        st.markdown(
+            f"<style id='sl-theme'>{css_body}</style>",
             unsafe_allow_html=True,
         )
 

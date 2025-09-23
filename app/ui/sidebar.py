@@ -131,9 +131,6 @@ def build_sidebar(
             st.markdown(
                 """
                 <div class='sb-nav-title'>
-                  <span class='sb-nav-badge' aria-hidden='true'>
-                    <span class='sb-nav-badge-pulse'></span>
-                  </span>
                   <span class='sb-nav-text'>Navigation</span>
                   <span class='sb-nav-underline' aria-hidden='true'></span>
                 </div>
