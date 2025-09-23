@@ -13,32 +13,50 @@ import streamlit as st
 
 
 def bootstrap_sidebar_auto_collapse() -> None:
-    """Collapse the sidebar automatically on narrow viewports (throttled)."""
+    """Collapse sidebar on narrow viewports; safe against cross-origin and cleans up."""
     st.markdown(
         """
         <script>
         (function() {
-          const root = window.parent || window;
-          if (!root || root.__sl_sb_auto_collapse_init) return;
-          root.__sl_sb_auto_collapse_init = true;
+          // Guard against multiple inits
+          const w = window;
+          if (w.__sl_sb_auto_collapse_init) return;
+          w.__sl_sb_auto_collapse_init = true;
 
-          const collapseSel='[data-testid="stSidebarCollapseButton"]';
-          const sidebarSel='section[data-testid="stSidebar"]';
+          // Safe parent document access
+          function getDoc() {
+            try {
+              return (w.parent && w.parent.document) ? w.parent.document : w.document;
+            } catch (e) {
+              return w.document; // cross-origin fallback
+            }
+          }
+
           let raf = 0;
 
           function autoCollapse(){
-            const btn = root.document.querySelector(collapseSel);
-            const sb  = root.document.querySelector(sidebarSel);
+            const doc = getDoc();
+            const btn = doc.querySelector('[data-testid="stSidebarCollapseButton"]');
+            const sb  = doc.querySelector('section[data-testid="stSidebar"]');
             if(!btn || !sb) return;
-            const isExpanded = sb.getAttribute('aria-expanded') !== 'false';
-            if (root.innerWidth < 768 && isExpanded) btn.click();
+            const attr = sb.getAttribute('aria-expanded');
+            const isExpanded = (attr === null) ? true : (attr !== 'false');
+            if (w.innerWidth < 768 && isExpanded) btn.click();
           }
+
           function onResize(){
             if (raf) cancelAnimationFrame(raf);
             raf = requestAnimationFrame(autoCollapse);
           }
-          root.addEventListener('load', autoCollapse, { once: true });
-          root.addEventListener('resize', onResize);
+
+          // Init + cleanup
+          w.addEventListener('load', autoCollapse, { once: true });
+          w.addEventListener('resize', onResize);
+
+          w.addEventListener('beforeunload', () => {
+            if (raf) cancelAnimationFrame(raf);
+            w.removeEventListener('resize', onResize);
+          });
         })();
         </script>
         """,
@@ -74,16 +92,22 @@ def build_sidebar(
             display:block; margin:0 auto; width:100%; max-width:180px; height:auto; border-radius:18px;
             box-shadow:0 22px 38px rgba(12,20,44,.45);
           }
+          .sb-nav-icon{ margin-left:auto; }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
+    # Safened alert relocation (no-op if elements missing or cross-origin)
     st.markdown(
         """
         <script>
         (function relocateAlerts(){
-          const doc = window.parent?.document ?? document;
+          function getDoc(){
+            try { return (window.parent && window.parent.document) ? window.parent.document : document; }
+            catch(e){ return document; }
+          }
+          const doc = getDoc();
           const sb = doc.querySelector('section[data-testid="stSidebar"]');
           if (!sb) return;
           const shell = sb.querySelector('.block-container') || sb;
@@ -92,8 +116,7 @@ def build_sidebar(
           if (!alerts.length) return;
           alerts.forEach(alert => {
             const blk = alert.closest('[data-testid="stVerticalBlock"]') || alert;
-            if (!blk) return;
-            footer?.after(blk);
+            if (blk && footer) footer.after(blk);
           });
         })();
         </script>
@@ -120,7 +143,7 @@ def build_sidebar(
         </div>
         """
         .replace("__LOGO__", logo_html)
-        .replace("__TITLE__", escape(app_title))
+        .replace("__TITLE__", escape(app_title or ""))
         .replace("__TAGLINE__", tagline_html)
     )
 
@@ -144,34 +167,43 @@ def build_sidebar(
                 format_func=lambda key: nav_display.get(key, key),
                 key="_nav_radio",
                 label_visibility="collapsed",
-                on_change=lambda: go(st.session_state["_nav_radio"]),
+                on_change=lambda: go(st.session_state.get("_nav_radio", nav_options[0] if nav_options else "")),
             )
 
         if nav_options:
             icon_map = {key: nav_icons.get(key, "") for key in nav_options}
+            # ensure_ascii=False keeps emoji/codepoints readable in JS
             st.markdown(
                 """
                 <script>
                 (function attachIcons() {
+                  function getDoc(){
+                    try { return (window.parent && window.parent.document) ? window.parent.document : document; }
+                    catch(e){ return document; }
+                  }
                   const ICON_MAP = __ICON_MAP__;
-                  const rootDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                  const rootDoc = getDoc();
 
                   function applyIcons() {
                     const container = rootDoc.querySelector('section[data-testid="stSidebar"]');
                     if (!container) return;
-                    const labels = container.querySelectorAll('[role="radiogroup"] > label');
+                    const group = container.querySelector('[role="radiogroup"]');
+                    if (!group) return;
+                    const labels = group.querySelectorAll(':scope > label');
                     labels.forEach((label) => {
                       const input = label.querySelector('input');
                       if (!input) return;
                       const iconChar = ICON_MAP[input.value] || '';
                       let iconSpan = label.querySelector('.sb-nav-icon');
+
                       if (!iconChar) {
                         if (iconSpan) iconSpan.remove();
                       } else {
                         if (!iconSpan) {
                           iconSpan = rootDoc.createElement('span');
                           iconSpan.className = 'sb-nav-icon';
-                          iconSpan.setAttribute('aria-hidden', 'true');
+                          iconSpan.setAttribute('aria-hidden', 'true'); // decorative
+                          // push to end for consistent layout
                           label.appendChild(iconSpan);
                         }
                         iconSpan.textContent = iconChar;
@@ -188,8 +220,10 @@ def build_sidebar(
                     });
                   }
 
+                  // Initial pass
                   applyIcons();
 
+                  // Observe sidebar changes (Streamlit re-renders)
                   const observer = new MutationObserver(() => applyIcons());
                   function observeSidebar() {
                     const container = rootDoc.querySelector('section[data-testid="stSidebar"]');
@@ -200,9 +234,14 @@ def build_sidebar(
                     observer.observe(container, { childList: true, subtree: true });
                   }
                   observeSidebar();
+
+                  // Cleanup on unload to avoid leaks
+                  window.addEventListener('beforeunload', () => {
+                    try { observer.disconnect(); } catch(e) {}
+                  });
                 })();
                 </script>
-                """.replace("__ICON_MAP__", json.dumps(icon_map)),
+                """.replace("__ICON_MAP__", json.dumps(icon_map, ensure_ascii=False)),
                 unsafe_allow_html=True,
             )
 
@@ -250,6 +289,7 @@ def build_sidebar(
             )
 
             st.markdown(profile_html, unsafe_allow_html=True)
+            # type="secondary" is valid in recent Streamlit; safe default if older
             st.button("Sign out", on_click=logout, type="secondary", key="sidebar-signout")
 
         footer_html = (
@@ -258,7 +298,7 @@ def build_sidebar(
               <span class='sb-footer-title'>{title}</span>
               <span class='sb-version'>v{version}</span>
             </div>
-            """.format(title=escape(app_title), version=escape(app_version))
+            """.format(title=escape(app_title or ""), version=escape(app_version or ""))
         )
         st.markdown(footer_html, unsafe_allow_html=True)
 
@@ -266,19 +306,17 @@ def build_sidebar(
 @lru_cache(maxsize=1)
 def _get_logo_data_uri(path_str: str) -> str:
     """Return a base64 data URI for the sidebar logo (empty if missing)."""
-
     path = Path(path_str)
     if not path.exists():
         return ""
-
     try:
         data = path.read_bytes()
     except OSError:
         return ""
-
+    # Minimal type sniffing by extension
     mime = "image/png"
     suffix = path.suffix.lower()
-    if suffix == ".jpg" or suffix == ".jpeg":
+    if suffix in (".jpg", ".jpeg"):
         mime = "image/jpeg"
     elif suffix == ".svg":
         mime = "image/svg+xml"
