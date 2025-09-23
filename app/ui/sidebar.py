@@ -170,15 +170,24 @@ def build_sidebar(
                       let iconSpan = label.querySelector('.sb-nav-icon');
                       if (!iconChar) {
                         if (iconSpan) iconSpan.remove();
-                        return;
+                      } else {
+                        if (!iconSpan) {
+                          iconSpan = rootDoc.createElement('span');
+                          iconSpan.className = 'sb-nav-icon';
+                          iconSpan.setAttribute('aria-hidden', 'true');
+                          label.appendChild(iconSpan);
+                        }
+                        iconSpan.textContent = iconChar;
                       }
-                      if (!iconSpan) {
-                        iconSpan = rootDoc.createElement('span');
-                        iconSpan.className = 'sb-nav-icon';
-                        iconSpan.setAttribute('aria-hidden', 'true');
-                        label.appendChild(iconSpan);
+
+                      label.classList.add('sb-nav-item');
+                      label.dataset.option = input.value;
+                      label.dataset.active = input.checked ? 'true' : 'false';
+
+                      const textBlock = label.querySelector(':scope > div:last-child');
+                      if (textBlock && !textBlock.classList.contains('sb-nav-label')) {
+                        textBlock.classList.add('sb-nav-label');
                       }
-                      iconSpan.textContent = iconChar;
                     });
                   }
 
