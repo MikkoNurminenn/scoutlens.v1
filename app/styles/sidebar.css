@@ -18,6 +18,7 @@
   --hi:        #8ca2ff;   /* korostus-teksti */
   --accent:    #3b82f6;   /* painike/valinta */
   --accent-2:  #6366f1;   /* toissijainen accent */
+  --accent-glow: rgba(99,102,241,.45);
   --danger:    #ef4444;
   --shadow:    0 10px 24px rgba(0,0,0,.35);
   --radius-lg: 20px;
@@ -135,7 +136,7 @@
   display: flex;
   align-items: center;
   gap: .9rem;
-  padding: .9rem 1rem .9rem 3.5rem;
+  padding: .95rem 1.15rem .95rem 3.85rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: linear-gradient(0deg, rgba(255,255,255,.01), rgba(255,255,255,.01)), var(--bg-elev);
@@ -152,14 +153,29 @@
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label)::before{
   content:"";
   position: absolute;
-  left: .9rem;
+  left: .78rem;
   top: 50%;
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: .9rem;
+  width: 2.7rem;
+  height: 2.7rem;
+  border-radius: 1.05rem;
   background: var(--bg-soft);
   transform: translateY(-50%);
   transition: background .18s ease, transform .18s ease;
+  z-index: 0;
+}
+
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label)::after{
+  content:"";
+  position: absolute;
+  left: .38rem;
+  top: .55rem;
+  bottom: .55rem;
+  width: .46rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(99,102,241,0), rgba(59,130,246,.38));
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity .18s ease, transform .18s ease, background .18s ease, box-shadow .18s ease;
   z-index: 0;
 }
 
@@ -168,11 +184,11 @@
 /* Ikonialue — FA tai emoji */
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label .sb-nav-icon){
   position: absolute;
-  left: .9rem;
+  left: .78rem;
   top: 50%;
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: .9rem;
+  width: 2.7rem;
+  height: 2.7rem;
+  border-radius: 1.05rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -181,6 +197,7 @@
   border: 1px solid var(--border);
   transform: translateY(-50%);
   z-index: 1;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.04), 0 10px 18px rgba(0,0,0,.32);
 }
 :where(.sb-nav-icon i){ font-size: 1.05rem; line-height: 1; }
 
@@ -210,9 +227,19 @@
   background: var(--bg-soft);
   border-color: color-mix(in oklab, var(--border), white 6%);
 }
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover)::after{
+  opacity: .7;
+  transform: translateX(0);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--accent), white 15%), color-mix(in oklab, var(--accent-2), black 5%));
+  box-shadow: 0 0 12px rgba(59,130,246,.22);
+}
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover .sb-nav-label)::after{
   color: var(--ink-dim);
   letter-spacing: .22em;
+}
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover .sb-nav-icon){
+  border-color: color-mix(in oklab, var(--accent), black 55%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06), 0 12px 22px rgba(59,130,246,.28);
 }
 
 /* Checked */
@@ -220,7 +247,13 @@
   background: linear-gradient(0deg, rgba(99,102,241,.06), rgba(99,102,241,.06)), var(--bg-soft);
   border-color: color-mix(in oklab, var(--accent-2), black 65%);
   box-shadow: 0 12px 26px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.02);
-  color: var(--ink);
+  color: var(--hi);
+}
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked))::after{
+  opacity: 1;
+  transform: translateX(0);
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 16px var(--accent-glow);
 }
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked)::before){
   background: linear-gradient(0deg, rgba(99,102,241,.18), rgba(59,130,246,.18)), var(--bg-soft);
@@ -229,6 +262,11 @@
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) .sb-nav-icon){
   background: linear-gradient(0deg, rgba(99,102,241,.18), rgba(59,130,246,.18));
   border-color: color-mix(in oklab, var(--accent), black 45%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 16px 26px rgba(99,102,241,.38);
+}
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) .sb-nav-label){
+  color: var(--hi);
+  text-shadow: 0 4px 18px rgba(99,102,241,.28);
 }
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) .sb-nav-label)::after{
   content: "Selected";
