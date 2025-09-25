@@ -1,42 +1,58 @@
-/* ===== Dark Grey Sidebar (smooth) ===== */
+/* path: app/ui/sidebar.css */
 
-/* Fontit (dev: CDN ok, prod: itsehostaa) */
+/* ===== Dark Grey Sidebar (refined) ===== */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 @import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css");
 
-/* Väriteema */
+/* Väriteema + leveydet */
 :root {
   color-scheme: dark;
-  --bg:        #0f1115;   /* runko */
-  --bg-elev:   #14171d;   /* kortit */
-  --bg-soft:   #1a1e25;   /* hover/korostus tausta */
-  --ink:       #e7eaf0;   /* teksti */
-  --ink-dim:   #c7cbd4;   /* toissijainen */
-  --muted:     #9aa3b2;   /* selite */
-  --border:    #242a33;   /* reunat */
-  --ring:      #6d91ff;   /* focus */
-  --hi:        #8ca2ff;   /* korostus-teksti */
-  --accent:    #3b82f6;   /* painike/valinta */
-  --accent-2:  #6366f1;   /* toissijainen accent */
-  --accent-glow: rgba(99,102,241,.45);
+  --bg:        #0f1115;
+  --bg-elev:   #14171d;
+  --bg-soft:   #1a1e25;
+  --ink:       #e7eaf0;
+  --ink-dim:   #c7cbd4;
+  --muted:     #a0a7b4;
+  --border:    #242a33;
+  --ring:      #6d91ff;
+  --hi:        #8ca2ff;
+  --accent:    #3b82f6;
+  --accent-2:  #6366f1;
   --danger:    #ef4444;
-  --shadow:    0 10px 24px rgba(0,0,0,.35);
+  --shadow:    0 8px 24px rgba(0,0,0,.4);
   --radius-lg: 20px;
   --radius-md: 16px;
   --radius-sm: 12px;
+
+  --sb-width-lg: 360px;
+  --sb-width-md: 300px;
+  --sb-width-sm: 260px;
 }
 
-/* ===== Sidebar perusrakenne ===== */
+/* Light mode tuki */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f8f9fb;
+    --bg-elev: #ffffff;
+    --bg-soft: #f1f3f7;
+    --ink: #111;
+    --ink-dim: #333;
+    --muted: #555;
+    --border: #d0d7e2;
+    --shadow: 0 6px 18px rgba(0,0,0,.12);
+  }
+}
+
+/* ===== Sidebar ===== */
 :where(section[data-testid="stSidebar"]) {
   background: radial-gradient(1200px 600px at 15% -10%, rgba(255,255,255,.03), transparent 60%), var(--bg);
   color: var(--ink);
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  min-width: 300px;
-  max-width: 320px;
+  min-width: var(--sb-width-lg);
+  max-width: var(--sb-width-lg);
   border-right: 1px solid var(--border);
 }
 
-/* Kollapsi — säilytä fokus mahdollisuus */
 :where(section[data-testid="stSidebar"][aria-expanded="false"]) {
   width: 0 !important;
   min-width: 0 !important;
@@ -44,10 +60,8 @@
   overflow: hidden;
 }
 
-/* Piilota resizer */
 :where([data-testid="stSidebarResizer"]) { display: none; }
 
-/* Sisäinen kontti */
 :where(section[data-testid="stSidebar"] .block-container) {
   padding: 0 1.1rem 1.4rem;
   display: flex;
@@ -69,294 +83,128 @@
 }
 
 .sb-logo{ display:flex; justify-content:center; }
-.sb-logo img{
-  width:100%;
-  border-radius: 16px;
-  box-shadow: 0 14px 28px rgba(0,0,0,.35);
-}
+.sb-logo img{ width:100%; border-radius: 16px; box-shadow: var(--shadow); }
 
 .sb-title-block{ display:flex; flex-direction:column; gap:.2rem; text-align:center; }
-.sb-title{
-  font-size: 1.35rem;
-  font-weight: 700;
-  letter-spacing: .02em;
-  color: var(--ink);
-}
-.sb-tagline{
-  font-size: .95rem;
-  color: var(--muted);
-  font-weight: 500;
-}
+.sb-title{ font-size: 1.35rem; font-weight: 700; color: var(--ink); }
+.sb-tagline{ font-size: .95rem; color: var(--muted); font-weight: 500; }
 
-/* ===== Navigation otsikko ===== */
+/* ===== Navigation ===== */
 .sb-nav-title{
   display:flex; align-items:center; gap:.6rem; text-transform:uppercase; letter-spacing:.22em;
   margin-top:.2rem; margin-bottom:.2rem;
 }
-.sb-nav-title .sb-nav-text{
-  font-size:.78rem; font-weight:700; color: var(--hi);
-}
-.sb-nav-underline{
-  flex:1 1 auto; height:1px; border-radius:999px; background: var(--border);
-}
+.sb-nav-title .sb-nav-text{ font-size:.78rem; font-weight:600; color: var(--hi); }
+.sb-nav-underline{ flex:1; height:1px; background: var(--border); border-radius:999px; }
 
-/* ===== Radio-kortti ===== */
 :where(section[data-testid="stSidebar"] div[data-testid="stRadio"]) {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: .7rem;
-  padding: 1rem .9rem 1rem;
+  display:flex; flex-direction:column; gap:.7rem;
+  padding:1rem .9rem;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+  border:1px solid var(--border);
   background: var(--bg-elev);
   box-shadow: var(--shadow);
-  overflow: hidden;
-  isolation: isolate;
-}
-
-/* Piilota Streamlitin radio-glyph + input */
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label input[type="radio"]) {
-  position: absolute !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  appearance: none !important;
-}
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label > div:first-child){
-  display: none !important;
-}
-
-/* Ryhmä ja labelit */
-:where(section[data-testid="stSidebar"] [role="radiogroup"]) {
-  display: flex; flex-direction: column; gap: .7rem;
 }
 
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label){
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: .9rem;
-  padding: .95rem 1.15rem .95rem 3.85rem;
+  position:relative; display:flex; align-items:center; gap:.9rem;
+  width:100%; box-sizing:border-box;
+  padding:1rem 1.25rem 1rem 3.9rem;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: linear-gradient(0deg, rgba(255,255,255,.01), rgba(255,255,255,.01)), var(--bg-elev);
-  color: var(--ink);
-  font-size: .98rem;
-  font-weight: 560;
-  transition: transform .18s ease, background .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease;
-  cursor: pointer;
-  overflow: hidden;
-  isolation: isolate;
+  border:1px solid var(--border);
+  background: var(--bg-elev);
+  color:var(--ink);
+  font-size:.98rem;
+  font-weight:600;
+  transition: transform .18s, background .18s, border-color .18s, color .18s, box-shadow .18s;
+  cursor:pointer;
 }
 
-/* Dekoratiivinen vasen “pilleri” taustalle */
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label)::before{
-  content:"";
-  position: absolute;
-  left: .78rem;
-  top: 50%;
-  width: 2.7rem;
-  height: 2.7rem;
-  border-radius: 1.05rem;
-  background: var(--bg-soft);
-  transform: translateY(-50%);
-  transition: background .18s ease, transform .18s ease;
-  z-index: 0;
-}
-
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label)::after{
-  content:"";
-  position: absolute;
-  left: .38rem;
-  top: .55rem;
-  bottom: .55rem;
-  width: .46rem;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(99,102,241,0), rgba(59,130,246,.38));
-  opacity: 0;
-  transform: translateX(-8px);
-  transition: opacity .18s ease, transform .18s ease, background .18s ease, box-shadow .18s ease;
-  z-index: 0;
-}
-
-/* Iso, pehmeä “watermark”-teksti pois -> minimalistinen look, joten ei ::afteria */
-
-/* Ikonialue — FA tai emoji */
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label)::before,
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label .sb-nav-icon){
-  position: absolute;
-  left: .78rem;
-  top: 50%;
-  width: 2.7rem;
-  height: 2.7rem;
-  border-radius: 1.05rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ink);
-  background: rgba(255,255,255,.03);
-  border: 1px solid var(--border);
-  transform: translateY(-50%);
-  z-index: 1;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.04), 0 10px 18px rgba(0,0,0,.32);
-}
-:where(.sb-nav-icon i){ font-size: 1.05rem; line-height: 1; }
-
-/* Tekstiblokki */
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label .sb-nav-label){
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: .22rem;
-  font-weight: 600;
-  font-size: 1rem;
-  color: inherit;
-}
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label .sb-nav-label)::after{
-  content: "Open";
-  font-size: .7rem;
-  letter-spacing: .18em;
-  text-transform: uppercase;
-  color: var(--muted);
-  transition: color .16s ease, letter-spacing .16s ease, transform .16s ease, opacity .16s ease;
+  width:2.6rem; height:2.6rem; border-radius:.9rem;
 }
 
-/* Hover */
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover){
-  transform: translateX(4px);
-  background: var(--bg-soft);
+  transform:translateX(4px);
+  background:var(--bg-soft);
   border-color: color-mix(in oklab, var(--border), white 6%);
 }
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover)::after{
-  opacity: .7;
-  transform: translateX(0);
-  background: linear-gradient(180deg, color-mix(in oklab, var(--accent), white 15%), color-mix(in oklab, var(--accent-2), black 5%));
-  box-shadow: 0 0 12px rgba(59,130,246,.22);
-}
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover .sb-nav-label)::after{
-  color: var(--ink-dim);
-  letter-spacing: .22em;
-}
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover .sb-nav-icon){
-  border-color: color-mix(in oklab, var(--accent), black 55%);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06), 0 12px 22px rgba(59,130,246,.28);
-}
 
-/* Checked */
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked)){
-  background: linear-gradient(0deg, rgba(99,102,241,.06), rgba(99,102,241,.06)), var(--bg-soft);
-  border-color: color-mix(in oklab, var(--accent-2), black 65%);
-  box-shadow: 0 12px 26px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.02);
-  color: var(--hi);
-}
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked))::after{
-  opacity: 1;
-  transform: translateX(0);
-  background: linear-gradient(180deg, var(--accent), var(--accent-2));
-  box-shadow: 0 0 16px var(--accent-glow);
-}
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked)::before){
-  background: linear-gradient(0deg, rgba(99,102,241,.18), rgba(59,130,246,.18)), var(--bg-soft);
-  transform: translateY(-50%) scale(1.04);
-}
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) .sb-nav-icon){
-  background: linear-gradient(0deg, rgba(99,102,241,.18), rgba(59,130,246,.18));
-  border-color: color-mix(in oklab, var(--accent), black 45%);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 16px 26px rgba(99,102,241,.38);
-}
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) .sb-nav-label){
-  color: var(--hi);
-  text-shadow: 0 4px 18px rgba(99,102,241,.28);
-}
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) .sb-nav-label)::after{
-  content: "Selected";
-  color: var(--ink-dim);
+  background:linear-gradient(0deg, rgba(99,102,241,.06), rgba(99,102,241,.06)), var(--bg-soft);
+  border-color:color-mix(in oklab, var(--accent-2), black 65%);
+  box-shadow: var(--shadow), inset 0 0 0 1px rgba(255,255,255,.02);
+  color:var(--ink);
 }
 
-/* Focus-visible (näppäimistö) */
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label:focus-within){
-  outline: none;
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ring), white 15%), 0 0 0 5px rgba(109,145,255,.18);
+  outline:none;
+  box-shadow:0 0 0 2px var(--ring), 0 0 0 5px rgba(109,145,255,.18);
 }
 
-/* Linkkien väri-inherit */
-:where(section[data-testid="stSidebar"] a){ color: inherit; text-decoration: none; }
-:where(section[data-testid="stSidebar"] a:hover){ color: var(--ink); }
-
-/* ===== Profiilikortti ===== */
+/* ===== Profile ===== */
 .sb-profile-card{
   display:flex; align-items:center; gap:.75rem; margin-top:auto; padding:.8rem .9rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--bg-elev);
-  box-shadow: var(--shadow);
+  border-radius:var(--radius-md); border:1px solid var(--border);
+  background:var(--bg-elev); box-shadow: var(--shadow);
 }
-.sb-profile-avatar{
-  width: 44px; height: 44px; border-radius: 50%;
-  background: linear-gradient(180deg, #303644, #232834);
-  border: 1px solid var(--border);
-  display:flex; align-items:center; justify-content:center;
-  font-weight: 600; font-size: .95rem; letter-spacing: .04em; color: var(--ink);
-  overflow: hidden; position: relative;
-}
-.sb-profile-avatar::after{ content: attr(data-initials); }
+.sb-profile-avatar{ width:44px; height:44px; border-radius:50%; background:linear-gradient(180deg,#303644,#232834);
+  border:1px solid var(--border); display:flex; align-items:center; justify-content:center;
+  font-weight:600; font-size:.95rem; color:var(--ink); overflow:hidden; }
+.sb-profile-avatar::after{ content:attr(data-initials); }
 .sb-profile-avatar.has-image::after{ content:""; }
-.sb-profile-avatar img{ width:100%; height:100%; object-fit: cover; display:block; }
+.sb-profile-avatar img{ width:100%; height:100%; object-fit:cover; }
 .sb-profile-meta{ display:flex; flex-direction:column; gap:.15rem; }
-.sb-profile-name{ font-weight:600; color: var(--ink); }
-.sb-profile-email{ font-size:.82rem; color: var(--muted); }
+.sb-profile-name{ font-weight:600; color:var(--ink); }
+.sb-profile-email{ font-size:.82rem; color:var(--ink-dim); }
 
-/* Sign out -nappi */
+/* ===== Sign out button ===== */
 :where(section[data-testid="stSidebar"] div[data-testid="stButton"]){ width:100%; margin-top:.7rem; }
-:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button[data-testid="baseButton-secondary"],
-       section[data-testid="stSidebar"] div[data-testid="stButton"] button[kind="secondary"]){
-  width:100%;
-  border-radius: 999px;
-  border: 1px solid color-mix(in oklab, var(--danger), black 40%);
-  background: color-mix(in oklab, var(--danger), black 88%);
-  color: color-mix(in oklab, var(--danger), white 25%);
-  font-weight: 600;
-  letter-spacing: .02em;
-  transition: background .16s ease, color .16s ease, border-color .16s ease, transform .12s ease;
+:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button){
+  width:100%; border-radius:999px;
+  border:1px solid color-mix(in oklab,var(--danger),black 40%);
+  background:color-mix(in oklab,var(--danger),black 88%);
+  color:color-mix(in oklab,var(--danger),white 25%);
+  font-weight:600; letter-spacing:.02em;
+  transition: background .16s, color .16s, border-color .16s, transform .12s;
 }
-:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button[data-testid="baseButton-secondary"]:hover,
-       section[data-testid="stSidebar"] div[data-testid="stButton"] button[kind="secondary"]:hover){
-  background: color-mix(in oklab, var(--danger), black 80%);
-  color: #ffe4e6;
-  transform: translateY(-1px);
+:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover){
+  background:color-mix(in oklab,var(--danger),black 80%);
+  color:#ffe4e6; transform:translateY(-1px);
 }
-:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button[data-testid="baseButton-secondary"]:active,
-       section[data-testid="stSidebar"] div[data-testid="stButton"] button[kind="secondary"]:active){
-  transform: translateY(0);
+:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:active){
+  transform:translateY(0);
+}
+/* ✅ lisätty focus-visible saavutettavuutta varten */
+:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:focus-visible){
+  outline:none;
+  box-shadow:0 0 0 2px var(--ring), 0 0 0 5px rgba(239,68,68,.3);
 }
 
-/* Footer */
+/* ===== Footer ===== */
 .sb-footer-line{
-  margin-top: 1rem;
-  padding-top: .9rem;
-  border-top: 1px solid var(--border);
+  margin-top:1rem; padding-top:.9rem; border-top:1px solid var(--border);
   display:flex; align-items:center; justify-content:space-between;
-  font-size: .74rem; letter-spacing: .12em; text-transform: uppercase;
-  color: var(--muted);
+  font-size:.74rem; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted);
 }
-.sb-footer-title{ font-weight: 600; }
-.sb-version{ font-weight: 500; }
+.sb-footer-title{ font-weight:600; }
+.sb-version{ font-weight:500; }
 
 /* ===== Responsiivisuus ===== */
-@media (max-width: 900px){
-  :where(section[data-testid="stSidebar"]){ min-width: 260px; max-width: 260px; }
-  :where(section[data-testid="stSidebar"] .block-container){ padding: 0 .9rem 1.2rem; }
+@media (max-width:900px){
+  :where(section[data-testid="stSidebar"]){
+    min-width:var(--sb-width-md);
+    max-width:var(--sb-width-md);
+  }
 }
-@media (max-width: 520px){
-  :where(section[data-testid="stSidebar"] div[data-testid="stRadio"]){ padding: .8rem .7rem .9rem; border-radius: 18px; gap: .6rem; }
-  :where(section[data-testid="stSidebar"] [role="radiogroup"] > label){ padding: .8rem .85rem .8rem 3.1rem; border-radius: 14px; }
-  :where(section[data-testid="stSidebar"] [role="radiogroup"] > label)::before,
-  :where(section[data-testid="stSidebar"] [role="radiogroup"] > label .sb-nav-icon){ width: 2.2rem; height: 2.2rem; border-radius: .8rem; }
-  :where(section[data-testid="stSidebar"] [role="radiogroup"] > label .sb-nav-label){ font-size: .96rem; }
-  .sb-profile-avatar{ width: 40px; height: 40px; }
+@media (max-width:520px){
+  :where(section[data-testid="stSidebar"]){
+    min-width:var(--sb-width-sm);
+    max-width:var(--sb-width-sm);
+  }
 }
-
-/* ===== Liikkeen vähennys ===== */
-@media (prefers-reduced-motion: reduce){
-  * { transition: none !important; animation: none !important; }
+@media (prefers-reduced-motion:reduce){
+  *{ transition:none !important; animation:none !important; }
 }
