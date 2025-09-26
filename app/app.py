@@ -8,6 +8,66 @@ import sys
 import traceback
 import streamlit as st
 
+
+def _install_sidebar_guard() -> None:
+    """Wrap ``st.sidebar`` so accidental writes outside ``build_sidebar`` get logged."""
+
+    original_sidebar = st.sidebar
+
+    if getattr(original_sidebar, "_sl_guard_installed", False):
+        return
+
+    def _log_violation(action: str) -> None:
+        store = st.session_state.setdefault("_sidebar_guard", {"violations": []})
+        message = f"{action} (outside build_sidebar)"
+        if message not in store["violations"]:
+            store["violations"].append(message)
+            store.pop("notified", None)
+            print(f"[ScoutLens] Sidebar guard: {message}")
+
+    class _SidebarProxy:
+        """Proxy that mirrors ``DeltaGenerator`` but records misuse."""
+
+        __slots__ = ("_target",)
+
+        def __init__(self, target):
+            self._target = target
+
+        def _active(self) -> bool:
+            return bool(st.session_state.get("_sidebar_owner_active"))
+
+        def __getattr__(self, name):  # noqa: D401 - proxy helper
+            attr = getattr(self._target, name)
+            if callable(attr):
+
+                def wrapped(*args, **kwargs):
+                    if not self._active():
+                        _log_violation(f"st.sidebar.{name}")
+                    return attr(*args, **kwargs)
+
+                return wrapped
+            return attr
+
+        def __call__(self, *args, **kwargs):
+            if not self._active():
+                _log_violation("st.sidebar(...)")
+            return self._target(*args, **kwargs)
+
+        def __enter__(self):
+            if not self._active():
+                _log_violation("with st.sidebar")
+            return self._target.__enter__()
+
+        def __exit__(self, exc_type, exc, tb):
+            return self._target.__exit__(exc_type, exc, tb)
+
+    proxy = _SidebarProxy(original_sidebar)
+    setattr(proxy, "_sl_guard_installed", True)
+    st.sidebar = proxy  # type: ignore[assignment]
+
+
+_install_sidebar_guard()
+
 # ---- Peruspolut (MUST run before any local imports)
 ROOT = Path(__file__).resolve().parent.parent
 PKG_DIR = ROOT / "app"
@@ -117,6 +177,24 @@ def inject_css():
             unsafe_allow_html=True,
         )
 
+def _render_sidebar_guard_report() -> None:
+    guard = st.session_state.get("_sidebar_guard")
+    if not guard:
+        return
+    violations = guard.get("violations", [])
+    if not violations or guard.get("notified"):
+        return
+
+    st.warning(
+        "Sidebar guard detected direct ``st.sidebar`` usage outside ``build_sidebar``."
+        " Please route sidebar content through ``build_sidebar`` instead.",
+        icon="⚠️",
+    )
+    st.code("\n".join(violations))
+    guard["notified"] = True
+
+
+
 # --------- Nav
 NAV_KEYS = [
     "Reports",
@@ -197,6 +275,7 @@ def main() -> None:
     with track(f"page:{current}"):
         page_func()
     render_perf()
+    _render_sidebar_guard_report()
 
 
 if __name__ == "__main__":
