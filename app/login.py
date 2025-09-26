@@ -29,9 +29,15 @@ def _ensure_auth_state() -> Dict[str, object]:
 
 
 def _render_post_login_loading() -> None:
-    st.markdown(
+    placeholder = st.empty()
+    placeholder.markdown(
         """
         <style>
+        html, body, .stApp { overflow: hidden !important; }
+        .stApp > header,
+        .stApp > div[data-testid="stToolbar"],
+        .stApp > div[data-testid="stDecoration"],
+        .stApp > div[data-testid="stSidebar"] { display: none !important; }
         .sl-login-loading-overlay {
             position: fixed;
             inset: 0;
