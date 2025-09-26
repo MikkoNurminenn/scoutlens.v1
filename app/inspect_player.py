@@ -88,7 +88,9 @@ def show_inspect_player() -> None:
     # --- Filters for reports ---
     st.markdown("### Match Reports")
     fc1, fc2 = st.columns([2, 1])
-    comp_filter = fc1.text_input("Filter by competition (contains)", "")
+    comp_filter = fc1.text_input(
+        "Filter by competition (contains)", "", autocomplete="off"
+    )
     date_range = fc2.date_input(
         "Date range",
         value=(),

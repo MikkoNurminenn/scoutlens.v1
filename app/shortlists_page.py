@@ -80,7 +80,7 @@ def show_shortlists_page() -> None:
 
     # create shortlist
     with st.expander("Create new shortlist"):
-        name = st.text_input("Shortlist name", key="shortlists__name")
+        name = st.text_input("Shortlist name", key="shortlists__name", autocomplete="off")
         if st.button("Create", type="primary"):
             if not name.strip():
                 st.warning("Name required.")

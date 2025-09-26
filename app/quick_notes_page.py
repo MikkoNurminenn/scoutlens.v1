@@ -92,6 +92,7 @@ def show_quick_notes_page() -> None:
             "Search by name",
             key=PAGE_KEY + "search",
             placeholder="Type player name…",
+            autocomplete="off",
         )
         results = _search_players(query)
         labels = [f"{p['name']} ({p.get('current_club') or '—'})" for p in results]
@@ -118,12 +119,14 @@ def show_quick_notes_page() -> None:
     with col_add:
         with st.popover("＋ New Player"):
             with st.form(PAGE_KEY + "add_player_form", clear_on_submit=True):
-                name = st.text_input("Name*", value="")
+                name = st.text_input("Name*", value="", autocomplete="off")
                 colp = st.columns(2)
-                position = colp[0].text_input("Position", value="")
-                current_club = colp[1].text_input("Current club", value="")
+                position = colp[0].text_input("Position", value="", autocomplete="off")
+                current_club = colp[1].text_input(
+                    "Current club", value="", autocomplete="off"
+                )
                 coln = st.columns(2)
-                nationality = coln[0].text_input("Nationality", value="")
+                nationality = coln[0].text_input("Nationality", value="", autocomplete="off")
                 preferred_foot = coln[1].selectbox(
                     "Preferred foot",
                     ["", "Right", "Left", "Both"],

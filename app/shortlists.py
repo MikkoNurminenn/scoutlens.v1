@@ -128,7 +128,9 @@ def show_shortlists():
             st.info("No shortlists yet. Create one below.")
 
         sel = st.selectbox("Select", list_names or ["—"], index=0 if list_names else 0, key="sl_sel_page")
-        new_nm = st.text_input("New list name", placeholder="e.g. U23 Forwards")
+        new_nm = st.text_input(
+            "New list name", placeholder="e.g. U23 Forwards", autocomplete="off"
+        )
         c1, c2 = st.columns([1, 1])
         if c1.button("Create", type="primary"):
             nn = new_nm.strip()
@@ -145,7 +147,9 @@ def show_shortlists():
 
         # rename
         if sel in shortlists:
-            rn = st.text_input("Rename", value=sel, key="sl_rename")
+            rn = st.text_input(
+                "Rename", value=sel, key="sl_rename", autocomplete="off"
+            )
             if rn.strip() and rn.strip() != sel and st.button("Apply rename", type="primary"):
                 shortlists[rn.strip()] = shortlists.pop(sel)
                 _save_shortlists(shortlists)

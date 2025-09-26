@@ -22,7 +22,9 @@ def show_age_minutes() -> None:
         )
 
         if selected_team == "Create new team...":
-            new_team = st.text_input("New team name", key="age_minutes_new_team")
+            new_team = st.text_input(
+                "New team name", key="age_minutes_new_team", autocomplete="off"
+            )
             if st.button("Create Team", type="primary", key="age_minutes_create_team"):
                 if new_team.strip():
                     selected_team = new_team.strip()
@@ -43,10 +45,14 @@ def show_age_minutes() -> None:
 
         st.markdown("### Add or Update Player")
         with st.form("player_form"):
-            name = st.text_input("Name", key="age_minutes_player_name")
+            name = st.text_input("Name", key="age_minutes_player_name", autocomplete="off")
             age = st.number_input("Age", min_value=15, max_value=45, key="age_minutes_age")
-            position = st.text_input("Position", key="age_minutes_position")
-            nationality = st.text_input("Nationality", key="age_minutes_nationality")
+            position = st.text_input(
+                "Position", key="age_minutes_position", autocomplete="off"
+            )
+            nationality = st.text_input(
+                "Nationality", key="age_minutes_nationality", autocomplete="off"
+            )
             contract_start = st.date_input("Contract Start", key="age_minutes_contract_start")
             contract_end = st.date_input("Contract End", key="age_minutes_contract_end")
             loan = st.checkbox("On Loan", key="age_minutes_loan")

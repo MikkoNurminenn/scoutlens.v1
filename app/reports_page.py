@@ -45,7 +45,12 @@ def render_essential_section() -> dict:
         position = (
             st.selectbox("Position", POSITIONS, index=6, key="reports__pos_dd")
             if use_dd
-            else st.text_input("Position (free text)", value="CM", key="reports__pos_txt")
+            else st.text_input(
+                "Position (free text)",
+                value="CM",
+                key="reports__pos_txt",
+                autocomplete="off",
+            )
         )
 
     c1, c2 = st.columns(2)
@@ -111,12 +116,12 @@ def _load_players() -> List[Dict[str, Any]]:
 
 def render_add_player_form(on_success: Callable | None = None) -> None:
     with st.form(key="players__add_form", border=True):
-        name = st.text_input("Name*", "")
-        position = st.text_input("Position", "")
+        name = st.text_input("Name*", "", autocomplete="off")
+        position = st.text_input("Position", "", autocomplete="off")
         preferred_foot = st.selectbox("Preferred Foot", ["", "Right", "Left", "Both"])
-        nationality = st.text_input("Nationality", "")
-        current_club = st.text_input("Current Club", "")
-        transfermarkt_url = st.text_input("Transfermarkt URL", "")
+        nationality = st.text_input("Nationality", "", autocomplete="off")
+        current_club = st.text_input("Current Club", "", autocomplete="off")
+        transfermarkt_url = st.text_input("Transfermarkt URL", "", autocomplete="off")
 
         submitted = st.form_submit_button("Create Player", use_container_width=True, type="primary")
         if submitted:
@@ -192,9 +197,11 @@ def show_reports_page() -> None:
                 key="reports__selected_player_id",
             )
             report_date = st.date_input("Report date", value=date.today(), key="reports__report_date")
-            competition = st.text_input("Competition", key="reports__competition")
-            opponent = st.text_input("Opponent", key="reports__opponent")
-            location = st.text_input("Location", key="reports__location")
+            competition = st.text_input(
+                "Competition", key="reports__competition", autocomplete="off"
+            )
+            opponent = st.text_input("Opponent", key="reports__opponent", autocomplete="off")
+            location = st.text_input("Location", key="reports__location", autocomplete="off")
 
             st.divider()
             attrs = render_essential_section()
@@ -261,9 +268,19 @@ def show_reports_page() -> None:
 
         c1, c2, c3 = st.columns([2, 2, 1])
         with c1:
-            q_opp = st.text_input("Filter by opponent", placeholder="e.g. Millonarios", key="reports__f_opp")
+            q_opp = st.text_input(
+                "Filter by opponent",
+                placeholder="e.g. Millonarios",
+                key="reports__f_opp",
+                autocomplete="off",
+            )
         with c2:
-            q_comp = st.text_input("Filter by competition", placeholder="e.g. Liga", key="reports__f_comp")
+            q_comp = st.text_input(
+                "Filter by competition",
+                placeholder="e.g. Liga",
+                key="reports__f_comp",
+                autocomplete="off",
+            )
         with c3:
             min_ment = st.slider("MENT ≥", 1, 5, 1, key="reports__f_ment")
 
