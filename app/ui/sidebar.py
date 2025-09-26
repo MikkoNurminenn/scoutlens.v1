@@ -71,230 +71,315 @@ def build_sidebar(
     logout: Callable[[], None],
     logo_path: Optional[str] = None,
 ) -> None:
-    """Render Streamlit sidebar with robust DOM integration and icon support."""
+    """Render the Streamlit sidebar using a single, accessible owner."""
 
     root = Path(__file__).resolve().parents[2]
     nav_options: List[str] = list(nav_keys)
     nav_display = {key: nav_labels.get(key, key) for key in nav_options}
+    icon_map = {key: nav_icons.get(key, "") for key in nav_options}
 
-    # Minimal baseline styles that won't fight your main CSS
-    st.markdown(
+    _force_dark_theme()
+
+    previous_state = bool(st.session_state.get("_sidebar_owner_active"))
+    st.session_state["_sidebar_owner_active"] = True
+
+    if not logo_path:
+        logo_path = str(root / "assets" / "logo.png")
+
+    logo_data_uri = _get_logo_data_uri(logo_path)
+    logo_html = (
+        f"<div class='sb-logo'><img src='{logo_data_uri}' alt='{escape(app_title)} logo' "
+        "loading='lazy' decoding='async'/></div>"
+        if logo_data_uri
+        else ""
+    )
+    tagline_html = f"<p class='sb-tagline'>{escape(app_tagline)}</p>" if app_tagline else ""
+
+    header_html = (
         """
-        <style>
-          section[data-testid="stSidebar"]{
-            font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-          }
-          .sb-logo img{
-            display:block; margin:0 auto; width:100%; max-width:180px; height:auto; border-radius:18px;
-            box-shadow:0 22px 38px rgba(12,20,44,.45);
-          }
-        </style>
-        """,
-        unsafe_allow_html=True,
+        <div class='sb-header-card' role='banner'>
+          {logo}
+          <div class='sb-title-block'>
+            <h1 class='sb-title'>{title}</h1>
+            {tagline}
+          </div>
+        </div>
+        """
+        .format(
+            logo=logo_html,
+            title=escape(app_title or ""),
+            tagline=tagline_html,
+        )
+        .strip()
     )
 
-    # Move alerts to the bottom of the sidebar (safe no-op if not found)
+    try:
+        with st.sidebar:
+            st.markdown(header_html, unsafe_allow_html=True)
+
+            selected_option: Optional[str] = None
+            if nav_options:
+                st.markdown(
+                    """
+                    <div class='sb-nav-title' role='heading' aria-level='2'>
+                      <span class='sb-nav-text'>Navigation</span>
+                      <span class='sb-nav-underline' aria-hidden='true'></span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                selected_option = st.radio(
+                    "Navigate",
+                    options=nav_options,
+                    index=nav_options.index(current) if current in nav_options else 0,
+                    format_func=lambda key: nav_display.get(key, key),
+                    key="sidebar_nav",
+                    label_visibility="collapsed",
+                )
+
+            if selected_option and selected_option != current:
+                go(selected_option)
+
+            st.markdown(_nav_behavior_script(icon_map), unsafe_allow_html=True)
+
+            auth = st.session_state.get("auth", {})
+            user = auth.get("user")
+            if auth.get("authenticated") and user:
+                display_name = (
+                    user.get("name")
+                    or user.get("username")
+                    or user.get("user_metadata", {}).get("full_name")
+                    or user.get("email")
+                    or "Scout"
+                )
+                email = user.get("email") or ""
+                avatar_url = (
+                    user.get("user_metadata", {}).get("avatar_url")
+                    or user.get("avatar_url")
+                    or ""
+                )
+                initials = "".join(p[0].upper() for p in display_name.split() if p)[:2] or "SL"
+                avatar_classes = "sb-profile-avatar" + (" has-image" if avatar_url else "")
+                avatar_inner = (
+                    "<img src='{src}' alt='' loading='lazy' decoding='async'/>".format(
+                        src=escape(avatar_url)
+                    )
+                    if avatar_url
+                    else ""
+                )
+                profile_html = (
+                    """
+                    <div class='sb-profile-card'>
+                      <div class='{classes}' data-initials='{initials}'>{inner}</div>
+                      <div class='sb-profile-meta'>
+                        <div class='sb-profile-name'>{name}</div>
+                        {email_line}
+                      </div>
+                    </div>
+                    """
+                    .format(
+                        classes=avatar_classes,
+                        initials=escape(initials),
+                        inner=avatar_inner,
+                        name=escape(display_name),
+                        email_line=(
+                            f"<div class='sb-profile-email'>{escape(email)}</div>" if email else ""
+                        ),
+                    )
+                    .strip()
+                )
+                st.markdown(profile_html, unsafe_allow_html=True)
+                st.button(
+                    "Sign out",
+                    on_click=logout,
+                    type="secondary",
+                    key="sidebar-signout",
+                    use_container_width=True,
+                )
+
+            footer_html = (
+                """
+                <footer class='sb-footer-line' aria-label='Application version'>
+                  <span class='sb-footer-title'>{title}</span>
+                  <span class='sb-version'>v{version}</span>
+                </footer>
+                """
+                .format(
+                    title=escape(app_title or ""),
+                    version=escape(app_version or ""),
+                )
+                .strip()
+            )
+            st.markdown(footer_html, unsafe_allow_html=True)
+            st.markdown(_sidebar_alert_script(), unsafe_allow_html=True)
+    finally:
+        st.session_state["_sidebar_owner_active"] = previous_state
+
+
+def _force_dark_theme() -> None:
     st.markdown(
         """
-        <script>
-        (function relocateAlerts(){
+        <script id="sl-force-dark">
+        (function forceDark(){
+          const w = window;
+          if (w.__slForceDarkApplied) return;
+          w.__slForceDarkApplied = true;
           function getDoc(){
-            try { return (window.parent && window.parent.document) ? window.parent.document : document; }
-            catch(e){ return document; }
+            try { return (w.parent && w.parent.document) ? w.parent.document : document; }
+            catch (e) { return document; }
           }
           const doc = getDoc();
-          const sb = doc.querySelector('section[data-testid="stSidebar"]');
-          if (!sb) return;
-          const shell = sb.querySelector('.block-container') || sb;
-          const footer = sb.querySelector('.sb-footer-line')?.parentElement || shell.lastElementChild || shell;
-          const alerts = sb.querySelectorAll('.stAlert');
-          if (!alerts.length) return;
-          alerts.forEach(alert => {
-            const blk = alert.closest('[data-testid="stVerticalBlock"]') || alert;
-            if (blk && footer) footer.after(blk);
-          });
+          if (!doc || !doc.documentElement) return;
+          doc.documentElement.dataset.slTheme = 'dark';
+          doc.documentElement.style.colorScheme = 'dark';
         })();
         </script>
         """,
         unsafe_allow_html=True,
     )
 
-    if not logo_path:
-        logo_path = str(root / "assets" / "logo.png")
 
-    logo_data_uri = _get_logo_data_uri(logo_path)
-    tagline_html = f"<div class='sb-tagline'>{escape(app_tagline)}</div>" if app_tagline else ""
-    logo_html = (
-        f"<div class='sb-logo'><img src=\"{logo_data_uri}\" alt=\"{escape(app_title)} logo\" loading=\"lazy\"/></div>"
-        if logo_data_uri
-        else ""
-    )
+def _nav_behavior_script(icon_map: Dict[str, str]) -> str:
+    icon_payload = json.dumps(icon_map, ensure_ascii=False)
+    return """
+    <script>
+    (function sidebarNavEnhancer(){
+      const ICON_MAP = __ICON_MAP__;
+      const w = window;
+      function getDoc(){
+        try { return (w.parent && w.parent.document) ? w.parent.document : document; }
+        catch (e) { return document; }
+      }
+      function syncNav(){
+        const doc = getDoc();
+        if (!doc) return;
+        const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+        if (!sidebar) return;
+        const group = sidebar.querySelector('[role="radiogroup"]');
+        if (!group) return;
+        group.setAttribute('aria-label', 'Primary navigation');
+        group.dataset.owner = 'scoutlens';
+        const labels = group.querySelectorAll(':scope > label');
+        labels.forEach((label) => {
+          const input = label.querySelector('input');
+          if (!input) return;
+          const value = input.value;
+          const spec = ICON_MAP[value] || '';
+          let iconSpan = label.querySelector('.sb-nav-icon');
+          if (spec) {
+            if (!iconSpan) {
+              iconSpan = doc.createElement('span');
+              iconSpan.className = 'sb-nav-icon';
+              iconSpan.setAttribute('aria-hidden', 'true');
+              iconSpan.setAttribute('role', 'presentation');
+              input.insertAdjacentElement('afterend', iconSpan);
+            }
+            if (/\\bfa-/.test(spec)) {
+              iconSpan.innerHTML = '<i class="' + spec + '"></i>';
+            } else {
+              iconSpan.textContent = spec;
+            }
+          } else if (iconSpan) {
+            iconSpan.remove();
+            iconSpan = null;
+          }
+          const isActive = input.checked;
+          label.dataset.option = value;
+          label.dataset.active = isActive ? 'true' : 'false';
+          label.setAttribute('aria-current', isActive ? 'page' : 'false');
+          label.classList.add('sb-nav-item');
+          const textWrap = label.querySelector(':scope > div:last-child');
+          if (textWrap && !textWrap.classList.contains('sb-nav-label')) {
+            textWrap.classList.add('sb-nav-label');
+          }
+        });
+      }
+      w.__slSidebarIconMap = ICON_MAP;
+      w.__slSidebarNavSync = syncNav;
+      if (!w.__slSidebarNavObserver) {
+        const observer = new MutationObserver(() => {
+          if (typeof w.__slSidebarNavSync === 'function') {
+            w.__slSidebarNavSync();
+          }
+        });
+        w.__slSidebarNavObserver = observer;
+        const init = () => {
+          const doc = getDoc();
+          const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+          if (!sidebar) {
+            setTimeout(init, 150);
+            return;
+          }
+          observer.observe(sidebar, { childList: true, subtree: true });
+          if (typeof w.__slSidebarNavSync === 'function') {
+            w.__slSidebarNavSync();
+          }
+        };
+        init();
+        w.addEventListener('beforeunload', () => {
+          try { observer.disconnect(); } catch (e) {}
+          if (w.__slSidebarNavObserver === observer) {
+            w.__slSidebarNavObserver = null;
+          }
+        });
+      } else if (typeof w.__slSidebarNavSync === 'function') {
+        w.__slSidebarNavSync();
+      }
+    })();
+    </script>
+    """.replace("__ICON_MAP__", icon_payload)
 
-    header_html = (
-        """
-        <div class='sb-header-card'>
-          __LOGO__
-          <div class='sb-title-block'>
-            <div class='sb-title'>__TITLE__</div>
-            __TAGLINE__
-          </div>
-        </div>
-        """
-        .replace("__LOGO__", logo_html)
-        .replace("__TITLE__", escape(app_title or ""))
-        .replace("__TAGLINE__", tagline_html)
-    )
 
-    with st.sidebar:
-        st.markdown(header_html, unsafe_allow_html=True)
-
-        if nav_options:
-            st.markdown(
-                """
-                <div class='sb-nav-title'>
-                  <span class='sb-nav-text'>Navigation</span>
-                  <span class='sb-nav-underline' aria-hidden='true'></span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            st.radio(
-                "Navigate",
-                options=nav_options,
-                index=nav_options.index(current) if current in nav_options else 0,
-                format_func=lambda key: nav_display.get(key, key),
-                key="_nav_radio",
-                label_visibility="collapsed",
-                on_change=lambda: go(st.session_state.get("_nav_radio", nav_options[0] if nav_options else "")),
-            )
-
-        if nav_options:
-            icon_map = {key: nav_icons.get(key, "") for key in nav_options}
-            st.markdown(
-                """
-                <script>
-                (function attachIcons() {
-                  function getDoc(){
-                    try { return (window.parent && window.parent.document) ? window.parent.document : document; }
-                    catch(e){ return document; }
-                  }
-                  const ICON_MAP = __ICON_MAP__;
-                  const rootDoc = getDoc();
-
-                  function applyIcons() {
-                    const container = rootDoc.querySelector('section[data-testid="stSidebar"]');
-                    if (!container) return;
-                    const group = container.querySelector('[role="radiogroup"]');
-                    if (!group) return;
-                    const labels = group.querySelectorAll(':scope > label');
-                    labels.forEach((label) => {
-                      const input = label.querySelector('input');
-                      if (!input) return;
-
-                      const spec = ICON_MAP[input.value] || ''; // "fa-solid fa-house" TAI "🏠"
-                      let iconSpan = label.querySelector('.sb-nav-icon');
-
-                      if (!spec) {
-                        if (iconSpan) iconSpan.remove();
-                      } else {
-                        if (!iconSpan) {
-                          iconSpan = rootDoc.createElement('span');
-                          iconSpan.className = 'sb-nav-icon';
-                          iconSpan.setAttribute('aria-hidden', 'true'); // dekoratiivinen
-                          label.appendChild(iconSpan);
-                        }
-                        if (/\\bfa-/.test(spec)) {
-                          iconSpan.innerHTML = '<i class="' + spec + '"></i>';
-                        } else {
-                          iconSpan.textContent = spec;
-                        }
-                      }
-
-                      label.classList.add('sb-nav-item');
-                      label.dataset.option = input.value;
-                      label.dataset.active = input.checked ? 'true' : 'false';
-
-                      const textBlock = label.querySelector(':scope > div:last-child');
-                      if (textBlock && !textBlock.classList.contains('sb-nav-label')) {
-                        textBlock.classList.add('sb-nav-label');
-                      }
-                    });
-                  }
-
-                  // Init + re-apply on mutations (Streamlit re-render)
-                  applyIcons();
-                  const observer = new MutationObserver(() => applyIcons());
-
-                  (function observeSidebar() {
-                    const container = rootDoc.querySelector('section[data-testid="stSidebar"]');
-                    if (!container) return setTimeout(observeSidebar, 120);
-                    observer.observe(container, { childList: true, subtree: true });
-                  })();
-
-                  window.addEventListener('beforeunload', () => {
-                    try { observer.disconnect(); } catch(e) {}
-                  });
-                })();
-                </script>
-                """.replace("__ICON_MAP__", json.dumps(icon_map, ensure_ascii=False)),
-                unsafe_allow_html=True,
-            )
-
-        auth = st.session_state.get("auth", {})
-        user = auth.get("user")
-        if auth.get("authenticated") and user:
-            display_name = (
-                user.get("name")
-                or user.get("username")
-                or user.get("user_metadata", {}).get("full_name")
-                or user.get("email")
-                or "Scout"
-            )
-            email = user.get("email") or ""
-            avatar_url = (
-                user.get("user_metadata", {}).get("avatar_url")
-                or user.get("avatar_url")
-                or ""
-            )
-            initials = "".join(p[0].upper() for p in display_name.split() if p)[:2] or "SL"
-            avatar_classes = "sb-profile-avatar"
-            avatar_inner = ""
-            if avatar_url:
-                avatar_classes += " has-image"
-                avatar_inner = (
-                    "<img src='{src}' alt='{alt} avatar' loading='lazy'/>".format(
-                        src=escape(avatar_url), alt=escape(display_name)
-                    )
-                )
-
-            profile_html = """
-                <div class='sb-profile-card'>
-                  <div class='{classes}' data-initials='{initials}'>{inner}</div>
-                  <div class='sb-profile-meta'>
-                    <div class='sb-profile-name'>{name}</div>
-                    {email_line}
-                  </div>
-                </div>
-            """.format(
-                classes=avatar_classes,
-                initials=escape(initials),
-                inner=avatar_inner,
-                name=escape(display_name),
-                email_line=(f"<div class='sb-profile-email'>{escape(email)}</div>" if email else ""),
-            )
-
-            st.markdown(profile_html, unsafe_allow_html=True)
-            st.button("Sign out", on_click=logout, type="secondary", key="sidebar-signout")
-
-        footer_html = (
-            """
-            <div class='sb-footer-line'>
-              <span class='sb-footer-title'>{title}</span>
-              <span class='sb-version'>v{version}</span>
-            </div>
-            """.format(title=escape(app_title or ""), version=escape(app_version or ""))
-        )
-        st.markdown(footer_html, unsafe_allow_html=True)
+def _sidebar_alert_script() -> str:
+    return """
+    <script>
+    (function sidebarAlertRelocator(){
+      const w = window;
+      function getDoc(){
+        try { return (w.parent && w.parent.document) ? w.parent.document : document; }
+        catch (e) { return document; }
+      }
+      function relocate(){
+        const doc = getDoc();
+        if (!doc) return;
+        const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+        if (!sidebar) return;
+        const shell = sidebar.querySelector('.block-container') || sidebar;
+        const footerHost = sidebar.querySelector('.sb-footer-line')?.parentElement || shell.lastElementChild || shell;
+        const alerts = Array.from(sidebar.querySelectorAll('.stAlert'));
+        if (!alerts.length || !footerHost) return;
+        alerts.forEach((alert) => {
+          const block = alert.closest('[data-testid="stVerticalBlock"]') || alert;
+          if (!block || block === footerHost) return;
+          footerHost.after(block);
+        });
+      }
+      if (w.__slSidebarAlertInit) {
+        if (typeof w.__slSidebarAlertRelocate === 'function') {
+          w.__slSidebarAlertRelocate();
+        }
+        return;
+      }
+      w.__slSidebarAlertInit = true;
+      w.__slSidebarAlertRelocate = relocate;
+      const observer = new MutationObserver(relocate);
+      const init = () => {
+        const doc = getDoc();
+        const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+        if (!sidebar) {
+          setTimeout(init, 160);
+          return;
+        }
+        observer.observe(sidebar, { childList: true, subtree: true });
+        relocate();
+      };
+      init();
+      w.addEventListener('beforeunload', () => {
+        try { observer.disconnect(); } catch (e) {}
+      });
+    })();
+    </script>
+    """
 
 
 @lru_cache(maxsize=1)
