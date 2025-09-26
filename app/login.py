@@ -37,50 +37,163 @@ def _render_post_login_loading() -> None:
             inset: 0;
             display: grid;
             place-items: center;
-            background: radial-gradient(900px 540px at 22% 46%, rgba(15,23,42,0.90), rgba(15,23,42,0.80) 48%, rgba(15,23,42,0.65) 72%, rgba(15,23,42,0.35));
+            padding: 24px;
+            background: radial-gradient(900px 600px at 20% 38%, rgba(2,6,23,0.92), rgba(2,6,23,0.86) 45%, rgba(2,6,23,0.72) 70%, rgba(2,6,23,0.55)),
+                radial-gradient(820px 520px at 82% 22%, rgba(15,23,42,0.92), rgba(15,23,42,0.65) 52%, rgba(15,23,42,0.42));
+            backdrop-filter: blur(18px) saturate(135%);
             z-index: 1000;
+            overflow: hidden;
+        }
+        .sl-login-loading-overlay::before {
+            content: "";
+            position: absolute;
+            width: 160%;
+            height: 160%;
+            background: conic-gradient(from 130deg, rgba(56,189,248,0.12), rgba(129,140,248,0.18), rgba(56,189,248,0.12), rgba(56,189,248,0.05));
+            filter: blur(140px);
+            opacity: 0.9;
+            animation: sl-login-glow 16s linear infinite;
         }
         .sl-login-loading-card {
-            background: rgba(15, 23, 42, 0.75);
-            border-radius: 16px;
-            border: 1px solid rgba(148, 163, 184, 0.25);
-            padding: 36px 32px;
-            max-width: 360px;
-            width: min(92vw, 360px);
+            position: relative;
+            background:
+                linear-gradient(172deg, rgba(15,23,42,0.88), rgba(15,23,42,0.74) 48%, rgba(15,23,42,0.68)) padding-box,
+                linear-gradient(160deg, rgba(56,189,248,0.55), rgba(129,140,248,0.45), rgba(96,165,250,0.55)) border-box;
+            border-radius: 22px;
+            border: 1px solid transparent;
+            padding: 44px 40px 36px;
+            max-width: 420px;
+            width: min(92vw, 420px);
             text-align: center;
-            box-shadow: 0 12px 30px rgba(2,6,23,0.35);
+            box-shadow: 0 28px 70px rgba(2,6,23,0.55);
             color: #e2e8f0;
             font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            backdrop-filter: blur(20px);
+            overflow: hidden;
+        }
+        .sl-login-loading-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(420px 240px at 12% -18%, rgba(56,189,248,0.25), transparent 65%),
+                radial-gradient(520px 320px at 88% 118%, rgba(129,140,248,0.18), transparent 70%);
+            opacity: 0.75;
+            pointer-events: none;
         }
         .sl-login-loading-card h3 {
             margin: 18px 0 8px 0;
-            font-size: var(--fs-22, 1.35rem);
+            font-size: var(--fs-22, 1.4rem);
             font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+        .sl-login-loading-lede {
+            margin: 0;
+            font-size: var(--fs-16, 1rem);
+            color: rgba(226, 232, 240, 0.88);
         }
         .sl-login-loading-card p {
             margin: 0;
-            font-size: var(--fs-15, 0.95rem);
-            color: rgba(226, 232, 240, 0.85);
+            font-size: var(--fs-14, 0.92rem);
+            color: rgba(203, 213, 225, 0.78);
+        }
+        .sl-login-spinner-wrap {
+            position: relative;
+            width: 68px;
+            height: 68px;
+            margin: 0 auto 18px;
+        }
+        .sl-login-spinner-glow {
+            position: absolute;
+            inset: -16px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(56,189,248,0.25), rgba(15,23,42,0));
+            filter: blur(12px);
+            opacity: 0.85;
         }
         .sl-login-spinner {
-            width: 54px;
-            height: 54px;
+            position: absolute;
+            inset: 0;
             border-radius: 50%;
-            border: 4px solid rgba(148, 163, 184, 0.35);
-            border-top-color: #38bdf8;
-            margin: 0 auto;
-            animation: sl-login-spin 1s linear infinite;
+            background:
+                conic-gradient(from 0deg, rgba(56,189,248,0.95), rgba(56,189,248,0.15) 120deg, rgba(129,140,248,0.85) 240deg, rgba(56,189,248,0.95));
+            -webkit-mask: radial-gradient(farthest-side, #0000 calc(100% - 6px), #000 calc(100% - 6px));
+            mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 6px));
+            animation: sl-login-spin 0.9s linear infinite;
+            box-shadow: 0 0 26px rgba(56,189,248,0.35);
+        }
+        .sl-login-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            margin: 22px auto 10px;
+            background: linear-gradient(120deg, rgba(56,189,248,0.16), rgba(129,140,248,0.12));
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            color: rgba(226, 232, 240, 0.88);
+            font-size: var(--fs-13, 0.82rem);
+            font-weight: 500;
+            letter-spacing: 0.01em;
+        }
+        .sl-login-pill::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #38bdf8, #6366f1);
+            box-shadow: 0 0 12px rgba(56,189,248,0.75);
+            animation: sl-login-pulse 1.8s ease-in-out infinite;
+        }
+        .sl-login-subcopy {
+            margin-top: 6px;
+            font-size: var(--fs-13, 0.85rem);
+            color: rgba(148, 163, 184, 0.78);
+        }
+        .sl-login-progress {
+            position: relative;
+            margin-top: 24px;
+            height: 4px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.16);
+            overflow: hidden;
+        }
+        .sl-login-progress-bar {
+            position: absolute;
+            inset: 0;
+            width: 32%;
+            border-radius: inherit;
+            background: linear-gradient(120deg, rgba(56,189,248,0.75), rgba(129,140,248,0.9));
+            animation: sl-login-progress 2.2s ease-in-out infinite;
         }
         @keyframes sl-login-spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        @keyframes sl-login-glow {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes sl-login-pulse {
+            0%, 100% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.25); opacity: 1; }
+        }
+        @keyframes sl-login-progress {
+            0% { transform: translateX(-120%); }
+            50% { transform: translateX(30%); }
+            100% { transform: translateX(120%); }
+        }
         </style>
         <div class="sl-login-loading-overlay">
             <div class="sl-login-loading-card">
-                <div class="sl-login-spinner"></div>
-                <h3>Signing you in…</h3>
-                <p>ScoutLens is getting your workspace ready.</p>
+                <div class="sl-login-spinner-wrap">
+                    <div class="sl-login-spinner-glow"></div>
+                    <div class="sl-login-spinner"></div>
+                </div>
+                <h3>Welcome back to ScoutLens</h3>
+                <p class="sl-login-loading-lede">Curating your scouting intel and syncing secure access.</p>
+                <div class="sl-login-pill">Establishing trusted Supabase session</div>
+                <p class="sl-login-subcopy">Please hold on for just a moment.</p>
+                <div class="sl-login-progress"><span class="sl-login-progress-bar"></span></div>
             </div>
         </div>
         """,
