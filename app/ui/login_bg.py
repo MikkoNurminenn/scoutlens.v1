@@ -1,7 +1,9 @@
 from __future__ import annotations
-import sys
-from pathlib import Path
+
 from base64 import b64encode
+from pathlib import Path
+import sys
+
 import streamlit as st
 
 
@@ -34,6 +36,19 @@ def _candidate_paths(name_or_path: str) -> list[Path]:
 @st.cache_data(show_spinner=False)
 def _read_image_b64(p: Path) -> str:
     return b64encode(p.read_bytes()).decode("ascii")
+
+
+def load_login_asset_b64(name: str) -> str:
+    """Return the base64-encoded contents of a login asset image."""
+
+    tried = _candidate_paths(name)
+    asset_path = next((p for p in tried if p.exists()), None)
+    if not asset_path:
+        tried_str = "\n - " + "\n - ".join(str(p) for p in tried)
+        st.warning(f"Login asset not found. Tried:{tried_str}")
+        return ""
+
+    return _read_image_b64(asset_path)
 
 
 def set_login_background(

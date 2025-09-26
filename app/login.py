@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Dict
 
 import streamlit as st
@@ -14,16 +15,114 @@ from app.supabase_client import (
     sign_out as supabase_sign_out,
 )
 from app.ui import bootstrap_sidebar_auto_collapse
-from app.ui.login_bg import set_login_background
+from app.ui.login_bg import load_login_asset_b64, set_login_background
 
 bootstrap_sidebar_auto_collapse()
 
 _LAST_EMAIL_KEY = "login__last_email"
 _FORM_KEY = "login_form"
+_POST_LOGIN_LOADING_KEY = "login__post_auth_loading"
 
 
 def _ensure_auth_state() -> Dict[str, object]:
     return st.session_state.setdefault("auth", {"authenticated": False, "user": None})
+
+
+def _render_post_login_loading() -> None:
+    logo_b64 = load_login_asset_b64("ScoutLensLogo.png")
+    logo_markup = (
+        f'<img class="sl-login-logo" src="data:image/png;base64,{logo_b64}" alt="ScoutLens logo">'
+        if logo_b64
+        else ""
+    )
+    st.markdown(
+        """
+        <style>
+        .sl-login-loading-overlay {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            padding: 36px;
+            background: linear-gradient(135deg, rgba(15,23,42,0.82), rgba(15,23,42,0.58));
+            backdrop-filter: blur(18px);
+            z-index: 1000;
+            animation: sl-login-fade-in 240ms ease-out;
+        }
+        .sl-login-loading-card {
+            position: relative;
+            display: grid;
+            gap: 18px;
+            background: rgba(15, 23, 42, 0.72);
+            border-radius: 18px;
+            border: 1px solid rgba(148,163,184,0.18);
+            padding: 40px 36px;
+            max-width: 380px;
+            width: min(92vw, 380px);
+            text-align: center;
+            box-shadow: 0 22px 55px rgba(15,23,42,0.55);
+            color: #e2e8f0;
+            font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            animation: sl-login-card-in 260ms cubic-bezier(.19,1,.22,1) 80ms both;
+        }
+        .sl-login-loading-card::before {
+            content: "";
+            position: absolute;
+            inset: 18px 18px auto 18px;
+            height: 2px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(56,189,248,0.85), rgba(14,165,233,0));
+        }
+        .sl-login-loading-card h3 {
+            margin: 0;
+            font-size: var(--fs-22, 1.35rem);
+            font-weight: 700;
+        }
+        .sl-login-loading-card p {
+            margin: 0;
+            font-size: var(--fs-15, 0.95rem);
+            color: rgba(226, 232, 240, 0.85);
+        }
+        .sl-login-logo {
+            height: 44px;
+            margin: 0 auto 6px;
+            filter: drop-shadow(0 8px 18px rgba(56,189,248,0.35));
+            animation: sl-login-fade-in 320ms ease-out;
+        }
+        .sl-login-spinner {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            background: conic-gradient(#38bdf8 0 320deg, rgba(148,163,184,0.25) 320deg 360deg);
+            mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+            margin: 0 auto 4px;
+            animation: sl-login-spin 900ms linear infinite;
+        }
+        @keyframes sl-login-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes sl-login-fade-in {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes sl-login-card-in {
+            0% { opacity: 0; transform: translateY(18px) scale(0.98); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        </style>
+        <div class="sl-login-loading-overlay">
+            <div class="sl-login-loading-card">
+                {logo}
+                <div class="sl-login-spinner"></div>
+                <h3>Signing you in…</h3>
+                <p>ScoutLens is getting your workspace ready.</p>
+            </div>
+        </div>
+        """.format(logo=logo_markup),
+        unsafe_allow_html=True,
+    )
+    time.sleep(0.75)
 
 
 def logout() -> None:
@@ -101,6 +200,9 @@ def login(
     client = get_client()
     session = client.auth.get_session()
     if session and session_value(session, "access_token"):
+        if st.session_state.pop(_POST_LOGIN_LOADING_KEY, False):
+            _render_post_login_loading()
+            st.rerun()
         return
 
     _inject_login_styles(background_opacity)
@@ -163,6 +265,7 @@ def login(
             st.error("Supabase did not return a valid session. Please try again.")
             st.stop()
 
+        st.session_state[_POST_LOGIN_LOADING_KEY] = True
         st.rerun()
 
     st.stop()
