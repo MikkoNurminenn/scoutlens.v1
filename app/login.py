@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Dict
 
 import streamlit as st
@@ -20,10 +21,72 @@ bootstrap_sidebar_auto_collapse()
 
 _LAST_EMAIL_KEY = "login__last_email"
 _FORM_KEY = "login_form"
+_POST_LOGIN_LOADING_KEY = "login__post_auth_loading"
 
 
 def _ensure_auth_state() -> Dict[str, object]:
     return st.session_state.setdefault("auth", {"authenticated": False, "user": None})
+
+
+def _render_post_login_loading() -> None:
+    st.markdown(
+        """
+        <style>
+        .sl-login-loading-overlay {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            background: radial-gradient(900px 540px at 22% 46%, rgba(15,23,42,0.90), rgba(15,23,42,0.80) 48%, rgba(15,23,42,0.65) 72%, rgba(15,23,42,0.35));
+            z-index: 1000;
+        }
+        .sl-login-loading-card {
+            background: rgba(15, 23, 42, 0.75);
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            padding: 36px 32px;
+            max-width: 360px;
+            width: min(92vw, 360px);
+            text-align: center;
+            box-shadow: 0 12px 30px rgba(2,6,23,0.35);
+            color: #e2e8f0;
+            font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        .sl-login-loading-card h3 {
+            margin: 18px 0 8px 0;
+            font-size: var(--fs-22, 1.35rem);
+            font-weight: 700;
+        }
+        .sl-login-loading-card p {
+            margin: 0;
+            font-size: var(--fs-15, 0.95rem);
+            color: rgba(226, 232, 240, 0.85);
+        }
+        .sl-login-spinner {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            border: 4px solid rgba(148, 163, 184, 0.35);
+            border-top-color: #38bdf8;
+            margin: 0 auto;
+            animation: sl-login-spin 1s linear infinite;
+        }
+        @keyframes sl-login-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        </style>
+        <div class="sl-login-loading-overlay">
+            <div class="sl-login-loading-card">
+                <div class="sl-login-spinner"></div>
+                <h3>Signing you in…</h3>
+                <p>ScoutLens is getting your workspace ready.</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    time.sleep(0.75)
 
 
 def logout() -> None:
@@ -101,6 +164,9 @@ def login(
     client = get_client()
     session = client.auth.get_session()
     if session and session_value(session, "access_token"):
+        if st.session_state.pop(_POST_LOGIN_LOADING_KEY, False):
+            _render_post_login_loading()
+            st.rerun()
         return
 
     _inject_login_styles(background_opacity)
@@ -163,6 +229,7 @@ def login(
             st.error("Supabase did not return a valid session. Please try again.")
             st.stop()
 
+        st.session_state[_POST_LOGIN_LOADING_KEY] = True
         st.rerun()
 
     st.stop()
