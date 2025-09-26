@@ -97,7 +97,12 @@ def show_notes():
             placeholder="Observation, idea, follow-up…"
         )
     with c2:
-        tags_str = st.text_input("Tags (comma-separated)", key="notes__new_tags", placeholder="e.g. U23, LW, Brazil")
+        tags_str = st.text_input(
+            "Tags (comma-separated)",
+            key="notes__new_tags",
+            placeholder="e.g. U23, LW, Brazil",
+            autocomplete="off",
+        )
         st.caption("Keep tags short; use commas to separate.")
 
     cc1, cc2, cc3 = st.columns([1,1,2.2])
@@ -125,7 +130,13 @@ def show_notes():
     st.subheader("Browse")
     b1, b2, b3, b4 = st.columns([1.6, 1.2, 1.2, 1.0])
     with b1:
-        q = st.text_input("Search text", key="notes__q", placeholder="find in text…").strip().lower()
+        raw_q = st.text_input(
+            "Search text",
+            key="notes__q",
+            placeholder="find in text…",
+            autocomplete="off",
+        )
+        q = (raw_q or "").strip().lower()
     # collect tag universe
     all_tags = []
     for n in notes:
@@ -195,7 +206,12 @@ def show_notes():
         ids = [n["id"] for n in page_items]
         picks = st.multiselect("Select notes to delete", options=ids, format_func=lambda nid: next((f"{_fmt_ts(n['created_at'])}  •  {(n['text'][:40] + '…' if len(n['text'])>40 else n['text'])}" for n in page_items if n['id']==nid), nid), key="notes__bulk")
         st.warning("Type DELETE to confirm bulk deletion.", icon="⚠️")
-        confirm = st.text_input("Confirmation", key="notes__confirm", placeholder="DELETE")
+        confirm = st.text_input(
+            "Confirmation",
+            key="notes__confirm",
+            placeholder="DELETE",
+            autocomplete="off",
+        )
         if st.button(
             f"🗑️ Delete selected ({len(picks)})",
             disabled=(len(picks)==0 or confirm!="DELETE"),
@@ -237,7 +253,12 @@ def show_notes():
                 # Inline edit
                 with st.expander("✏️ Edit"):
                     new_text = st.text_area("Edit text", value=n.get("text",""), key=f"notes__edit_text_{n['id']}", height=120)
-                    new_tags = st.text_input("Edit tags (comma-separated)", value=", ".join(n.get("tags",[])), key=f"notes__edit_tags_{n['id']}")
+                    new_tags = st.text_input(
+                        "Edit tags (comma-separated)",
+                        value=", ".join(n.get("tags", [])),
+                        key=f"notes__edit_tags_{n['id']}",
+                        autocomplete="off",
+                    )
                     if st.button("💾 Save changes", key=f"notes__edit_save_{n['id']}", type="primary"):
                         n["text"] = (new_text or "").strip()
                         n["tags"] = _clean_tags(new_tags or "")

@@ -105,12 +105,16 @@ def show_add_player_form():
         st.subheader("Perustiedot")
         c1, c2, c3 = st.columns([2,1.2,1])
         with c1:
-            name = st.text_input("Nimi *", placeholder="Etunimi Sukunimi")
+            name = st.text_input(
+                "Nimi *", placeholder="Etunimi Sukunimi", autocomplete="off"
+            )
         with c2:
             dob = st.date_input("Syntymäpäivä *", value=date(2004, 1, 1), min_value=date(1970,1,1), max_value=date.today())
             st.caption(f"Ikä: {_age_from_dob(dob)} v")
         with c3:
-            nationality = st.text_input("Kansallisuus", placeholder="ARG / BRA / URU ...")
+            nationality = st.text_input(
+                "Kansallisuus", placeholder="ARG / BRA / URU ...", autocomplete="off"
+            )
 
         c4, c5, c6 = st.columns([1,1,1])
         with c4:
@@ -132,7 +136,11 @@ def show_add_player_form():
 
         with st.expander("Lisätiedot (valinnainen)"):
             notes = st.text_area("Muistiinpanot")
-            tags = st.text_input("Tunnisteet (pilkulla eroteltuna)", placeholder="U23, trial, high-potential")
+            tags = st.text_input(
+                "Tunnisteet (pilkulla eroteltuna)",
+                placeholder="U23, trial, high-potential",
+                autocomplete="off",
+            )
 
         st.subheader("Kuva (valinnainen)")
         photo = st.file_uploader("Lataa pelaajakuva (PNG/JPG)", type=["png","jpg","jpeg"])

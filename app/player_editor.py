@@ -491,7 +491,9 @@ def show_player_editor():
         return _render_shortlist_flow()
 
     # --- TEAM FLOW ---
-    new_name = st.text_input("Create Team", placeholder="e.g. ATLÉTICO NACIONAL")
+    new_name = st.text_input(
+        "Create Team", placeholder="e.g. ATLÉTICO NACIONAL", autocomplete="off"
+    )
     if st.button(
         "➕ Create Team",
         type="primary",
@@ -524,7 +526,12 @@ def _render_shortlist_flow():
         st.info(
             "Ei shortlisteja vielä. Luo listat Home/Team View -sivuilla tai luo uusi tässä."
         )
-        new_name = st.text_input("Uuden shortlistin nimi", value="default", key="pe_new_shortlist_name")
+        new_name = st.text_input(
+            "Uuden shortlistin nimi",
+            value="default",
+            key="pe_new_shortlist_name",
+            autocomplete="off",
+        )
         if st.button("Luo shortlist", type="primary"):
             if new_name.strip():
                 shortlists[new_name.strip()] = []
@@ -671,7 +678,9 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
     st.subheader("🔍 Find Player (single-row editor)")
     c_s1, c_s2 = st.columns([3, 1])
     with c_s1:
-        search_term = st.text_input("Search by name", key=f"pe_search__{selected_team}")
+        search_term = st.text_input(
+            "Search by name", key=f"pe_search__{selected_team}", autocomplete="off"
+        )
     with c_s2:
         sort_by = st.selectbox(
             "Sort by",
@@ -717,13 +726,21 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
 
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.text_input("PlayerID", value=pid_str, disabled=True)
+            st.text_input("PlayerID", value=pid_str, disabled=True, autocomplete="off")
         with c2:
             name_val = st.text_input(
-                "Name", value=_as_str(row.get("Name", "")), key=f"{selected_team}_{pid_str}_name"
+                "Name",
+                value=_as_str(row.get("Name", "")),
+                key=f"{selected_team}_{pid_str}_name",
+                autocomplete="off",
             )
         with c3:
-            st.text_input("Team (master file)", value=str(selected_team), disabled=True)
+            st.text_input(
+                "Team (master file)",
+                value=str(selected_team),
+                disabled=True,
+                autocomplete="off",
+            )
 
         c4, c5, c6 = st.columns(3)
         with c4:
@@ -735,10 +752,14 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
                 "Nationality (A, B)",
                 value=_normalize_nationality(_as_str(row.get("Nationality", ""))),
                 key=f"{selected_team}_{pid_str}_nat",
+                autocomplete="off",
             )
         with c6:
             pos_val = st.text_input(
-                "Position", value=_as_str(row.get("Position", "")), key=f"{selected_team}_{pid_str}_pos"
+                "Position",
+                value=_as_str(row.get("Position", "")),
+                key=f"{selected_team}_{pid_str}_pos",
+                autocomplete="off",
             )
 
         c7, c8, c9 = st.columns(3)
@@ -767,6 +788,7 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
             value=_as_str(row.get("TransfermarktURL", "")),
             placeholder="https://www.transfermarkt.com/...",
             key=f"{selected_team}_{pid_str}_tmurl",
+            autocomplete="off",
         )
         if tm_url_val and not _valid_tm_url(tm_url_val):
             st.warning("URL ei näytä Transfermarkt-osoitteelta.")
@@ -868,7 +890,10 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         tags_key = f"tags_{pid_str}"
         current_tags = st.session_state.get(tags_key, "")
         tag_str = st.text_input(
-            "Tags (comma-separated)", value=current_tags, key=f"{selected_team}_{pid_str}_tags"
+            "Tags (comma-separated)",
+            value=current_tags,
+            key=f"{selected_team}_{pid_str}_tags",
+            autocomplete="off",
         )
         st.session_state[tags_key] = tag_str
         st.caption("Vinkki: muutama iskevä tagi (esim. 'Press-resistance, Pace, Leader').")
@@ -997,7 +1022,10 @@ def _render_team_editor_flow(selected_team: str, preselected_name: Optional[str]
         with a3:
             st.warning("Type DELETE to confirm deletion from master file", icon="⚠️")
             conf = st.text_input(
-                "Confirmation", key=f"{selected_team}_{pid_str}_del_conf", placeholder="DELETE"
+                "Confirmation",
+                key=f"{selected_team}_{pid_str}_del_conf",
+                placeholder="DELETE",
+                autocomplete="off",
             )
             if st.button(
                 "Delete row from master",

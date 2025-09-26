@@ -170,18 +170,42 @@ def _form(default: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
             except Exception:
                 pass
         date_val = st.date_input("Date", value=dval)
-        time_val = st.text_input("Time (HH:MM)", value=(default.get("time", "") if is_edit else ""))
+        time_val = st.text_input(
+            "Time (HH:MM)",
+            value=(default.get("time", "") if is_edit else ""),
+            autocomplete="off",
+        )
         tz_opts = [LOCAL_TZ] + LATAM_TZS
         tz_default = default.get("tz") if (is_edit and default.get("tz") in tz_opts) else LOCAL_TZ
         tz_val = st.selectbox("Time zone (IANA)", tz_opts, index=tz_opts.index(tz_default))
     with col2:
-        competition = st.text_input("Competition", value=(default.get("competition", "") if is_edit else ""))
-        city = st.text_input("City", value=(default.get("city", "") if is_edit else ""))
-        location = st.text_input("Stadium / Location", value=(default.get("location", "") if is_edit else ""))
+        competition = st.text_input(
+            "Competition",
+            value=(default.get("competition", "") if is_edit else ""),
+            autocomplete="off",
+        )
+        city = st.text_input(
+            "City",
+            value=(default.get("city", "") if is_edit else ""),
+            autocomplete="off",
+        )
+        location = st.text_input(
+            "Stadium / Location",
+            value=(default.get("location", "") if is_edit else ""),
+            autocomplete="off",
+        )
 
-    home = st.text_input("Home team", value=(default.get("home", "") if is_edit else ""))
-    away = st.text_input("Away team", value=(default.get("away", "") if is_edit else ""))
-    targets_str = st.text_input("Scout targets (comma-separated)", value=(",".join(default.get("targets", [])) if is_edit else ""))
+    home = st.text_input(
+        "Home team", value=(default.get("home", "") if is_edit else ""), autocomplete="off"
+    )
+    away = st.text_input(
+        "Away team", value=(default.get("away", "") if is_edit else ""), autocomplete="off"
+    )
+    targets_str = st.text_input(
+        "Scout targets (comma-separated)",
+        value=(",".join(default.get("targets", [])) if is_edit else ""),
+        autocomplete="off",
+    )
     notes = st.text_area("Notes", value=(default.get("notes", "") if is_edit else ""))
 
     c1, c2 = st.columns(2)

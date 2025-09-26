@@ -309,8 +309,12 @@ def show_scout_match_reporter():
     matches = list_matches()
     with st.expander("➕ Add Match", expanded=False):
         c1, c2 = st.columns(2)
-        home = c1.text_input("Home Team", key="scout_reporter__home")
-        away = c2.text_input("Away Team", key="scout_reporter__away")
+        home = c1.text_input(
+            "Home Team", key="scout_reporter__home", autocomplete="off"
+        )
+        away = c2.text_input(
+            "Away Team", key="scout_reporter__away", autocomplete="off"
+        )
         mdate = st.date_input("Match Date", date.today(), key="scout_reporter__mdate")
         mtime = st.time_input(
             "Kickoff Time",
@@ -321,9 +325,14 @@ def show_scout_match_reporter():
             "Kickoff timezone",
             st.session_state.get("latam_tz", "America/Bogota"),
             key="scout_reporter__tz",
+            autocomplete="off",
         )
-        comp = st.text_input("Competition (optional)", key="scout_reporter__comp")
-        loc = st.text_input("Location (optional)", key="scout_reporter__loc")
+        comp = st.text_input(
+            "Competition (optional)", key="scout_reporter__comp", autocomplete="off"
+        )
+        loc = st.text_input(
+            "Location (optional)", key="scout_reporter__loc", autocomplete="off"
+        )
         if st.button("Add Match", key="scout_reporter__add_match_btn", type="primary"):
             if home and away:
                 local_dt = datetime.combine(mdate, mtime).replace(tzinfo=ZoneInfo(latam_tz))
@@ -408,7 +417,7 @@ def show_scout_match_reporter():
         st.warning("No players for this selection.")
         return
 
-    q = st.text_input("Search Player", key="scout_reporter__search")
+    q = st.text_input("Search Player", key="scout_reporter__search", autocomplete="off")
     if q:
         ql = q.lower().strip()
         player_opts = [p for p in player_opts if ql in p[1].lower()]
@@ -440,7 +449,9 @@ def show_scout_match_reporter():
 
     position_final = pos_choice
     if pos_choice == "Other / free text":
-        position_free = st.text_input("Position (free text)", key="scout_reporter__pos_free")
+        position_free = st.text_input(
+            "Position (free text)", key="scout_reporter__pos_free", autocomplete="off"
+        )
         position_final = position_free.strip() if position_free else pos_choice
 
     st.markdown("#### Core Areas (1–5) + short notes")
@@ -449,7 +460,12 @@ def show_scout_match_reporter():
     for i, (label, key) in enumerate(CORE_AREAS):
         with (colA if i % 2 == 0 else colB):
             val = st.slider(label, 1, 5, 3, step=1, key=f"scout_reporter__rt_{key}")
-            note = st.text_input(f"Comment – {label}", key=f"scout_reporter__cm_{key}", placeholder="optional")
+            note = st.text_input(
+                f"Comment – {label}",
+                key=f"scout_reporter__cm_{key}",
+                placeholder="optional",
+                autocomplete="off",
+            )
             ratings.append({"attribute": label, "rating": val, "comment": note})
 
     # General comment
@@ -586,6 +602,7 @@ def show_scout_match_reporter():
         text_query = st.text_input(
             "Search (player, match, notes)",
             key="scout_reporter__filter_q",
+            autocomplete="off",
         )
     with f2:
         player_filter = st.multiselect(
@@ -658,7 +675,12 @@ def show_scout_match_reporter():
 
     st.markdown("---")
     st.warning("Type **DELETE** to confirm removals.", icon="⚠️")
-    confirm = st.text_input("Confirmation", placeholder="DELETE to confirm", key="scout_reporter__confirm")
+    confirm = st.text_input(
+        "Confirmation",
+        placeholder="DELETE to confirm",
+        key="scout_reporter__confirm",
+        autocomplete="off",
+    )
 
     cdel1, cdel2, cdel3 = st.columns([1, 1, 3])
     with cdel1:
