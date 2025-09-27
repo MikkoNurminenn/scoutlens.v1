@@ -1,9 +1,11 @@
 # path: app/ui/sidebar.py
-
 from __future__ import annotations
 
 import base64
 import json
+import re
+from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import lru_cache
 from html import escape
 from pathlib import Path
@@ -12,23 +14,24 @@ from typing import Callable, Dict, Iterable, List, Optional
 import streamlit as st
 
 
+# ----------------------------- Public API --------------------------------- #
+
 def bootstrap_sidebar_auto_collapse() -> None:
-    """Collapse sidebar on narrow viewports; safe against cross-origin and cleans up."""
+    """Collapse sidebar on narrow viewports; idempotent & cleaned up."""
     st.markdown(
         """
-        <script>
-        (function() {
+        <script id="sl-sb-auto-collapse">
+        (function(){
           const w = window;
           if (w.__sl_sb_auto_collapse_init) return;
           w.__sl_sb_auto_collapse_init = true;
 
-          function getDoc() {
+          function getDoc(){
             try { return (w.parent && w.parent.document) ? w.parent.document : w.document; }
             catch (e) { return w.document; }
           }
 
           let raf = 0;
-
           function autoCollapse(){
             const doc = getDoc();
             const btn = doc.querySelector('[data-testid="stSidebarCollapseButton"]');
@@ -36,7 +39,7 @@ def bootstrap_sidebar_auto_collapse() -> None:
             if(!btn || !sb) return;
             const attr = sb.getAttribute('aria-expanded');
             const isExpanded = (attr === null) ? true : (attr !== 'false');
-            if (w.innerWidth < 768 && isExpanded) btn.click();
+            if (w.innerWidth < 768 && isExpanded) { try { btn.click(); } catch(_){} }
           }
 
           function onResize(){
@@ -45,7 +48,7 @@ def bootstrap_sidebar_auto_collapse() -> None:
           }
 
           w.addEventListener('load', autoCollapse, { once: true });
-          w.addEventListener('resize', onResize);
+          w.addEventListener('resize', onResize, { passive: true });
 
           w.addEventListener('beforeunload', () => {
             if (raf) cancelAnimationFrame(raf);
@@ -71,51 +74,20 @@ def build_sidebar(
     logout: Callable[[], None],
     logo_path: Optional[str] = None,
 ) -> None:
-    """Render the Streamlit sidebar using a single, accessible owner."""
-
-    root = Path(__file__).resolve().parents[2]
-    nav_options: List[str] = list(nav_keys)
-    nav_display = {key: nav_labels.get(key, key) for key in nav_options}
-    icon_map = {key: nav_icons.get(key, "") for key in nav_options}
-
+    """Render Streamlit sidebar; single owner; resilient DOM hooks."""
     _force_dark_theme()
 
-    previous_state = bool(st.session_state.get("_sidebar_owner_active"))
-    st.session_state["_sidebar_owner_active"] = True
+    with _sidebar_owner():
+        root = Path(__file__).resolve().parents[2]
+        logo_path = logo_path or str(root / "assets" / "logo.png")
+        logo_data_uri = _get_logo_data_uri(logo_path)
 
-    if not logo_path:
-        logo_path = str(root / "assets" / "logo.png")
+        nav_options: List[str] = list(nav_keys)
+        nav_display = {k: nav_labels.get(k, k) for k in nav_options}
+        icon_map = {k: nav_icons.get(k, "") for k in nav_options}
 
-    logo_data_uri = _get_logo_data_uri(logo_path)
-    logo_html = (
-        f"<div class='sb-logo'><img src='{logo_data_uri}' alt='{escape(app_title)} logo' "
-        "loading='lazy' decoding='async'/></div>"
-        if logo_data_uri
-        else ""
-    )
-    tagline_html = f"<p class='sb-tagline'>{escape(app_tagline)}</p>" if app_tagline else ""
-
-    header_html = (
-        """
-        <div class='sb-header-card' role='banner'>
-          {logo}
-          <div class='sb-title-block'>
-            <h1 class='sb-title'>{title}</h1>
-            {tagline}
-          </div>
-        </div>
-        """
-        .format(
-            logo=logo_html,
-            title=escape(app_title or ""),
-            tagline=tagline_html,
-        )
-        .strip()
-    )
-
-    try:
         with st.sidebar:
-            st.markdown(header_html, unsafe_allow_html=True)
+            st.markdown(_build_header_html(app_title, app_tagline, logo_data_uri), unsafe_allow_html=True)
 
             selected_option: Optional[str] = None
             if nav_options:
@@ -128,67 +100,21 @@ def build_sidebar(
                     """,
                     unsafe_allow_html=True,
                 )
-                selected_option = st.radio(
-                    "Navigate",
-                    options=nav_options,
-                    index=nav_options.index(current) if current in nav_options else 0,
-                    format_func=lambda key: nav_display.get(key, key),
-                    key="sidebar_nav",
-                    label_visibility="collapsed",
-                )
+                selected_option = _build_nav(current, nav_options, nav_display)
 
             if selected_option and selected_option != current:
-                go(selected_option)
+                try:
+                    go(selected_option)
+                except Exception as exc:  # noqa: BLE001
+                    # why: don't crash UI on user callback failures
+                    st.warning(f"Navigation failed: {exc}")
 
             st.markdown(_nav_behavior_script(icon_map), unsafe_allow_html=True)
 
             auth = st.session_state.get("auth", {})
             user = auth.get("user")
             if auth.get("authenticated") and user:
-                display_name = (
-                    user.get("name")
-                    or user.get("username")
-                    or user.get("user_metadata", {}).get("full_name")
-                    or user.get("email")
-                    or "Scout"
-                )
-                email = user.get("email") or ""
-                avatar_url = (
-                    user.get("user_metadata", {}).get("avatar_url")
-                    or user.get("avatar_url")
-                    or ""
-                )
-                initials = "".join(p[0].upper() for p in display_name.split() if p)[:2] or "SL"
-                avatar_classes = "sb-profile-avatar" + (" has-image" if avatar_url else "")
-                avatar_inner = (
-                    "<img src='{src}' alt='' loading='lazy' decoding='async'/>".format(
-                        src=escape(avatar_url)
-                    )
-                    if avatar_url
-                    else ""
-                )
-                profile_html = (
-                    """
-                    <div class='sb-profile-card'>
-                      <div class='{classes}' data-initials='{initials}'>{inner}</div>
-                      <div class='sb-profile-meta'>
-                        <div class='sb-profile-name'>{name}</div>
-                        {email_line}
-                      </div>
-                    </div>
-                    """
-                    .format(
-                        classes=avatar_classes,
-                        initials=escape(initials),
-                        inner=avatar_inner,
-                        name=escape(display_name),
-                        email_line=(
-                            f"<div class='sb-profile-email'>{escape(email)}</div>" if email else ""
-                        ),
-                    )
-                    .strip()
-                )
-                st.markdown(profile_html, unsafe_allow_html=True)
+                st.markdown(_build_profile_html(user), unsafe_allow_html=True)
                 st.button(
                     "Sign out",
                     on_click=logout,
@@ -197,30 +123,31 @@ def build_sidebar(
                     use_container_width=True,
                 )
 
-            footer_html = (
-                """
-                <footer class='sb-footer-line' aria-label='Application version'>
-                  <span class='sb-footer-title'>{title}</span>
-                  <span class='sb-version'>v{version}</span>
-                </footer>
-                """
-                .format(
-                    title=escape(app_title or ""),
-                    version=escape(app_version or ""),
-                )
-                .strip()
-            )
-            st.markdown(footer_html, unsafe_allow_html=True)
+            st.markdown(_build_footer_html(app_title, app_version), unsafe_allow_html=True)
             st.markdown(_sidebar_alert_script(), unsafe_allow_html=True)
+
+
+__all__ = ["bootstrap_sidebar_auto_collapse", "build_sidebar"]
+
+
+# --------------------------- Internal helpers ------------------------------ #
+
+@contextmanager
+def _sidebar_owner():
+    """Context manager to mark sidebar owner and restore prior state."""
+    prev = bool(st.session_state.get("_sidebar_owner_active"))
+    st.session_state["_sidebar_owner_active"] = True
+    try:
+        yield
     finally:
-        st.session_state["_sidebar_owner_active"] = previous_state
+        st.session_state["_sidebar_owner_active"] = prev
 
 
 def _force_dark_theme() -> None:
     st.markdown(
         """
         <script id="sl-force-dark">
-        (function forceDark(){
+        (function(){
           const w = window;
           if (w.__slForceDarkApplied) return;
           w.__slForceDarkApplied = true;
@@ -239,11 +166,84 @@ def _force_dark_theme() -> None:
     )
 
 
+def _build_header_html(title: str, tagline: str, logo_data_uri: str) -> str:
+    logo_html = (
+        f"<div class='sb-logo'><img src='{logo_data_uri}' alt='{escape(title)} logo' loading='lazy' decoding='async'/></div>"
+        if logo_data_uri else ""
+    )
+    tagline_html = f"<p class='sb-tagline'>{escape(tagline)}</p>" if tagline else ""
+    return (
+        f"""
+        <div class='sb-header-card' role='banner'>
+          {logo_html}
+          <div class='sb-title-block'>
+            <h1 class='sb-title'>{escape(title or "")}</h1>
+            {tagline_html}
+          </div>
+        </div>
+        """.strip()
+    )
+
+
+def _build_nav(current: str, options: List[str], display_map: Dict[str, str]) -> Optional[str]:
+    index = options.index(current) if current in options else 0
+    return st.radio(
+        "Navigate",
+        options=options,
+        index=index,
+        format_func=lambda key: display_map.get(key, key),
+        key="sidebar_nav",
+        label_visibility="collapsed",
+    )
+
+
+def _build_profile_html(user: Dict[str, object]) -> str:
+    name = (
+        str(user.get("name") or "")
+        or str(user.get("username") or "")
+        or str(user.get("user_metadata", {}).get("full_name") or "")
+        or str(user.get("email") or "")
+        or "Scout"
+    )
+    email = str(user.get("email") or "")
+    avatar_url = (
+        str(user.get("user_metadata", {}).get("avatar_url") or "")
+        or str(user.get("avatar_url") or "")
+    )
+    initials = _compute_initials(name) or "SL"
+    avatar_classes = "sb-profile-avatar" + (" has-image" if avatar_url else "")
+    avatar_inner = f"<img src='{escape(avatar_url)}' alt='' loading='lazy' decoding='async'/>" if avatar_url else ""
+    email_line = f"<div class='sb-profile-email'>{escape(email)}</div>" if email else ""
+    return (
+        f"""
+        <div class='sb-profile-card'>
+          <div class='{avatar_classes}' data-initials='{escape(initials)}'>{avatar_inner}</div>
+          <div class='sb-profile-meta'>
+            <div class='sb-profile-name'>{escape(name)}</div>
+            {email_line}
+          </div>
+        </div>
+        """.strip()
+    )
+
+
+def _build_footer_html(title: str, version: str) -> str:
+    return (
+        f"""
+        <footer class='sb-footer-line' aria-label='Application version'>
+          <span class='sb-footer-title'>{escape(title or "")}</span>
+          <span class='sb-version'>v{escape(version or "")}</span>
+        </footer>
+        """.strip()
+    )
+
+
 def _nav_behavior_script(icon_map: Dict[str, str]) -> str:
-    icon_payload = json.dumps(icon_map, ensure_ascii=False)
+    # why: JSON payload kept minimal & safe for embedding
+    icon_payload = json.dumps(icon_map, ensure_ascii=True, separators=(",", ":"))
     return """
-    <script>
-    (function sidebarNavEnhancer(){
+    <script id="sl-sidebar-nav-enhancer">
+    (function(){
       const ICON_MAP = __ICON_MAP__;
       const w = window;
       function getDoc(){
@@ -252,8 +252,7 @@ def _nav_behavior_script(icon_map: Dict[str, str]) -> str:
       }
       function syncNav(){
         const doc = getDoc();
-        if (!doc) return;
-        const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+        const sidebar = doc && doc.querySelector('section[data-testid="stSidebar"]');
         if (!sidebar) return;
         const group = sidebar.querySelector('[role="radiogroup"]');
         if (!group) return;
@@ -274,20 +273,16 @@ def _nav_behavior_script(icon_map: Dict[str, str]) -> str:
               iconSpan.setAttribute('role', 'presentation');
               input.insertAdjacentElement('afterend', iconSpan);
             }
-            if (/\\bfa-/.test(spec)) {
-              iconSpan.innerHTML = '<i class="' + spec + '"></i>';
-            } else {
-              iconSpan.textContent = spec;
-            }
+            if (/\\bfa-/.test(spec)) iconSpan.innerHTML = '<i class=\"' + spec + '\"></i>';
+            else iconSpan.textContent = spec;
           } else if (iconSpan) {
             iconSpan.remove();
             iconSpan = null;
           }
-          const isActive = input.checked;
+          const isActive = !!input.checked;
           label.dataset.option = value;
           label.dataset.active = isActive ? 'true' : 'false';
           label.setAttribute('aria-current', isActive ? 'page' : 'false');
-          label.classList.add('sb-nav-item');
           const textWrap = label.querySelector(':scope > div:last-child');
           if (textWrap && !textWrap.classList.contains('sb-nav-label')) {
             textWrap.classList.add('sb-nav-label');
@@ -296,31 +291,25 @@ def _nav_behavior_script(icon_map: Dict[str, str]) -> str:
       }
       w.__slSidebarIconMap = ICON_MAP;
       w.__slSidebarNavSync = syncNav;
+
       if (!w.__slSidebarNavObserver) {
         const observer = new MutationObserver(() => {
-          if (typeof w.__slSidebarNavSync === 'function') {
-            w.__slSidebarNavSync();
-          }
+          if (typeof w.__slSidebarNavSync === 'function') w.__slSidebarNavSync();
         });
         w.__slSidebarNavObserver = observer;
+
         const init = () => {
           const doc = getDoc();
           const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
-          if (!sidebar) {
-            setTimeout(init, 150);
-            return;
-          }
+          if (!sidebar) { setTimeout(init, 150); return; }
           observer.observe(sidebar, { childList: true, subtree: true });
-          if (typeof w.__slSidebarNavSync === 'function') {
-            w.__slSidebarNavSync();
-          }
+          if (typeof w.__slSidebarNavSync === 'function') w.__slSidebarNavSync();
         };
         init();
+
         w.addEventListener('beforeunload', () => {
-          try { observer.disconnect(); } catch (e) {}
-          if (w.__slSidebarNavObserver === observer) {
-            w.__slSidebarNavObserver = null;
-          }
+          try { observer.disconnect(); } catch(_) {}
+          if (w.__slSidebarNavObserver === observer) w.__slSidebarNavObserver = null;
         });
       } else if (typeof w.__slSidebarNavSync === 'function') {
         w.__slSidebarNavSync();
@@ -332,8 +321,8 @@ def _nav_behavior_script(icon_map: Dict[str, str]) -> str:
 
 def _sidebar_alert_script() -> str:
     return """
-    <script>
-    (function sidebarAlertRelocator(){
+    <script id="sl-sidebar-alert-relocator">
+    (function(){
       const w = window;
       function getDoc(){
         try { return (w.parent && w.parent.document) ? w.parent.document : document; }
@@ -341,12 +330,11 @@ def _sidebar_alert_script() -> str:
       }
       function relocate(){
         const doc = getDoc();
-        if (!doc) return;
-        const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+        const sidebar = doc && doc.querySelector('section[data-testid="stSidebar"]');
         if (!sidebar) return;
         const shell = sidebar.querySelector('.block-container') || sidebar;
         const footerHost = sidebar.querySelector('.sb-footer-line')?.parentElement || shell.lastElementChild || shell;
-        const alerts = Array.from(sidebar.querySelectorAll('.stAlert'));
+        const alerts = sidebar.querySelectorAll('.stAlert');
         if (!alerts.length || !footerHost) return;
         alerts.forEach((alert) => {
           const block = alert.closest('[data-testid="stVerticalBlock"]') || alert;
@@ -354,46 +342,39 @@ def _sidebar_alert_script() -> str:
           footerHost.after(block);
         });
       }
-      if (w.__slSidebarAlertInit) {
-        if (typeof w.__slSidebarAlertRelocate === 'function') {
-          w.__slSidebarAlertRelocate();
-        }
-        return;
-      }
+      if (w.__slSidebarAlertInit) { if (typeof w.__slSidebarAlertRelocate === 'function') w.__slSidebarAlertRelocate(); return; }
       w.__slSidebarAlertInit = true;
       w.__slSidebarAlertRelocate = relocate;
+
       const observer = new MutationObserver(relocate);
       const init = () => {
         const doc = getDoc();
         const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
-        if (!sidebar) {
-          setTimeout(init, 160);
-          return;
-        }
+        if (!sidebar) { setTimeout(init, 160); return; }
         observer.observe(sidebar, { childList: true, subtree: true });
         relocate();
       };
       init();
-      w.addEventListener('beforeunload', () => {
-        try { observer.disconnect(); } catch (e) {}
-      });
+
+      w.addEventListener('beforeunload', () => { try { observer.disconnect(); } catch(_){} });
     })();
     </script>
     """
 
 
 @lru_cache(maxsize=1)
-def _get_logo_data_uri(path_str: str) -> str:
-    """Return a base64 data URI for the sidebar logo (empty if missing)."""
+def _get_logo_data_uri(path_str: str, *, max_bytes: int = 5_000_000) -> str:
+    """Return a base64 data URI for the sidebar logo (empty if missing/too big)."""
     path = Path(path_str)
-    if not path.exists():
+    if not path.exists() or not path.is_file():
         return ""
     try:
         data = path.read_bytes()
     except OSError:
         return ""
+    if len(data) > max_bytes:
+        return ""  # why: avoid embedding huge assets as data URIs
 
-    mime = "image/png"
     suffix = path.suffix.lower()
     if suffix in (".jpg", ".jpeg"):
         mime = "image/jpeg"
@@ -401,9 +382,30 @@ def _get_logo_data_uri(path_str: str) -> str:
         mime = "image/svg+xml"
     elif suffix == ".gif":
         mime = "image/gif"
+    else:
+        mime = "image/png"
 
     encoded = base64.b64encode(data).decode("ascii")
     return f"data:{mime};base64,{encoded}"
 
 
-__all__ = ["bootstrap_sidebar_auto_collapse", "build_sidebar"]
+# ----------------------------- Utilities ---------------------------------- #
+
+_INITIALS_RE = re.compile(r"[A-Za-zÅÄÖåäö0-9]", re.UNICODE)
+
+def _compute_initials(name: str, max_len: int = 2) -> str:
+    """Extract up to max_len initials from name; locale-agnostic letters/digits."""
+    parts = [p for p in re.split(r"\s+", name.strip()) if p]
+    if not parts:
+        return ""
+    chars: List[str] = []
+    for part in parts:
+        m = _INITIALS_RE.search(part)
+        if m:
+            chars.append(m.group(0).upper())
+        if len(chars) >= max_len:
+            break
+    # fallback: take first characters from first token(s)
+    if not chars:
+        chars = [c.upper() for c in name[:max_len]]
+    return "".join(chars)[:max_len]
