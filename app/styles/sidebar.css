@@ -118,10 +118,15 @@ button[data-testid="stSidebarCollapseButton"]:focus-visible {
 }
 
 :where(section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"])::after,
-:where(button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]::after) {
+:where(button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]::after),
+:where(.stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"]::after) {
   content: "Menu";
   opacity: 1;
   transform: translateY(-50%) translateX(0);
+  background: linear-gradient(135deg, color-mix(in oklab, var(--accent), transparent 0%), color-mix(in oklab, var(--accent-2), transparent 10%));
+  border-color: color-mix(in oklab, var(--accent-2), black 45%);
+  color: #f9fbff;
+  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
 
 :where(body .stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"]) {
