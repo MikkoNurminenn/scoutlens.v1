@@ -152,7 +152,7 @@ button[data-testid="stSidebarCollapseButton"]:focus-visible {
 :where(section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"])::after,
 :where(button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]::after),
 :where(.stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"]::after) {
-  content: "Menu";
+  content: "Avaa valikko";
   opacity: 1;
   transform: translateY(-50%) translateX(0);
   background: linear-gradient(150deg,
