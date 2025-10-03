@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date
 import textwrap
 import pandas as pd
 import streamlit as st
 from postgrest.exceptions import APIError
+import altair as alt
 
 from app.ui import bootstrap_sidebar_auto_collapse
 from app.supabase_client import get_client
@@ -87,13 +87,23 @@ def show_inspect_player() -> None:
 
     # --- Filters for reports ---
     st.markdown("### Match Reports")
-    fc1, fc2 = st.columns([2, 1])
+    fc1, fc2, fc3 = st.columns([2, 1, 1])
     comp_filter = fc1.text_input(
-        "Filter by competition (contains)", "", autocomplete="off"
+        "Filter by competition (contains)",
+        "",
+        key="inspect__f_comp",
+        autocomplete="off",
     )
-    date_range = fc2.date_input(
+    opponent_filter = fc2.text_input(
+        "Filter by opponent (contains)",
+        "",
+        key="inspect__f_opp",
+        autocomplete="off",
+    )
+    date_range = fc3.date_input(
         "Date range",
         value=(),
+        key="inspect__f_dates",
         help="Optional: filter reports between two dates",
     )
 
@@ -167,6 +177,9 @@ def show_inspect_player() -> None:
     if comp_filter:
         df = df[df["Competition"].fillna("").str.contains(comp_filter, case=False)]
 
+    if opponent_filter:
+        df = df[df["Opponent"].fillna("").str.contains(opponent_filter, case=False)]
+
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start, end = date_range
         if start and end:
@@ -186,9 +199,71 @@ def show_inspect_player() -> None:
     overall_avg_str = f"{overall_avg:.1f}" if overall_avg is not None else "—"
     header.subheader(f"{player['name']} — Avg {overall_avg_str}")
 
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("Reports", len(df))
+    metric_cols[1].metric("Avg Tech", f"{avg_cols.get('Tech', 0):.1f}" if avg_cols.get("Tech") is not None else "—")
+    metric_cols[2].metric("Avg GI", f"{avg_cols.get('GI', 0):.1f}" if avg_cols.get("GI") is not None else "—")
+    metric_cols[3].metric("Avg MENT", f"{avg_cols.get('MENT', 0):.1f}" if avg_cols.get("MENT") is not None else "—")
+    metric_cols[4].metric("Avg ATH", f"{avg_cols.get('ATH', 0):.1f}" if avg_cols.get("ATH") is not None else "—")
+
     if df.empty:
         st.warning("No reports match the current filters.")
         return
+
+    chart_df = df.copy()
+    if "Date" in chart_df.columns:
+        chart_df["Date"] = pd.to_datetime(chart_df["Date"], errors="coerce")
+        chart_df = chart_df.dropna(subset=["Date"])
+    numeric_cols = [col for col in ["Tech", "GI", "MENT", "ATH"] if col in chart_df.columns]
+    if numeric_cols and not chart_df.empty:
+        melted = chart_df.melt(
+            id_vars="Date",
+            value_vars=numeric_cols,
+            var_name="Attribute",
+            value_name="Score",
+        )
+        melted = melted.dropna(subset=["Score"])
+        if not melted.empty:
+            chart = (
+                alt.Chart(melted)
+                .mark_line(point=True)
+                .encode(
+                    x=alt.X("Date:T", title="Date"),
+                    y=alt.Y("Score:Q", title="Score (0-5)", scale=alt.Scale(domain=[0, 5])),
+                    color=alt.Color("Attribute:N", title="Attribute"),
+                    tooltip=["Date:T", "Attribute:N", alt.Tooltip("Score:Q", format=".1f")],
+                )
+                .interactive()
+            )
+            st.markdown("#### Attribute trend")
+            st.altair_chart(chart, use_container_width=True)
+
+    comments_df = df.copy()
+    if "Date" in comments_df.columns:
+        comments_df["Date"] = pd.to_datetime(comments_df["Date"], errors="coerce")
+    comments_df = comments_df.dropna(subset=["Comments"]) if "Comments" in comments_df.columns else pd.DataFrame()
+    if not comments_df.empty:
+        comments_df = comments_df[comments_df["Comments"].astype(str).str.len() > 0]
+    if not comments_df.empty:
+        with st.expander("Latest comments", expanded=False):
+            preview = (
+                comments_df.sort_values("Date", ascending=False)
+                [["Date", "Opponent", "Competition", "Comments"]]
+                .head(3)
+            )
+            for idx, row in preview.iterrows():
+                dt_display = row["Date"].strftime("%Y-%m-%d") if not pd.isna(row["Date"]) else "—"
+                subtitle = " vs ".join(
+                    filter(
+                        None,
+                        [row.get("Competition", ""), row.get("Opponent", "")],
+                    )
+                )
+                st.markdown(
+                    f"**{dt_display}** — {subtitle or 'Match'}\n\n{row['Comments']}"
+                )
+                if idx < len(preview) - 1:
+                    st.markdown("---")
 
     cols_order = [
         "Date", "Player", "Club", "Opponent", "Competition",
