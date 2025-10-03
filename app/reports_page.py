@@ -11,7 +11,7 @@ Guidelines:
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Dict, List, Callable
 
 import pandas as pd
@@ -266,7 +266,7 @@ def show_reports_page() -> None:
             )
         df = pd.DataFrame(data)
 
-        c1, c2, c3 = st.columns([2, 2, 1])
+        c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
         with c1:
             q_opp = st.text_input(
                 "Filter by opponent",
@@ -283,15 +283,66 @@ def show_reports_page() -> None:
             )
         with c3:
             min_ment = st.slider("MENT ≥", 1, 5, 1, key="reports__f_ment")
+        with c4:
+            enable_dates = st.toggle(
+                "Use date range",
+                value=False,
+                key="reports__f_date_toggle",
+                help="Limit the list to reports inside a specific window.",
+            )
+
+        foot_choices: list[str] = []
+        if "Foot" in df.columns:
+            foot_choices = sorted(
+                v
+                for v in df["Foot"].fillna("").astype(str).str.capitalize().unique()
+                if v
+            )
+        c5, _ = st.columns([1, 3])
+        with c5:
+            foot_filter = st.multiselect(
+                "Foot",
+                options=foot_choices,
+                default=[],
+                key="reports__f_foot",
+                help="Show only reports with these preferred foot values.",
+                disabled=not foot_choices,
+            )
+
+        if enable_dates:
+            default_end = date.today()
+            default_start = default_end - timedelta(days=90)
+            stored_range = st.session_state.get("reports__f_date")
+            if not (isinstance(stored_range, tuple) and len(stored_range) == 2):
+                stored_range = (default_start, default_end)
+                st.session_state["reports__f_date"] = stored_range
+            date_range = st.date_input(
+                "Date range",
+                value=stored_range,
+                key="reports__f_date",
+                help="Filter reports between two dates (inclusive).",
+            )
+        else:
+            date_range = ()
 
         def _apply_filters(df_in: pd.DataFrame) -> pd.DataFrame:
             out = df_in.copy()
+            if "Date" in out.columns:
+                out["Date"] = pd.to_datetime(out["Date"], errors="coerce")
             if q_opp:
                 out = out[out["Opponent"].str.contains(q_opp, case=False, na=False)]
             if q_comp:
                 out = out[out["Competition"].str.contains(q_comp, case=False, na=False)]
             if "MENT" in out.columns and min_ment > 1:
                 out = out[(out["MENT"].fillna(0) >= min_ment)]
+            if foot_filter:
+                out = out[out["Foot"].fillna("").str.capitalize().isin(foot_filter)]
+            if enable_dates and isinstance(date_range, tuple) and len(date_range) == 2:
+                start, end = date_range
+                if start and end:
+                    start_ts = pd.to_datetime(start)
+                    end_ts = pd.to_datetime(end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+                    out = out[(out["Date"] >= start_ts) & (out["Date"] <= end_ts)]
             return out
 
         df_f = _apply_filters(df)
@@ -305,12 +356,37 @@ def show_reports_page() -> None:
                 df_f[col] = None
         df_f = df_f[order]
 
+        if "Date" in df_f.columns:
+            df_f["Date"] = pd.to_datetime(df_f["Date"], errors="coerce")
+
         for col in ["Tech", "GI", "MENT", "ATH"]:
             if col in df_f.columns:
                 df_f[col] = pd.to_numeric(df_f[col], errors="coerce").round(1)
 
         if "Foot" in df_f.columns:
             df_f["Foot"] = df_f["Foot"].fillna("").astype(str).str.capitalize()
+
+        if "Date" in df_f.columns:
+            df_f["Date"] = df_f["Date"].dt.strftime("%Y-%m-%d")
+
+        if not df_f.empty:
+            metrics: dict[str, float | None] = {}
+            for col in ["Tech", "GI", "MENT", "ATH"]:
+                if col in df_f.columns:
+                    avg_val = pd.to_numeric(df_f[col], errors="coerce").dropna().mean()
+                    metrics[col] = round(float(avg_val), 1) if pd.notna(avg_val) else None
+                else:
+                    metrics[col] = None
+
+            summary_cols = st.columns(5)
+            def _fmt_metric(value: float | None) -> str:
+                return f"{value:.1f}" if value is not None else "—"
+
+            summary_cols[0].metric("Reports", len(df_f))
+            summary_cols[1].metric("Avg Tech", _fmt_metric(metrics.get("Tech")))
+            summary_cols[2].metric("Avg GI", _fmt_metric(metrics.get("GI")))
+            summary_cols[3].metric("Avg MENT", _fmt_metric(metrics.get("MENT")))
+            summary_cols[4].metric("Avg ATH", _fmt_metric(metrics.get("ATH")))
         def _highlight_class(v: float | None) -> str:
             if pd.isna(v):
                 return ""
@@ -341,11 +417,27 @@ def show_reports_page() -> None:
         with btn_col:
             if st.button("Clear filters", key="reports__clear_filters", type="secondary"):
                 st.session_state.update(
-                    {"reports__f_opp": "", "reports__f_comp": "", "reports__f_ment": 1}
+                    {
+                        "reports__f_opp": "",
+                        "reports__f_comp": "",
+                        "reports__f_ment": 1,
+                        "reports__f_foot": [],
+                        "reports__f_date_toggle": False,
+                        "reports__f_date": (),
+                    }
                 )
                 st.rerun()
 
         with track("reports:table"):
             st.dataframe(styler, use_container_width=True, hide_index=True, height=400)
+
+        if not df_f.empty:
+            csv_bytes = df_f.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Export CSV",
+                csv_bytes,
+                file_name="reports_filtered.csv",
+                mime="text/csv",
+            )
     else:
         st.caption("No reports yet.")
