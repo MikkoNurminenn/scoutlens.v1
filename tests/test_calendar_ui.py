@@ -108,3 +108,81 @@ def test_browser_store_uses_js_eval(monkeypatch):
 
     browser_store.clear_all()
     assert storage.get(browser_store.KEY) in (None, "[]")
+
+
+def test_calendar_store_timezone_ordering(monkeypatch, tmp_path):
+    storage: Dict[str, str] = {}
+
+    def fake_js_eval(*, js_expressions: str, want_output: bool = False, key: str | None = None):
+        if "getItem" in js_expressions:
+            return storage.get(browser_store.KEY, "[]")
+        if "setItem" in js_expressions:
+            start = js_expressions.index("`") + 1
+            end = js_expressions.rindex("`")
+            storage[browser_store.KEY] = js_expressions[start:end]
+            return None
+        if "removeItem" in js_expressions:
+            storage.pop(browser_store.KEY, None)
+            return None
+        raise AssertionError(f"Unexpected JS expression: {js_expressions}")
+
+    monkeypatch.setattr(browser_store, "streamlit_js_eval", fake_js_eval)
+    local_dir = tmp_path / "calendar"
+    local_dir.mkdir()
+    monkeypatch.setattr(local_store, "_app_dir", lambda: str(local_dir))
+
+    browser_store.clear_all()
+
+    seed_events = [
+        {
+            "title": "Early UTC",
+            "start_utc": "2024-07-02T08:00:00",
+            "end_utc": "2024-07-02T09:00:00",
+        },
+        {
+            "title": "Late Eastern",
+            "start_utc": "2024-07-02T09:30:00-04:00",
+            "end_utc": "2024-07-02T12:00:00-04:00",
+        },
+        {
+            "title": "Mid Central Europe",
+            "start_utc": "2024-07-02T14:15:00+02:00",
+            "end_utc": "2024-07-02T16:30:00+02:00",
+        },
+        {
+            "title": "Noon UTC",
+            "start_utc": "2024-07-02T12:00:00+00:00",
+            "end_utc": "2024-07-02T13:30:00+00:00",
+        },
+    ]
+
+    order = [2, 0, 3, 1]
+    for idx in order:
+        payload = seed_events[idx]
+        local_store.create_event(payload)
+        browser_store.create_event(payload)
+
+    expected_titles = [
+        "Late Eastern",
+        "Mid Central Europe",
+        "Noon UTC",
+        "Early UTC",
+    ]
+
+    assert [e["title"] for e in local_store.list_events()] == expected_titles
+    assert [e["title"] for e in browser_store.list_events()] == expected_titles
+
+    start_range = "2024-07-02T12:05:00+00:00"
+    end_range = "2024-07-02T13:45:00+00:00"
+    expected_between = [
+        "Late Eastern",
+        "Mid Central Europe",
+        "Noon UTC",
+    ]
+
+    assert [
+        e["title"] for e in local_store.list_events_between(start_range, end_range)
+    ] == expected_between
+    assert [
+        e["title"] for e in browser_store.list_events_between(start_range, end_range)
+    ] == expected_between
