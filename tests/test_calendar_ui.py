@@ -23,6 +23,19 @@ def test_event_header_includes_time_and_location():
     assert "2024-07-01" in header
 
 
+def test_event_header_handles_z_suffix_times():
+    event = {
+        "title": "Friendly Z",
+        "start_utc": "2024-07-01T15:00:00Z",
+        "end_utc": "2024-07-01T17:00:00Z",
+        "timezone": "America/Bogota",
+    }
+    header = calendar_ui._event_header(event, "America/Bogota")
+    assert "Friendly Z" in header
+    assert "2024-07-01 10:00" in header
+    assert "→ 12:00" in header
+
+
 def test_local_store_roundtrip(monkeypatch, tmp_path):
     monkeypatch.setattr(local_store, "_app_dir", lambda: str(tmp_path))
     start = "2024-07-05T18:00:00+00:00"

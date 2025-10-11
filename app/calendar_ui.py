@@ -48,7 +48,10 @@ def _parse_iso(value: Any) -> Optional[datetime]:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(str(value))
+        text = str(value)
+        if text.endswith("Z") or text.endswith("z"):
+            text = f"{text[:-1]}+00:00"
+        return datetime.fromisoformat(text)
     except ValueError:
         return None
 
