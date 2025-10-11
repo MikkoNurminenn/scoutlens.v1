@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from inspect import signature
 from typing import Any, Dict, Iterable, List, Optional
 
 import streamlit as st
@@ -14,6 +15,10 @@ except ModuleNotFoundError:  # pragma: no cover
 from zoneinfo import ZoneInfo
 
 DEFAULT_TZ = "America/Bogota"
+try:
+    _DATETIME_INPUT_SUPPORTS_TZ = "timezone" in signature(st.datetime_input).parameters
+except Exception:  # pragma: no cover - Streamlit API differences
+    _DATETIME_INPUT_SUPPORTS_TZ = False
 try:
     UTC = ZoneInfo("UTC")
 except Exception:  # pragma: no cover - ZoneInfo always available on Py3.11
@@ -48,6 +53,37 @@ def _localize(dt: datetime, tz_name: str) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=tz)
     return dt.astimezone(tz)
+
+
+def _datetime_input(
+    container,
+    label: str,
+    *,
+    value: Optional[datetime],
+    timezone: str,
+    key: Optional[str] = None,
+):
+    """Wrapper around Streamlit datetime_input with timezone compatibility."""
+
+    kwargs: Dict[str, Any] = {}
+
+    if key is not None:
+        kwargs["key"] = key
+
+    if _DATETIME_INPUT_SUPPORTS_TZ:
+        kwargs["timezone"] = timezone
+        kwargs["value"] = value
+    else:
+        if value is not None:
+            tz = _resolve_tz(timezone)
+            dt = value
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(tz)
+            kwargs["value"] = dt.replace(tzinfo=None) if dt.tzinfo else dt
+        else:
+            kwargs["value"] = value
+
+    return container.datetime_input(label, **kwargs)
 
 
 def _to_local(utc_iso: Any, tz_name: str) -> Optional[datetime]:
@@ -133,11 +169,17 @@ def show_calendar() -> None:
     title = form.text_input("Title", "Match: Junior vs. Millonarios")
     col1, col2 = form.columns(2)
     default_start = now_local.replace(microsecond=0)
-    start_local_input = col1.datetime_input(
-        "Start (local)", value=default_start, timezone=local_tz
+    start_local_input = _datetime_input(
+        col1,
+        "Start (local)",
+        value=default_start,
+        timezone=local_tz,
     )
-    end_local_input = col2.datetime_input(
-        "End (local)", value=default_start, timezone=local_tz
+    end_local_input = _datetime_input(
+        col2,
+        "End (local)",
+        value=default_start,
+        timezone=local_tz,
     )
     location = form.text_input("Location (city/stadium)")
     home_team = form.text_input("Home team")
