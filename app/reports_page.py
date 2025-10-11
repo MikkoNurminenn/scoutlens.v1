@@ -11,7 +11,8 @@ Guidelines:
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Any, Dict, List, Callable
 
 import pandas as pd
@@ -185,22 +186,87 @@ def render_add_player_form(on_success: Callable | None = None) -> None:
 # Page
 # ---------------------------------------------------------------------------
 
+def _serialize_attributes(attrs: Dict[str, Any]) -> Dict[str, Any]:
+    """Ensure report attributes only contain JSON-serializable primitives."""
+
+    if not isinstance(attrs, dict):
+        return {}
+
+    def _fallback(value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, Decimal):
+            return float(value)
+        if isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, (date, datetime)):
+            return value.isoformat()
+        return str(value)
+
+    clean: Dict[str, Any] = {}
+    for key, value in attrs.items():
+        if isinstance(value, str):
+            value = value.strip()
+        clean[key] = _fallback(value)
+    return clean
+
+
+def _load_players_by_ids(ids: List[str]) -> Dict[str, Dict[str, Any]]:
+    unique_ids = sorted({pid for pid in ids if pid})
+    if not unique_ids:
+        return {}
+
+    sb = get_client()
+    players: Dict[str, Dict[str, Any]] = {}
+    chunk_size = 50
+    for start in range(0, len(unique_ids), chunk_size):
+        chunk = unique_ids[start : start + chunk_size]
+        res = (
+            sb.table("players")
+            .select("id,name,current_club")
+            .in_("id", chunk)
+            .execute()
+        )
+        for row in res.data or []:
+            pid = row.get("id")
+            if pid:
+                players[pid] = {
+                    "name": row.get("name"),
+                    "current_club": row.get("current_club"),
+                }
+    return players
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def list_latest_reports(limit: int = 50):
     sb = get_client()
     with track("reports:fetch"):
-        return (
+        response = (
             sb.table("reports")
             .select(
-                "id,report_date,competition,opponent,position_played,rating,"
-                "player:player_id(name,current_club),attributes"
+                "id,player_id,player_name,report_date,competition,opponent,"
+                "position_played,rating,attributes"
             )
             .order("report_date", desc=True)
             .limit(limit)
             .execute()
-            .data
-            or []
         )
+
+    rows = response.data or []
+    player_map = _load_players_by_ids([row.get("player_id") for row in rows])
+
+    for row in rows:
+        pid = row.get("player_id")
+        if pid and pid in player_map:
+            row["player"] = player_map[pid]
+        else:
+            row["player"] = {
+                "name": row.get("player_name"),
+                "current_club": None,
+            }
+        row["attributes"] = _serialize_attributes(row.get("attributes") or {})
+
+    return rows
 
 
 def show_reports_page() -> None:
@@ -255,7 +321,8 @@ def show_reports_page() -> None:
             sb = get_client()
             pos_val = attrs.get("position")
             if isinstance(pos_val, str):
-                attrs["position"] = pos_val.strip()
+                pos_clean = pos_val.strip()
+                attrs["position"] = pos_clean or None
 
             payload = {
                 "player_id": selected_player_id,
@@ -263,7 +330,7 @@ def show_reports_page() -> None:
                 "competition": (competition or "").strip() or None,
                 "opponent": (opponent or "").strip() or None,
                 "location": (location or "").strip() or None,
-                "attributes": attrs,
+                "attributes": _serialize_attributes(attrs),
             }
             if prefill_match_id:
                 payload["match_id"] = prefill_match_id
