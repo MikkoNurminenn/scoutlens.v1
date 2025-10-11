@@ -1,175 +1,110 @@
-from datetime import datetime, timedelta
-from types import SimpleNamespace
+from __future__ import annotations
 
-import pytest
+import json
+from pathlib import Path
+from typing import Dict
 
+import calendar_browser_store as browser_store
+import calendar_local_store as local_store
 from app import calendar_ui
 
 
-def test_maps_search_url_combines_parts():
-    url = calendar_ui._maps_search_url("Estadio Uno", "La Plata")
-    assert url is not None
-    assert url.startswith("https://www.google.com/maps/search/?api=1&query=")
-    assert "Estadio+Uno%2C+La+Plata" in url
-
-
-def test_maps_search_url_handles_empty_values():
-    assert calendar_ui._maps_search_url(" ", None) is None
-    assert calendar_ui._maps_search_url() is None
-
-
-def test_kickoff_sort_key_handles_missing_kickoff():
-    rows = [
-        {"id": "missing", "kickoff_at": None},
-        {"id": "scheduled", "kickoff_at": "2024-07-05T18:00:00-05:00"},
-    ]
-
-    rows.sort(key=calendar_ui._kickoff_sort_key)
-
-    assert [row["id"] for row in rows] == ["scheduled", "missing"]
-    for row in rows:
-        key = calendar_ui._kickoff_sort_key(row)
-        assert key.tzinfo is not None
-
-
-class _DummyTable:
-    def __init__(self):
-        self.payload = None
-        self.filters = []
-
-    def update(self, payload):
-        self.payload = payload
-        return self
-
-    def eq(self, column, value):
-        self.filters.append((column, value))
-        return self
-
-    def execute(self):  # pragma: no cover - side effect free stub
-        return self
-
-
-class _DummyClient:
-    def __init__(self):
-        self.table_obj = _DummyTable()
-
-    def table(self, name):
-        assert name == "matches"
-        return self.table_obj
-
-
-@pytest.fixture
-def dummy_st():
-    return SimpleNamespace(warning=lambda *args, **kwargs: None, toast=lambda *args, **kwargs: None)
-
-
-class _QueryRecorder:
-    def __init__(self):
-        self.filters = []
-        self.ordered = None
-        self.limited = None
-
-    def select(self, *_args, **_kwargs):
-        return self
-
-    def gte(self, column, value):
-        self.filters.append(("gte", column, value))
-        return self
-
-    def lte(self, column, value):
-        self.filters.append(("lte", column, value))
-        return self
-
-    def order(self, column, desc=False):
-        self.ordered = (column, desc)
-        return self
-
-    def limit(self, value):
-        self.limited = value
-        return self
-
-    def execute(self):
-        return SimpleNamespace(data=[])
-
-
-def test_load_matches_includes_recent_past(monkeypatch):
-    recorder = _QueryRecorder()
-
-    class _Client:
-        def table(self, name):
-            assert name == "matches"
-            return recorder
-
-    fixed_now = datetime(2024, 1, 15, 12, 0, tzinfo=calendar_ui.UTC)
-
-    class _FixedDateTime:
-        @classmethod
-        def now(cls, tz=None):
-            assert tz is calendar_ui.UTC
-            return fixed_now
-
-    monkeypatch.setattr(calendar_ui, "get_client", lambda: _Client())
-    monkeypatch.setattr(calendar_ui, "datetime", _FixedDateTime)
-
-    rows = calendar_ui._load_matches()
-
-    assert rows == []
-
-    gte_filters = [f for f in recorder.filters if f[0] == "gte"]
-    assert gte_filters, "Expected gte filter to be applied"
-    gte_value = gte_filters[0][2]
-    assert gte_filters[0][1] == "kickoff_at"
-
-    expected_since = calendar_ui.utc_iso(
-        fixed_now - timedelta(days=calendar_ui.FETCH_PAST_DAYS)
-    )
-    assert gte_value == expected_since
-
-    lte_filters = [f for f in recorder.filters if f[0] == "lte"]
-    assert lte_filters, "Expected lte filter to be applied"
-    assert lte_filters[0][1] == "kickoff_at"
-
-    expected_until = calendar_ui.utc_iso(
-        fixed_now + timedelta(days=calendar_ui.FETCH_WINDOW_DAYS)
-    )
-    assert lte_filters[0][2] == expected_until
-
-
-def test_handle_drop_preserves_match_timezone(monkeypatch, dummy_st):
-    client = _DummyClient()
-    monkeypatch.setattr(calendar_ui, "get_client", lambda: client)
-    monkeypatch.setattr(calendar_ui, "st", dummy_st)
-
-    payload = {
-        "event": {
-            "id": "match-1",
-            "start": "2024-07-05T18:00:00-05:00",
-            "end": "2024-07-05T20:00:00-05:00",
-        }
+def test_event_header_includes_time_and_location():
+    event = {
+        "title": "Friendly",
+        "start_utc": "2024-07-01T15:00:00+00:00",
+        "end_utc": "2024-07-01T17:00:00+00:00",
+        "location": "Barranquilla",
+        "timezone": "America/Bogota",
     }
-
-    calendar_ui._handle_drop(payload, is_authenticated=True)
-
-    assert client.table_obj.filters == [("id", "match-1")]
-    assert client.table_obj.payload["kickoff_at"] == "2024-07-05T18:00:00-05:00"
-    assert client.table_obj.payload["ends_at_utc"] == "2024-07-06T01:00:00+00:00"
+    header = calendar_ui._event_header(event, "America/Bogota")
+    assert "Friendly" in header
+    assert "Barranquilla" in header
+    assert "2024-07-01" in header
 
 
-def test_handle_resize_updates_local_kickoff(monkeypatch, dummy_st):
-    client = _DummyClient()
-    monkeypatch.setattr(calendar_ui, "get_client", lambda: client)
-    monkeypatch.setattr(calendar_ui, "st", dummy_st)
+def test_local_store_roundtrip(monkeypatch, tmp_path):
+    monkeypatch.setattr(local_store, "_app_dir", lambda: str(tmp_path))
+    start = "2024-07-05T18:00:00+00:00"
+    end = "2024-07-05T19:30:00+00:00"
 
-    payload = {
-        "event": {
-            "id": "match-9",
-            "start": "2024-07-07T21:15:00-03:00",
-            "end": "2024-07-07T23:05:00-03:00",
-        }
-    }
+    created = local_store.create_event({
+        "title": "Match One",
+        "start_utc": start,
+        "end_utc": end,
+        "timezone": "UTC",
+        "location": "Medellín",
+    })
 
-    calendar_ui._handle_resize(payload, is_authenticated=True)
+    fetched = local_store.get_event(created["id"])
+    assert fetched is not None
+    assert fetched["title"] == "Match One"
 
-    assert client.table_obj.filters == [("id", "match-9")]
-    assert client.table_obj.payload["kickoff_at"] == "2024-07-07T21:15:00-03:00"
-    assert client.table_obj.payload["ends_at_utc"] == "2024-07-08T02:05:00+00:00"
+    updated = local_store.update_event(created["id"], {"title": "Match Uno"})
+    assert updated is not None
+    assert updated["title"] == "Match Uno"
+
+    events = local_store.list_events()
+    assert len(events) == 1
+    assert events[0]["id"] == created["id"]
+
+    assert local_store.delete_event(created["id"])
+    assert local_store.list_events() == []
+
+
+def test_local_store_export_files(monkeypatch, tmp_path):
+    monkeypatch.setattr(local_store, "_app_dir", lambda: str(tmp_path))
+    local_store.create_event({
+        "title": "Export Me",
+        "start_utc": "2024-08-01T12:00:00+00:00",
+        "end_utc": "2024-08-01T13:00:00+00:00",
+        "timezone": "UTC",
+    })
+
+    csv_path = Path(local_store.export_csv())
+    json_path = Path(local_store.export_json())
+
+    assert csv_path.exists()
+    assert json_path.exists()
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    assert isinstance(data, list)
+    assert data and data[0]["title"] == "Export Me"
+
+
+def test_browser_store_uses_js_eval(monkeypatch):
+    storage: Dict[str, str] = {}
+
+    def fake_js_eval(*, js_expressions: str, want_output: bool = False, key: str | None = None):
+        if "getItem" in js_expressions:
+            return storage.get(browser_store.KEY, "[]")
+        if "setItem" in js_expressions:
+            start = js_expressions.index("`") + 1
+            end = js_expressions.rindex("`")
+            storage[browser_store.KEY] = js_expressions[start:end]
+            return None
+        if "removeItem" in js_expressions:
+            storage.pop(browser_store.KEY, None)
+            return None
+        raise AssertionError(f"Unexpected JS expression: {js_expressions}")
+
+    monkeypatch.setattr(browser_store, "streamlit_js_eval", fake_js_eval)
+
+    event = browser_store.create_event({
+        "title": "Browser Match",
+        "start_utc": "2024-09-10T18:00:00+00:00",
+        "end_utc": "2024-09-10T20:00:00+00:00",
+        "timezone": "UTC",
+    })
+
+    listed = browser_store.list_events()
+    assert listed and listed[0]["id"] == event["id"]
+
+    browser_store.update_event(event["id"], {"location": "Cali"})
+    refreshed = browser_store.get_event(event["id"])
+    assert refreshed["location"] == "Cali"
+
+    assert browser_store.delete_event(event["id"])
+    assert browser_store.list_events() == []
+
+    browser_store.clear_all()
+    assert storage.get(browser_store.KEY) in (None, "[]")
