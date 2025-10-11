@@ -179,28 +179,28 @@ def show_calendar() -> None:
 
     st.subheader("Create / Edit Event")
     now_local = datetime.now(_resolve_tz(local_tz))
-    form = st.form("calendar_event_form")
-    title = form.text_input("Title", "Match: Junior vs. Millonarios")
-    col1, col2 = form.columns(2)
-    default_start = now_local.replace(microsecond=0)
-    start_local_input = _datetime_input(
-        col1,
-        "Start (local)",
-        value=default_start,
-        timezone=local_tz,
-    )
-    end_local_input = _datetime_input(
-        col2,
-        "End (local)",
-        value=default_start,
-        timezone=local_tz,
-    )
-    location = form.text_input("Location (city/stadium)")
-    home_team = form.text_input("Home team")
-    away_team = form.text_input("Away team")
-    competition = form.text_input("Competition")
-    notes = form.text_area("Notes")
-    submitted = form.form_submit_button("Save event", type="primary")
+    with st.form("calendar_event_form"):
+        title = st.text_input("Title", "Match: Junior vs. Millonarios")
+        col1, col2 = st.columns(2)
+        default_start = now_local.replace(microsecond=0)
+        start_local_input = _datetime_input(
+            col1,
+            "Start (local)",
+            value=default_start,
+            timezone=local_tz,
+        )
+        end_local_input = _datetime_input(
+            col2,
+            "End (local)",
+            value=default_start,
+            timezone=local_tz,
+        )
+        location = st.text_input("Location (city/stadium)")
+        home_team = st.text_input("Home team")
+        away_team = st.text_input("Away team")
+        competition = st.text_input("Competition")
+        notes = st.text_area("Notes")
+        submitted = st.form_submit_button("Save event", type="primary")
 
     if submitted:
         if not start_local_input or not end_local_input:
