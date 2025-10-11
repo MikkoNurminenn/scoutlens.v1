@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -60,6 +61,78 @@ class _DummyClient:
 @pytest.fixture
 def dummy_st():
     return SimpleNamespace(warning=lambda *args, **kwargs: None, toast=lambda *args, **kwargs: None)
+
+
+class _QueryRecorder:
+    def __init__(self):
+        self.filters = []
+        self.ordered = None
+        self.limited = None
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def gte(self, column, value):
+        self.filters.append(("gte", column, value))
+        return self
+
+    def lte(self, column, value):
+        self.filters.append(("lte", column, value))
+        return self
+
+    def order(self, column, desc=False):
+        self.ordered = (column, desc)
+        return self
+
+    def limit(self, value):
+        self.limited = value
+        return self
+
+    def execute(self):
+        return SimpleNamespace(data=[])
+
+
+def test_load_matches_includes_recent_past(monkeypatch):
+    recorder = _QueryRecorder()
+
+    class _Client:
+        def table(self, name):
+            assert name == "matches"
+            return recorder
+
+    fixed_now = datetime(2024, 1, 15, 12, 0, tzinfo=calendar_ui.UTC)
+
+    class _FixedDateTime:
+        @classmethod
+        def now(cls, tz=None):
+            assert tz is calendar_ui.UTC
+            return fixed_now
+
+    monkeypatch.setattr(calendar_ui, "get_client", lambda: _Client())
+    monkeypatch.setattr(calendar_ui, "datetime", _FixedDateTime)
+
+    rows = calendar_ui._load_matches()
+
+    assert rows == []
+
+    gte_filters = [f for f in recorder.filters if f[0] == "gte"]
+    assert gte_filters, "Expected gte filter to be applied"
+    gte_value = gte_filters[0][2]
+    assert gte_filters[0][1] == "kickoff_at"
+
+    expected_since = calendar_ui.utc_iso(
+        fixed_now - timedelta(days=calendar_ui.FETCH_PAST_DAYS)
+    )
+    assert gte_value == expected_since
+
+    lte_filters = [f for f in recorder.filters if f[0] == "lte"]
+    assert lte_filters, "Expected lte filter to be applied"
+    assert lte_filters[0][1] == "kickoff_at"
+
+    expected_until = calendar_ui.utc_iso(
+        fixed_now + timedelta(days=calendar_ui.FETCH_WINDOW_DAYS)
+    )
+    assert lte_filters[0][2] == expected_until
 
 
 def test_handle_drop_preserves_match_timezone(monkeypatch, dummy_st):

@@ -26,6 +26,7 @@ UTC = ZoneInfo("UTC")
 FAR_FUTURE = datetime.max.replace(tzinfo=UTC)
 DEFAULT_DURATION_MINUTES = 105
 FETCH_WINDOW_DAYS = 60
+FETCH_PAST_DAYS = 30
 SIDEBAR_STATE_KEY = "_sidebar_owner_active"
 DEBUG_LOG_KEY = "calendar__debug_log"
 DEBUG_ENABLED_KEY = "calendar__debug_enabled"
@@ -188,6 +189,7 @@ def _kickoff_sort_key(row: Dict[str, Any]) -> datetime:
 def _load_matches() -> List[Dict[str, Any]]:
     sb = get_client()
     now_utc = datetime.now(tz=UTC)
+    since_utc = now_utc - timedelta(days=FETCH_PAST_DAYS)
     until_utc = now_utc + timedelta(days=FETCH_WINDOW_DAYS)
 
     try:
@@ -196,7 +198,7 @@ def _load_matches() -> List[Dict[str, Any]]:
             .select(
                 "id,home_team,away_team,competition,venue,country,tz_name,kickoff_at,ends_at_utc,notes,location"
             )
-            .gte("kickoff_at", utc_iso(now_utc))
+            .gte("kickoff_at", utc_iso(since_utc))
             .lte("kickoff_at", utc_iso(until_utc))
             .order("kickoff_at", desc=True)
             .limit(1000)
@@ -793,7 +795,9 @@ def show_calendar() -> None:
                 st.markdown(f"- **{title}** — {details}{suffix}")
 
     if not events:
-        st.info("No matches scheduled in the next 60 days. Add one to get started!")
+        st.info(
+            "No matches scheduled in the past 30 days or the next 60 days. Add one to get started!"
+        )
 
 
 
