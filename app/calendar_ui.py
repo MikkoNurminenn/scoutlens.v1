@@ -343,8 +343,7 @@ def _render_new_match_form(selection: Optional[Dict[str, Any]] = None) -> None:
 
             kickoff_local = datetime.combine(kickoff_date, kickoff_time)
             kickoff_local = kickoff_local.replace(tzinfo=tzinfo)
-            kickoff_utc = kickoff_local.astimezone(UTC)
-            end_utc = kickoff_utc + timedelta(minutes=duration_minutes)
+            end_local = kickoff_local + timedelta(minutes=duration_minutes)
 
             disabled = False
             if not (home.strip() and away.strip()):
@@ -359,8 +358,8 @@ def _render_new_match_form(selection: Optional[Dict[str, Any]] = None) -> None:
                     "venue": _clean_str(venue),
                     "country": _clean_str(country),
                     "tz_name": _clean_str(tz_name),
-                    "kickoff_at": utc_iso(kickoff_utc),
-                    "ends_at_utc": utc_iso(end_utc),
+                    "kickoff_at": kickoff_local.isoformat(),
+                    "ends_at_utc": utc_iso(end_local.astimezone(UTC)),
                     "notes": _clean_str(notes),
                     "location": _clean_str(venue),
                 }
@@ -477,13 +476,21 @@ def _handle_drop(event_payload: Dict[str, Any], is_authenticated: bool) -> None:
     if end_dt and end_dt.tzinfo is None:
         end_dt = end_dt.replace(tzinfo=start_dt.tzinfo or UTC)
 
-    start_utc = start_dt.astimezone(UTC)
-    if end_dt:
-        end_utc = end_dt.astimezone(UTC)
-    else:
-        end_utc = start_utc + timedelta(minutes=DEFAULT_DURATION_MINUTES)
+    kickoff_local = start_dt
+    if kickoff_local.tzinfo is None:
+        kickoff_local = kickoff_local.replace(tzinfo=UTC)
 
-    payload = {"kickoff_at": utc_iso(start_utc), "ends_at_utc": utc_iso(end_utc)}
+    if end_dt is None:
+        end_local = kickoff_local + timedelta(minutes=DEFAULT_DURATION_MINUTES)
+    else:
+        end_local = end_dt
+        if end_local.tzinfo is None:
+            end_local = end_local.replace(tzinfo=kickoff_local.tzinfo or UTC)
+
+    payload = {
+        "kickoff_at": kickoff_local.isoformat(),
+        "ends_at_utc": utc_iso(end_local.astimezone(UTC)),
+    }
     try:
         get_client().table("matches").update(payload).eq("id", match_id).execute()
         st.toast("Kick-off updated")
@@ -515,7 +522,7 @@ def _handle_resize(event_payload: Dict[str, Any], is_authenticated: bool) -> Non
         end_dt = end_dt.replace(tzinfo=start_dt.tzinfo or UTC)
 
     payload = {
-        "kickoff_at": utc_iso(start_dt.astimezone(UTC)),
+        "kickoff_at": start_dt.isoformat(),
         "ends_at_utc": utc_iso(end_dt.astimezone(UTC)),
     }
     try:
