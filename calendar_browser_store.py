@@ -41,6 +41,30 @@ def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_MIN_AWARE = datetime(1, 1, 1, tzinfo=timezone.utc)
+
+
+def _parse_dt(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt
+
+
 def _ls_get() -> List[Dict[str, Any]]:
     data = streamlit_js_eval(
         js_expressions=f"window.localStorage.getItem('{KEY}')",
@@ -67,17 +91,35 @@ def _ls_set(rows: List[Dict[str, Any]]) -> None:
 def list_events() -> List[Dict[str, Any]]:
     _require_js_eval()
     rows = _ls_get()
-    return sorted(rows, key=lambda r: r.get("start_utc", ""), reverse=True)
+    return sorted(
+        rows,
+        key=lambda r: _parse_dt(r.get("start_utc")) or _MIN_AWARE,
+        reverse=True,
+    )
 
 
 def list_events_between(start_utc_iso: str, end_utc_iso: str) -> List[Dict[str, Any]]:
     _require_js_eval()
     rows = _ls_get()
-    return [
-        r
-        for r in rows
-        if (r.get("start_utc", "") < end_utc_iso) and (r.get("end_utc", "") >= start_utc_iso)
-    ]
+    start_dt = _parse_dt(start_utc_iso)
+    end_dt = _parse_dt(end_utc_iso)
+    if not start_dt or not end_dt:
+        return []
+
+    filtered: List[Dict[str, Any]] = []
+    for row in rows:
+        row_start = _parse_dt(row.get("start_utc"))
+        row_end = _parse_dt(row.get("end_utc"))
+        if not row_start or not row_end:
+            continue
+        if row_start < end_dt and row_end >= start_dt:
+            filtered.append(row)
+
+    return sorted(
+        filtered,
+        key=lambda r: _parse_dt(r.get("start_utc")) or _MIN_AWARE,
+        reverse=True,
+    )
 
 
 def get_event(event_id: str) -> Optional[Dict[str, Any]]:
