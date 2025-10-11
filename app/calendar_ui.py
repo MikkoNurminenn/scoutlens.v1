@@ -7,6 +7,11 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import streamlit as st
 
+try:  # pragma: no cover - Streamlit API differences across versions
+    from streamlit.errors import StreamlitAPIException
+except Exception:  # pragma: no cover - older Streamlit versions
+    StreamlitAPIException = Exception  # type: ignore[misc,assignment]
+
 try:  # pragma: no cover - optional dependency for local browser storage
     from streamlit_js_eval import streamlit_js_eval
 except ModuleNotFoundError:  # pragma: no cover
@@ -65,23 +70,32 @@ def _datetime_input(
 ):
     """Wrapper around Streamlit datetime_input with timezone compatibility."""
 
+    global _DATETIME_INPUT_SUPPORTS_TZ
+
     kwargs: Dict[str, Any] = {}
 
     if key is not None:
         kwargs["key"] = key
 
     if _DATETIME_INPUT_SUPPORTS_TZ:
-        kwargs["timezone"] = timezone
-        kwargs["value"] = value
+        try:
+            return container.datetime_input(
+                label,
+                value=value,
+                timezone=timezone,
+                **kwargs,
+            )
+        except (TypeError, StreamlitAPIException):
+            _DATETIME_INPUT_SUPPORTS_TZ = False
+
+    if value is not None:
+        tz = _resolve_tz(timezone)
+        dt = value
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(tz)
+        kwargs["value"] = dt.replace(tzinfo=None) if dt.tzinfo else dt
     else:
-        if value is not None:
-            tz = _resolve_tz(timezone)
-            dt = value
-            if dt.tzinfo is not None:
-                dt = dt.astimezone(tz)
-            kwargs["value"] = dt.replace(tzinfo=None) if dt.tzinfo else dt
-        else:
-            kwargs["value"] = value
+        kwargs["value"] = value
 
     return container.datetime_input(label, **kwargs)
 
