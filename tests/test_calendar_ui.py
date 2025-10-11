@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 from typing import Dict
@@ -114,6 +115,40 @@ def test_browser_store_uses_js_eval(monkeypatch):
 
     browser_store.clear_all()
     assert storage.get(browser_store.KEY) in (None, "[]")
+
+
+def test_browser_export_handles_template_literals(monkeypatch):
+    captured: Dict[str, object] = {}
+
+    def fake_js_eval(*, js_expressions, want_output: bool = False, key: str | None = None):
+        captured["js_expressions"] = js_expressions
+        captured["key"] = key
+        return None
+
+    monkeypatch.setattr(calendar_ui, "streamlit_js_eval", fake_js_eval)
+
+    rows = [
+        {
+            "title": "Match ${danger}",
+            "notes": "Scout focus on ${player}",
+        }
+    ]
+
+    calendar_ui._browser_export_events(rows, key="test_export")
+
+    assert captured["key"] == "test_export"
+
+    js_expressions = captured["js_expressions"]
+    assert isinstance(js_expressions, tuple)
+    assert any("Uint8Array.from" in part for part in js_expressions)
+
+    decode_line = next(part for part in js_expressions if "atob(" in part)
+    start = decode_line.index("atob('") + len("atob('")
+    end = decode_line.index("')", start)
+    payload_base64 = decode_line[start:end]
+
+    decoded = base64.b64decode(payload_base64).decode("utf-8")
+    assert json.loads(decoded) == rows
 
 
 def test_calendar_store_timezone_ordering(monkeypatch, tmp_path):
