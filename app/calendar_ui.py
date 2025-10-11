@@ -132,9 +132,13 @@ def show_calendar() -> None:
     form = st.form("calendar_event_form")
     title = form.text_input("Title", "Match: Junior vs. Millonarios")
     col1, col2 = form.columns(2)
-    default_start = now_local.replace(tzinfo=None)
-    start_local_input = col1.datetime_input("Start (local)", value=default_start)
-    end_local_input = col2.datetime_input("End (local)", value=default_start)
+    default_start = now_local.replace(microsecond=0)
+    start_local_input = col1.datetime_input(
+        "Start (local)", value=default_start, timezone=local_tz
+    )
+    end_local_input = col2.datetime_input(
+        "End (local)", value=default_start, timezone=local_tz
+    )
     location = form.text_input("Location (city/stadium)")
     home_team = form.text_input("Home team")
     away_team = form.text_input("Away team")
