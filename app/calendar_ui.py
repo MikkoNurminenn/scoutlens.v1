@@ -1,17 +1,23 @@
 # app/calendar_ui.py
 from __future__ import annotations
 
+import importlib
 import json
 import uuid
 import calendar as pycal
 from dataclasses import dataclass, field
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
 
 import pandas as pd
 import streamlit as st
 from zoneinfo import ZoneInfo
+
+_calendar_spec = importlib.util.find_spec("streamlit_calendar")
+calendar_component = None
+if _calendar_spec is not None:
+    calendar_component = importlib.import_module("streamlit_calendar").calendar
 
 from app.app_paths import file_path, DATA_DIR
 
@@ -271,8 +277,51 @@ def _pick_month(matches: List[Dict[str, Any]]):
     return sel_year, sel_month, sel_tz
 
 # -------------- Calendar grid --------------
-def _grid(matches: List[Dict[str, Any]], year: int, month: int, tz: str):
-    st.subheader(f"📅 {year}-{month:02d}")
+def _match_to_event(
+    match: Dict[str, Any], tz: str
+) -> Optional[tuple[Dict[str, Any], datetime]]:
+    dt_src = _parse_dt(match.get("date"), match.get("time"), match.get("tz"))
+    if not isinstance(dt_src, datetime):
+        return None
+
+    base_dt = dt_src
+    if base_dt.tzinfo is None:
+        for tz_name in (match.get("tz"), tz, LOCAL_TZ):
+            if not tz_name:
+                continue
+            try:
+                base_dt = base_dt.replace(tzinfo=ZoneInfo(str(tz_name)))
+                break
+            except Exception:
+                continue
+
+    view_dt = base_dt
+    if tz:
+        try:
+            view_dt = base_dt.astimezone(ZoneInfo(tz))
+        except Exception:
+            pass
+
+    event = {
+        "id": str(match.get("id")),
+        "title": f"{match.get('home', '—')} vs {match.get('away', '—')}",
+        "start": view_dt.isoformat(),
+        "end": (view_dt + timedelta(hours=2)).isoformat(),
+        "allDay": False,
+        "extendedProps": {
+            "id": str(match.get("id")),
+            "competition": match.get("competition"),
+            "location": match.get("location"),
+            "city": match.get("city"),
+            "notes": match.get("notes"),
+            "targets": match.get("targets", []),
+            "sourceTz": match.get("tz"),
+        },
+    }
+    return event, view_dt
+
+
+def _grid_markdown(matches: List[Dict[str, Any]], year: int, month: int, tz: str):
     cal = pycal.Calendar(firstweekday=0)  # Monday
     weeks = cal.monthdayscalendar(year, month)
 
@@ -303,7 +352,9 @@ def _grid(matches: List[Dict[str, Any]], year: int, month: int, tz: str):
                 for m in items[:3]:
                     dt_src = _parse_dt(m.get("date"), m.get("time"), m.get("tz"))
                     dt_disp = _disp(dt_src, tz)
-                    lines.append(f"- {m.get('home','—')} vs {m.get('away','—')}  \n  <small>{dt_disp}</small>")
+                    lines.append(
+                        f"- {m.get('home','—')} vs {m.get('away','—')}  \n  <small>{dt_disp}</small>"
+                    )
                     loc_label = ", ".join(
                         [x for x in (m.get("location"), m.get("city")) if x]
                     )
@@ -318,6 +369,80 @@ def _grid(matches: List[Dict[str, Any]], year: int, month: int, tz: str):
                     lines.append(f"- … +{len(items)-3} more")
                 cells.append("  \n".join(lines))
         st.write("| " + " | ".join(cells) + " |")
+
+
+def _grid(matches: List[Dict[str, Any]], year: int, month: int, tz: str):
+    st.subheader(f"📅 {year}-{month:02d}")
+    if tz:
+        st.caption(f"Display timezone: {tz}")
+
+    if calendar_component is None:
+        st.info("Interactive calendar unavailable (streamlit-calendar not installed). Showing basic view.")
+        _grid_markdown(matches, year, month, tz)
+        return
+
+    events: List[Dict[str, Any]] = []
+    lookup: Dict[str, Dict[str, Any]] = {}
+    for match in matches:
+        result = _match_to_event(match, tz)
+        if not result:
+            continue
+        event, view_dt = result
+        if view_dt.year == year and view_dt.month == month:
+            events.append(event)
+            lookup[event["id"]] = match
+
+    events.sort(key=lambda e: e.get("start", ""))
+
+    if not events:
+        st.caption("No matches scheduled for this month.")
+        return
+
+    options: Dict[str, Any] = {
+        "initialDate": f"{year}-{month:02d}-01",
+        "initialView": "dayGridMonth",
+        "height": "auto",
+        "eventTimeFormat": {"hour": "2-digit", "minute": "2-digit"},
+        "headerToolbar": {
+            "left": "prev,next today",
+            "center": "title",
+            "right": "dayGridMonth,timeGridWeek,timeGridDay",
+        },
+    }
+    if tz:
+        options["timeZone"] = tz
+
+    component_key = f"calendar__{year}_{month}_{tz}"
+    calendar_state = calendar_component(
+        events=events,
+        options=options,
+        custom_css=".fc-event-title{font-weight:600;} .fc-event-time{font-variant-numeric:tabular-nums;}",
+        key=component_key,
+    )
+
+    selected_match: Optional[Dict[str, Any]] = None
+    if isinstance(calendar_state, dict):
+        event_click = calendar_state.get("eventClick")
+        if isinstance(event_click, dict):
+            event_payload = event_click.get("event")
+            candidate_id = None
+            if isinstance(event_payload, dict):
+                candidate_id = event_payload.get("id")
+                if not candidate_id:
+                    candidate_id = (
+                        event_payload.get("extendedProps", {}).get("id")
+                        if isinstance(event_payload.get("extendedProps"), dict)
+                        else None
+                    )
+                if not candidate_id and isinstance(event_payload.get("_def"), dict):
+                    candidate_id = event_payload["_def"].get("publicId")
+            if candidate_id and candidate_id in lookup:
+                selected_match = lookup[candidate_id]
+
+    if selected_match:
+        st.markdown("#### Selected match")
+        with st.container(border=True):
+            _card(selected_match, tz)
 
 # -------------- Small card --------------
 def _card(m: Dict[str, Any], tz: str):
