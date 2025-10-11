@@ -1,5 +1,5 @@
 -- 002_reports_view.sql
--- Normalize reports via a stable VIEW using report_date only.
+-- Legacy view support for scout_reports table.
 
 -- (A) Minimal base table (safe if exists already)
 create extension if not exists pgcrypto;
@@ -20,8 +20,8 @@ create table if not exists public.scout_reports (
   updated_at timestamptz not null default now()
 );
 
--- (C) View with unified columns for the app
-create or replace view public.reports as
+-- (C) View with unified columns for the legacy app pieces
+create or replace view public.scout_reports_v as
 select
   r.id,
   coalesce(r.title, r.report_title) as title,
@@ -40,7 +40,7 @@ from public.scout_reports r;
 
 -- (D) Grants for anon access (RLS not enforced here)
 grant usage on schema public to anon;
-grant select on public.reports to anon;
+grant select on public.scout_reports_v to anon;
 
 -- (E) Reload PostgREST schema cache
 notify pgrst, 'reload schema';
