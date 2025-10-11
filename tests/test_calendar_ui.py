@@ -80,7 +80,12 @@ def test_browser_store_uses_js_eval(monkeypatch):
         if "setItem" in js_expressions:
             start = js_expressions.index("`") + 1
             end = js_expressions.rindex("`")
-            storage[browser_store.KEY] = js_expressions[start:end]
+            payload = js_expressions[start:end]
+            # Simulate the template literal throwing if a backtick is left unescaped.
+            for idx, ch in enumerate(payload):
+                if ch == "`" and (idx == 0 or payload[idx - 1] != "\\"):
+                    raise SyntaxError("Unescaped backtick in template literal")
+            storage[browser_store.KEY] = payload.replace("\\`", "`")
             return None
         if "removeItem" in js_expressions:
             storage.pop(browser_store.KEY, None)
@@ -90,10 +95,11 @@ def test_browser_store_uses_js_eval(monkeypatch):
     monkeypatch.setattr(browser_store, "streamlit_js_eval", fake_js_eval)
 
     event = browser_store.create_event({
-        "title": "Browser Match",
+        "title": "Browser `Match`",
         "start_utc": "2024-09-10T18:00:00+00:00",
         "end_utc": "2024-09-10T20:00:00+00:00",
         "timezone": "UTC",
+        "notes": "Backtick note: `check`",
     })
 
     listed = browser_store.list_events()
