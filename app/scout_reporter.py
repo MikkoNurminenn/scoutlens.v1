@@ -166,6 +166,14 @@ def insert_match(m: Dict[str, Any]) -> None:
     if not location and venue:
         location = venue
 
+    notes_raw = m.get("notes")
+    if isinstance(notes_raw, str):
+        notes_value = notes_raw.strip()
+    elif notes_raw is None:
+        notes_value = ""
+    else:
+        notes_value = str(notes_raw)
+
     new_item = {
         "id": uuid.uuid4().hex,
         "home_team": m["home_team"],
@@ -173,7 +181,7 @@ def insert_match(m: Dict[str, Any]) -> None:
         "location": location,
         "competition": _none_if_blank(m.get("competition")),
         "kickoff_at": m["kickoff_at"],
-        "notes": _none_if_blank(m.get("notes")),
+        "notes": notes_value,
     }
     optional_keys = {
         "venue": venue,
