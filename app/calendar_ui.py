@@ -22,6 +22,7 @@ if _calendar_spec is not None:
     calendar_component = importlib.import_module("streamlit_calendar").calendar
 
 UTC = ZoneInfo("UTC")
+FAR_FUTURE = datetime.max.replace(tzinfo=UTC)
 DEFAULT_DURATION_MINUTES = 105
 FETCH_WINDOW_DAYS = 60
 SIDEBAR_STATE_KEY = "_sidebar_owner_active"
@@ -115,6 +116,13 @@ def _warn_api_error(prefix: str, error: APIError) -> None:
     st.error(f"{prefix}: {message}")
 
 
+def _kickoff_sort_key(row: Dict[str, Any]) -> datetime:
+    dt = _parse_iso(row.get("kickoff_at"))
+    if dt is None:
+        return FAR_FUTURE
+    return dt.astimezone(UTC)
+
+
 def _load_matches() -> List[Dict[str, Any]]:
     sb = get_client()
     now_utc = datetime.now(tz=UTC)
@@ -137,7 +145,7 @@ def _load_matches() -> List[Dict[str, Any]]:
         return []
 
     rows = res.data or []
-    rows.sort(key=lambda r: _parse_iso(r.get("kickoff_at")) or datetime.max)
+    rows.sort(key=_kickoff_sort_key)
     return rows
 
 

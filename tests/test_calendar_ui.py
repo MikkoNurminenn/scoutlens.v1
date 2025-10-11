@@ -17,6 +17,20 @@ def test_maps_search_url_handles_empty_values():
     assert calendar_ui._maps_search_url() is None
 
 
+def test_kickoff_sort_key_handles_missing_kickoff():
+    rows = [
+        {"id": "missing", "kickoff_at": None},
+        {"id": "scheduled", "kickoff_at": "2024-07-05T18:00:00-05:00"},
+    ]
+
+    rows.sort(key=calendar_ui._kickoff_sort_key)
+
+    assert [row["id"] for row in rows] == ["scheduled", "missing"]
+    for row in rows:
+        key = calendar_ui._kickoff_sort_key(row)
+        assert key.tzinfo is not None
+
+
 class _DummyTable:
     def __init__(self):
         self.payload = None
