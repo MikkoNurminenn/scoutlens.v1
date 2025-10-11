@@ -97,6 +97,7 @@ def _safe_query(
         st.error(f"Supabase APIError on {table_name}: {getattr(e, 'message', e)}")
         return []
 
+@st.cache_data(ttl=60, show_spinner=False)
 def _load_players() -> List[Dict[str, Any]]:
     """Return normalized players."""
     rows = _safe_query("players_v") or _safe_query(PLAYERS)
@@ -221,13 +222,19 @@ def _load_players_by_ids(ids: List[str]) -> Dict[str, Dict[str, Any]]:
     chunk_size = 50
     for start in range(0, len(unique_ids), chunk_size):
         chunk = unique_ids[start : start + chunk_size]
-        res = (
-            sb.table("players")
-            .select("id,name,current_club")
-            .in_("id", chunk)
-            .execute()
-        )
-        for row in res.data or []:
+        try:
+            res = (
+                sb.table("players")
+                .select("id,name,current_club")
+                .in_("id", chunk)
+                .execute()
+            )
+            rows = res.data or []
+        except APIError as e:
+            st.error(f"Supabase error while loading players: {getattr(e, 'message', e)}")
+            return players
+
+        for row in rows:
             pid = row.get("id")
             if pid:
                 players[pid] = {
@@ -469,14 +476,20 @@ def show_reports_page() -> None:
             out = df_in.copy()
             if "Date" in out.columns:
                 out["Date"] = pd.to_datetime(out["Date"], errors="coerce")
-            if q_opp:
-                out = out[out["Opponent"].str.contains(q_opp, case=False, na=False)]
-            if q_comp:
-                out = out[out["Competition"].str.contains(q_comp, case=False, na=False)]
+            if q_opp and "Opponent" in out.columns:
+                out = out[
+                    out["Opponent"].fillna("").astype(str).str.contains(q_opp, case=False)
+                ]
+            if q_comp and "Competition" in out.columns:
+                out = out[
+                    out["Competition"].fillna("").astype(str).str.contains(q_comp, case=False)
+                ]
             if "MENT" in out.columns and min_ment > 1:
                 out = out[(out["MENT"].fillna(0) >= min_ment)]
-            if foot_filter:
-                out = out[out["Foot"].fillna("").str.capitalize().isin(foot_filter)]
+            if foot_filter and "Foot" in out.columns:
+                out = out[
+                    out["Foot"].fillna("").astype(str).str.capitalize().isin(foot_filter)
+                ]
             if enable_dates and isinstance(date_range, tuple) and len(date_range) == 2:
                 start, end = date_range
                 if start and end:
