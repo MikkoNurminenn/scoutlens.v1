@@ -8,8 +8,31 @@ from typing import Any, Dict, List, Optional
 try:  # pragma: no cover - optional dependency for browser runtime only
     from streamlit_js_eval import streamlit_js_eval
 except ModuleNotFoundError:  # pragma: no cover
+
     def streamlit_js_eval(*_, **__):
         raise RuntimeError("streamlit-js-eval is required for browser calendar storage")
+
+    streamlit_js_eval._is_placeholder = True  # type: ignore[attr-defined]
+
+
+def _js_eval_available() -> bool:
+    return not getattr(streamlit_js_eval, "_is_placeholder", False)
+
+
+def _require_js_eval() -> None:
+    global HAS_JS_EVAL
+    HAS_JS_EVAL = has_js_eval()
+    if not HAS_JS_EVAL:
+        raise RuntimeError("Browser calendar storage requires streamlit-js-eval.")
+
+
+def has_js_eval() -> bool:
+    """Return True if the optional JS evaluation helper is available."""
+
+    return _js_eval_available()
+
+
+HAS_JS_EVAL = has_js_eval()
 
 KEY = "scoutlens_calendar_events_v1"
 
@@ -40,11 +63,13 @@ def _ls_set(rows: List[Dict[str, Any]]) -> None:
 
 
 def list_events() -> List[Dict[str, Any]]:
+    _require_js_eval()
     rows = _ls_get()
     return sorted(rows, key=lambda r: r.get("start_utc", ""), reverse=True)
 
 
 def list_events_between(start_utc_iso: str, end_utc_iso: str) -> List[Dict[str, Any]]:
+    _require_js_eval()
     rows = _ls_get()
     return [
         r
@@ -61,6 +86,7 @@ def get_event(event_id: str) -> Optional[Dict[str, Any]]:
 
 
 def create_event(payload: Dict[str, Any]) -> Dict[str, Any]:
+    _require_js_eval()
     rows = _ls_get()
     now_iso = _now_utc_iso()
     event = {
@@ -85,6 +111,7 @@ def create_event(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def update_event(event_id: str, changes: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    _require_js_eval()
     rows = _ls_get()
     updated_event: Optional[Dict[str, Any]] = None
     for idx, row in enumerate(rows):
@@ -98,6 +125,7 @@ def update_event(event_id: str, changes: Dict[str, Any]) -> Optional[Dict[str, A
 
 
 def delete_event(event_id: str) -> bool:
+    _require_js_eval()
     rows = _ls_get()
     new_rows = [r for r in rows if r.get("id") != event_id]
     if len(new_rows) != len(rows):
@@ -107,6 +135,7 @@ def delete_event(event_id: str) -> bool:
 
 
 def upsert_event(payload: Dict[str, Any]) -> Dict[str, Any]:
+    _require_js_eval()
     event_id = payload.get("id")
     if not event_id:
         return create_event(payload)
@@ -117,6 +146,7 @@ def upsert_event(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def clear_all() -> None:
+    _require_js_eval()
     streamlit_js_eval(
         js_expressions=f"window.localStorage.removeItem('{KEY}')",
         key="ls_clear_" + KEY,
@@ -132,4 +162,6 @@ __all__ = [
     "delete_event",
     "upsert_event",
     "clear_all",
+    "HAS_JS_EVAL",
+    "has_js_eval",
 ]

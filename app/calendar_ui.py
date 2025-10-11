@@ -90,15 +90,37 @@ def show_calendar() -> None:
         "Calendar events are stored locally on your device. All other ScoutLens data stays in Supabase."
     )
 
+    browser_supported = False
+    try:
+        import calendar_browser_store as browser_store
+
+        if hasattr(browser_store, "has_js_eval"):
+            browser_supported = bool(browser_store.has_js_eval())
+        else:
+            browser_supported = bool(getattr(browser_store, "HAS_JS_EVAL", True))
+    except Exception:  # noqa: BLE001 - fallback to local storage if anything fails
+        browser_store = None  # type: ignore[assignment]
+
+    options: List[str] = []
+    if browser_supported:
+        options.append("Browser (mobile/phone)")
+    else:
+        st.info(
+            "Browser storage requires the optional `streamlit-js-eval` package. "
+            "Falling back to local file storage."
+        )
+    options.append("Local file (PC)")
+
+    default_index = 0 if browser_supported else len(options) - 1
     mode = st.radio(
         "Calendar storage",
-        ["Browser (mobile/phone)", "Local file (PC)"],
-        index=0,
+        options,
+        index=default_index,
         horizontal=True,
     )
 
-    if mode == "Browser (mobile/phone)":
-        import calendar_browser_store as cal_module
+    if mode == "Browser (mobile/phone)" and browser_supported and browser_store:
+        cal_module = browser_store
     else:
         import calendar_local_store as cal_module
 
