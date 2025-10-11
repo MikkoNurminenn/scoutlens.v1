@@ -241,18 +241,43 @@ def _load_players_by_ids(ids: List[str]) -> Dict[str, Dict[str, Any]]:
 def list_latest_reports(limit: int = 50):
     sb = get_client()
     with track("reports:fetch"):
-        response = (
-            sb.table("reports")
-            .select(
-                "id,player_id,player_name,report_date,competition,opponent,"
-                "position_played,rating,attributes"
+        try:
+            response = (
+                sb.table("reports")
+                .select(
+                    "id,player_id,player_name,report_date,competition,opponent,"
+                    "position_played,rating,attributes"
+                )
+                .order("report_date", desc=True)
+                .limit(limit)
+                .execute()
             )
-            .order("report_date", desc=True)
-            .limit(limit)
-            .execute()
-        )
-
-    rows = response.data or []
+            rows = response.data or []
+        except APIError as e:
+            message = getattr(e, "message", str(e))
+            if message and "reports.player_name" in message:
+                st.warning(
+                    "Supabase schema is missing reports.player_name — run the latest migrations. "
+                    "Player names will be loaded via fallback in the meantime."
+                )
+                response = (
+                    sb.table("reports")
+                    .select(
+                        "id,player_id,report_date,competition,opponent,"
+                        "position_played,rating,attributes"
+                    )
+                    .order("report_date", desc=True)
+                    .limit(limit)
+                    .execute()
+                )
+                rows = response.data or []
+                for row in rows:
+                    row.setdefault("player_name", None)
+                print(
+                    "Supabase APIError (missing reports.player_name column):", message
+                )
+            else:
+                raise
     player_map = _load_players_by_ids([row.get("player_id") for row in rows])
 
     for row in rows:
