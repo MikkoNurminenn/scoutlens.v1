@@ -56,8 +56,10 @@ def _ls_get() -> List[Dict[str, Any]]:
 
 def _ls_set(rows: List[Dict[str, Any]]) -> None:
     payload = json.dumps(rows, ensure_ascii=False)
+    # Escape backticks so the template literal remains valid even when event fields contain them.
+    safe_payload = payload.replace("`", "\\`")
     streamlit_js_eval(
-        js_expressions=f"window.localStorage.setItem('{KEY}', `{payload}`)",
+        js_expressions=f"window.localStorage.setItem('{KEY}', `{safe_payload}`)",
         key="ls_set_" + KEY,
     )
 
