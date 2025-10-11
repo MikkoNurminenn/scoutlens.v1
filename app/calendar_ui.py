@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 from contextlib import contextmanager
 from datetime import datetime, time, timedelta
 from typing import Any, Dict, Iterator, List, Optional
@@ -26,6 +27,8 @@ FAR_FUTURE = datetime.max.replace(tzinfo=UTC)
 DEFAULT_DURATION_MINUTES = 105
 FETCH_WINDOW_DAYS = 60
 SIDEBAR_STATE_KEY = "_sidebar_owner_active"
+DEBUG_LOG_KEY = "calendar__debug_log"
+DEBUG_ENABLED_KEY = "calendar__debug_enabled"
 
 
 @contextmanager
@@ -45,6 +48,52 @@ def _clean_str(value: str | None) -> str | None:
         return None
     value = value.strip()
     return value or None
+
+
+def _debug_enabled() -> bool:
+    return bool(st.session_state.get(DEBUG_ENABLED_KEY))
+
+
+def _push_debug_event(event: str, *, payload: Optional[Dict[str, Any]] = None) -> None:
+    if not _debug_enabled():
+        return
+
+    entry: Dict[str, Any] = {
+        "timestamp": datetime.now(tz=UTC).isoformat(),
+        "event": event,
+    }
+    if payload is not None:
+        try:
+            normalized = json.loads(json.dumps(payload, default=str))
+        except TypeError:
+            normalized = str(payload)
+        entry["payload"] = normalized
+
+    log: List[Dict[str, Any]] = st.session_state.get(DEBUG_LOG_KEY, []) or []
+    log.append(entry)
+    st.session_state[DEBUG_LOG_KEY] = log[-50:]
+
+
+def _render_debug_helpers() -> None:
+    debug_default = bool(st.session_state.get(DEBUG_ENABLED_KEY))
+    with st.expander("🐞 Debug helpers", expanded=debug_default):
+        debug_enabled = st.checkbox(
+            "Enable calendar debug logging",
+            value=debug_default,
+            key="calendar__debug_toggle",
+        )
+        st.session_state[DEBUG_ENABLED_KEY] = debug_enabled
+
+        log: List[Dict[str, Any]] = st.session_state.get(DEBUG_LOG_KEY, []) or []
+        if debug_enabled:
+            if log:
+                st.caption("Recent calendar events (most recent last):")
+                st.json(log)
+            else:
+                st.caption("Debug logging is enabled. Interact with the calendar to collect events.")
+
+        if st.button("Clear debug log", disabled=not log):
+            st.session_state[DEBUG_LOG_KEY] = []
 
 
 def _parse_iso(value: Any) -> Optional[datetime]:
@@ -122,6 +171,10 @@ def _match_to_event(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def _warn_api_error(prefix: str, error: APIError) -> None:
     message = getattr(error, "message", None) or str(error)
+    _push_debug_event(
+        "api_error",
+        payload={"prefix": prefix, "message": message},
+    )
     st.error(f"{prefix}: {message}")
 
 
@@ -282,6 +335,17 @@ def _render_new_match_form(selection: Optional[Dict[str, Any]] = None) -> None:
 
     selection_token = f"{start_raw}|{end_raw}" if (start_raw or end_raw) else "manual"
 
+    _push_debug_event(
+        "open_new_match_form",
+        payload={
+            "selection": {
+                "start": start_raw,
+                "end": end_raw,
+            },
+            "selection_token": selection_token,
+        },
+    )
+
     with _sidebar_owner():
         with st.sidebar:
             st.subheader("➕ New match")
@@ -380,8 +444,21 @@ def _render_new_match_form(selection: Optional[Dict[str, Any]] = None) -> None:
                     "notes": _clean_str(notes),
                     "location": _clean_str(venue),
                 }
+                _push_debug_event(
+                    "submit_new_match",
+                    payload={
+                        "payload": payload,
+                        "selection_token": selection_token,
+                    },
+                )
                 try:
-                    get_client().table("matches").insert(payload).execute()
+                    response = get_client().table("matches").insert(payload).execute()
+                    _push_debug_event(
+                        "new_match_created",
+                        payload={
+                            "response": getattr(response, "data", None),
+                        },
+                    )
                     st.session_state["calendar__tz"] = tz_name
                     st.session_state.pop("calendar__selection", None)
                     st.session_state.pop("calendar__show_new_form", None)
@@ -625,6 +702,8 @@ def show_calendar() -> None:
             "Install streamlit-calendar for the drag-and-drop calendar. You can still review and add matches below."
         )
 
+    _render_debug_helpers()
+
     matches = _load_matches()
     events: List[Dict[str, Any]] = []
     for row in matches:
@@ -633,6 +712,7 @@ def show_calendar() -> None:
             events.append(event)
 
     if is_authenticated and st.button("➕ Add match", key="calendar__open_form"):
+        _push_debug_event("click_add_match_button")
         st.session_state["calendar__show_new_form"] = True
         st.session_state.pop("calendar__selection", None)
 
@@ -666,9 +746,17 @@ def show_calendar() -> None:
     if isinstance(state, dict):
         selection = _calendar_payload(state, "select")
         if selection and is_authenticated:
+            _push_debug_event(
+                "calendar_selection_authenticated",
+                payload={"selection": selection},
+            )
             st.session_state["calendar__show_new_form"] = True
             st.session_state["calendar__selection"] = selection
         elif selection:
+            _push_debug_event(
+                "calendar_selection_guest",
+                payload={"selection": selection},
+            )
             st.warning("Sign in to add matches from the calendar.")
 
         click = _calendar_payload(state, "eventClick")
