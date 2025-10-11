@@ -62,6 +62,15 @@ def _parse_iso(value: Any) -> Optional[datetime]:
     return dt
 
 
+def _event_datetime(event: Dict[str, Any], field: str) -> Optional[datetime]:
+    if not isinstance(event, dict):
+        return None
+    raw = event.get(field)
+    if raw is None and field in {"start", "end"}:
+        raw = event.get(f"{field}Str")
+    return _parse_iso(raw)
+
+
 def _iso_from_row(value: Any) -> Optional[str]:
     if isinstance(value, str):
         return value
@@ -471,10 +480,8 @@ def _handle_drop(event_payload: Dict[str, Any], is_authenticated: bool) -> None:
     if not match_id:
         return
 
-    start = event.get("start")
-    end = event.get("end")
-    start_dt = parser.isoparse(start) if start else None
-    end_dt = parser.isoparse(end) if end else None
+    start_dt = _event_datetime(event, "start")
+    end_dt = _event_datetime(event, "end")
 
     if not start_dt:
         return
@@ -516,10 +523,8 @@ def _handle_resize(event_payload: Dict[str, Any], is_authenticated: bool) -> Non
     if not match_id:
         return
 
-    start = event.get("start")
-    end = event.get("end")
-    start_dt = parser.isoparse(start) if start else None
-    end_dt = parser.isoparse(end) if end else None
+    start_dt = _event_datetime(event, "start")
+    end_dt = _event_datetime(event, "end")
 
     if not start_dt or not end_dt:
         return
@@ -538,6 +543,73 @@ def _handle_resize(event_payload: Dict[str, Any], is_authenticated: bool) -> Non
         st.toast("Duration updated")
     except APIError as exc:
         _warn_api_error("Failed to update duration", exc)
+
+
+def _handle_event_change(change_payload: Dict[str, Any], is_authenticated: bool) -> None:
+    if not is_authenticated:
+        st.warning("Sign in to modify match times.")
+        return
+
+    event = change_payload.get("event") or {}
+    old_event = change_payload.get("oldEvent") or {}
+    match_id = event.get("id") or old_event.get("id")
+    if not match_id:
+        return
+
+    start_dt = _event_datetime(event, "start") or _event_datetime(event, "startStr")
+    end_dt = _event_datetime(event, "end") or _event_datetime(event, "endStr")
+
+    if start_dt is None:
+        start_dt = _event_datetime(old_event, "start") or _event_datetime(old_event, "startStr")
+    if end_dt is None:
+        end_dt = _event_datetime(old_event, "end") or _event_datetime(old_event, "endStr")
+
+    if start_dt is None:
+        return
+
+    if start_dt.tzinfo is None:
+        start_dt = start_dt.replace(tzinfo=UTC)
+
+    if end_dt is None:
+        end_dt = start_dt + timedelta(minutes=DEFAULT_DURATION_MINUTES)
+    elif end_dt.tzinfo is None:
+        end_dt = end_dt.replace(tzinfo=start_dt.tzinfo or UTC)
+
+    new_start_iso = start_dt.isoformat()
+    compare_start_iso = utc_iso(start_dt.astimezone(UTC))
+    compare_end_iso = utc_iso(end_dt.astimezone(UTC))
+    ends_at_utc_iso = compare_end_iso
+
+    old_start = _event_datetime(old_event, "start") or _event_datetime(old_event, "startStr")
+    old_end = _event_datetime(old_event, "end") or _event_datetime(old_event, "endStr")
+    if (
+        old_start
+        and old_end
+        and utc_iso(old_start.astimezone(UTC)) == compare_start_iso
+        and utc_iso(old_end.astimezone(UTC)) == compare_end_iso
+    ):
+        return
+
+    payload = {
+        "kickoff_at": new_start_iso,
+        "ends_at_utc": ends_at_utc_iso,
+    }
+    try:
+        get_client().table("matches").update(payload).eq("id", match_id).execute()
+        st.toast("Match timing updated")
+    except APIError as exc:
+        _warn_api_error("Failed to update match timing", exc)
+
+
+def _calendar_payload(state: Dict[str, Any], callback: str) -> Optional[Dict[str, Any]]:
+    if not isinstance(state, dict):
+        return None
+    state_callback = state.get("callback")
+    if state_callback:
+        if state_callback != callback:
+            return None
+        return state.get(callback)
+    return state.get(callback)
 
 
 def show_calendar() -> None:
@@ -592,14 +664,14 @@ def show_calendar() -> None:
         state = None
 
     if isinstance(state, dict):
-        selection = state.get("select")
+        selection = _calendar_payload(state, "select")
         if selection and is_authenticated:
             st.session_state["calendar__show_new_form"] = True
             st.session_state["calendar__selection"] = selection
         elif selection:
             st.warning("Sign in to add matches from the calendar.")
 
-        click = state.get("eventClick")
+        click = _calendar_payload(state, "eventClick")
         if click:
             match_id = (click.get("event") or {}).get("id")
             if match_id:
@@ -607,13 +679,17 @@ def show_calendar() -> None:
                 if match:
                     _render_match_editor(match, is_authenticated)
 
-        drop = state.get("eventDrop")
+        drop = _calendar_payload(state, "eventDrop")
         if drop:
             _handle_drop(drop, is_authenticated)
 
-        resize = state.get("eventResize")
+        resize = _calendar_payload(state, "eventResize")
         if resize:
             _handle_resize(resize, is_authenticated)
+
+        change = _calendar_payload(state, "eventChange")
+        if change:
+            _handle_event_change(change, is_authenticated)
 
     if is_authenticated and st.session_state.get("calendar__show_new_form"):
         _render_new_match_form(st.session_state.get("calendar__selection"))
