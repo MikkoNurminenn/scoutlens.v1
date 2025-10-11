@@ -14,7 +14,7 @@ from postgrest.exceptions import APIError
 from zoneinfo import ZoneInfo
 
 from app.supabase_client import get_client
-from app.time_utils import LATAM_TZS, to_utc, utc_iso, to_tz
+from app.time_utils import LATAM_TZS, utc_iso, to_tz
 
 _calendar_spec = importlib.util.find_spec("streamlit_calendar")
 calendar_component = None
@@ -245,17 +245,25 @@ def _kickoff_details(match: Dict[str, Any]) -> str:
     return f"{local.strftime('%Y-%m-%d %H:%M')} ({tz_name})"
 
 
-def _render_new_match_form(selection: Dict[str, Any]) -> None:
+def _render_new_match_form(selection: Optional[Dict[str, Any]] = None) -> None:
+    selection = selection or {}
     start_raw = selection.get("start")
     end_raw = selection.get("end")
-    start_dt = parser.isoparse(start_raw) if start_raw else None
-    end_dt = parser.isoparse(end_raw) if end_raw else None
-    has_time = bool(start_raw and "T" in start_raw)
+    try:
+        start_dt = parser.isoparse(start_raw) if start_raw else None
+    except (TypeError, ValueError):
+        start_dt = None
+    try:
+        end_dt = parser.isoparse(end_raw) if end_raw else None
+    except (TypeError, ValueError):
+        end_dt = None
 
     tz_options = list(LATAM_TZS)
     default_tz = st.session_state.get("calendar__tz", tz_options[0])
     if default_tz not in tz_options:
         default_tz = tz_options[0]
+
+    selection_token = f"{start_raw}|{end_raw}" if (start_raw or end_raw) else "manual"
 
     with _sidebar_owner():
         with st.sidebar:
@@ -273,26 +281,73 @@ def _render_new_match_form(selection: Dict[str, Any]) -> None:
             )
             notes = st.text_area("Notes", key="calendar__new_notes")
 
-            if isinstance(start_dt, datetime) and start_dt.tzinfo is None:
-                start_dt = start_dt.replace(tzinfo=ZoneInfo(tz_name))
-            if isinstance(end_dt, datetime) and end_dt.tzinfo is None:
-                end_dt = end_dt.replace(tzinfo=ZoneInfo(tz_name))
+            try:
+                tzinfo = ZoneInfo(tz_name)
+            except Exception:
+                tzinfo = UTC
+                tz_name = "UTC"
 
-            if not has_time and isinstance(start_dt, datetime):
-                local_start = start_dt.date()
-                kickoff_utc = to_utc(local_start, time(15, 0), tz_name)
-                end_utc = kickoff_utc + timedelta(minutes=DEFAULT_DURATION_MINUTES)
-            else:
-                kickoff_utc = start_dt.astimezone(UTC) if isinstance(start_dt, datetime) else None
-                if isinstance(end_dt, datetime):
-                    end_utc = end_dt.astimezone(UTC)
-                elif isinstance(start_dt, datetime):
-                    end_utc = start_dt.astimezone(UTC) + timedelta(minutes=DEFAULT_DURATION_MINUTES)
+            if isinstance(start_dt, datetime):
+                if start_dt.tzinfo is None:
+                    start_local_dt = start_dt.replace(tzinfo=tzinfo)
                 else:
-                    end_utc = None
+                    start_local_dt = start_dt.astimezone(tzinfo)
+            else:
+                start_local_dt = (datetime.now(tzinfo) + timedelta(hours=2)).replace(
+                    minute=0,
+                    second=0,
+                    microsecond=0,
+                )
+
+            if isinstance(end_dt, datetime):
+                if end_dt.tzinfo is None:
+                    end_local_dt = end_dt.replace(tzinfo=start_local_dt.tzinfo or tzinfo)
+                else:
+                    end_local_dt = end_dt.astimezone(start_local_dt.tzinfo or tzinfo)
+            else:
+                end_local_dt = start_local_dt + timedelta(minutes=DEFAULT_DURATION_MINUTES)
+
+            duration_default = int(
+                max(30, round((end_local_dt - start_local_dt).total_seconds() / 60))
+            )
+
+            if st.session_state.get("calendar__new_selection_token") != selection_token:
+                st.session_state["calendar__new_selection_token"] = selection_token
+                for field in (
+                    "calendar__new_home",
+                    "calendar__new_away",
+                    "calendar__new_comp",
+                    "calendar__new_venue",
+                    "calendar__new_country",
+                    "calendar__new_notes",
+                ):
+                    st.session_state.pop(field, None)
+                st.session_state["calendar__new_date"] = start_local_dt.date()
+                st.session_state["calendar__new_time"] = start_local_dt.time().replace(
+                    second=0,
+                    microsecond=0,
+                )
+                st.session_state["calendar__new_duration"] = duration_default
+
+            kickoff_date = st.date_input("Kick-off date", key="calendar__new_date")
+            kickoff_time = st.time_input("Kick-off time", key="calendar__new_time")
+            duration_minutes = int(
+                st.number_input(
+                    "Duration (minutes)",
+                    min_value=30,
+                    max_value=240,
+                    step=5,
+                    key="calendar__new_duration",
+                )
+            )
+
+            kickoff_local = datetime.combine(kickoff_date, kickoff_time)
+            kickoff_local = kickoff_local.replace(tzinfo=tzinfo)
+            kickoff_utc = kickoff_local.astimezone(UTC)
+            end_utc = kickoff_utc + timedelta(minutes=duration_minutes)
 
             disabled = False
-            if not (home.strip() and away.strip() and kickoff_utc):
+            if not (home.strip() and away.strip()):
                 disabled = True
                 st.info("Provide home & away teams to save the match.")
 
@@ -312,10 +367,17 @@ def _render_new_match_form(selection: Dict[str, Any]) -> None:
                 try:
                     get_client().table("matches").insert(payload).execute()
                     st.session_state["calendar__tz"] = tz_name
+                    st.session_state.pop("calendar__selection", None)
+                    st.session_state.pop("calendar__show_new_form", None)
                     st.success("Match created")
                     st.rerun()
                 except APIError as exc:
                     _warn_api_error("Failed to create match", exc)
+
+            if st.button("Cancel", use_container_width=True):
+                st.session_state.pop("calendar__selection", None)
+                st.session_state.pop("calendar__show_new_form", None)
+                st.rerun()
 
 
 def _render_match_editor(match: Dict[str, Any], is_authenticated: bool) -> None:
@@ -466,14 +528,15 @@ def _handle_resize(event_payload: Dict[str, Any], is_authenticated: bool) -> Non
 def show_calendar() -> None:
     st.header("📅 Matches — Calendar")
 
-    if calendar_component is None:
-        st.info("Install streamlit-calendar to use the interactive calendar view.")
-        return
-
     auth = st.session_state.get("auth", {})
     is_authenticated = bool(auth.get("authenticated"))
     if not is_authenticated:
         st.info("Sign in to create or edit matches. Calendar is read-only for guests.")
+
+    if calendar_component is None:
+        st.info(
+            "Install streamlit-calendar for the drag-and-drop calendar. You can still review and add matches below."
+        )
 
     matches = _load_matches()
     events: List[Dict[str, Any]] = []
@@ -482,34 +545,42 @@ def show_calendar() -> None:
         if event:
             events.append(event)
 
-    options = {
-        "initialView": "dayGridMonth",
-        "height": 760,
-        "locale": "en",
-        "timeZone": "local",
-        "firstDay": 1,
-        "selectable": is_authenticated,
-        "editable": is_authenticated,
-        "eventStartEditable": is_authenticated,
-        "eventDurationEditable": is_authenticated,
-        "eventTimeFormat": {"hour": "2-digit", "minute": "2-digit"},
-        "headerToolbar": {
-            "left": "prev,next today",
-            "center": "title",
-            "right": "dayGridMonth,timeGridWeek,timeGridDay,listWeek",
-        },
-    }
+    if is_authenticated and st.button("➕ Add match", key="calendar__open_form"):
+        st.session_state["calendar__show_new_form"] = True
+        st.session_state.pop("calendar__selection", None)
 
-    state = calendar_component(
-        events=events,
-        options=options,
-        key="scoutlens_calendar",
-    )
+    if calendar_component is not None:
+        options = {
+            "initialView": "dayGridMonth",
+            "height": 760,
+            "locale": "en",
+            "timeZone": "local",
+            "firstDay": 1,
+            "selectable": is_authenticated,
+            "editable": is_authenticated,
+            "eventStartEditable": is_authenticated,
+            "eventDurationEditable": is_authenticated,
+            "eventTimeFormat": {"hour": "2-digit", "minute": "2-digit"},
+            "headerToolbar": {
+                "left": "prev,next today",
+                "center": "title",
+                "right": "dayGridMonth,timeGridWeek,timeGridDay,listWeek",
+            },
+        }
+
+        state = calendar_component(
+            events=events,
+            options=options,
+            key="scoutlens_calendar",
+        )
+    else:
+        state = None
 
     if isinstance(state, dict):
         selection = state.get("select")
         if selection and is_authenticated:
-            _render_new_match_form(selection)
+            st.session_state["calendar__show_new_form"] = True
+            st.session_state["calendar__selection"] = selection
         elif selection:
             st.warning("Sign in to add matches from the calendar.")
 
@@ -528,6 +599,23 @@ def show_calendar() -> None:
         resize = state.get("eventResize")
         if resize:
             _handle_resize(resize, is_authenticated)
+
+    if is_authenticated and st.session_state.get("calendar__show_new_form"):
+        _render_new_match_form(st.session_state.get("calendar__selection"))
+
+    if matches:
+        expanded = calendar_component is None
+        with st.expander("Upcoming matches", expanded=expanded):
+            for row in matches[:25]:
+                title = f"{row.get('home_team') or '—'} vs {row.get('away_team') or '—'}"
+                details = _kickoff_details(row)
+                comp = row.get("competition")
+                suffix = f" · {comp}" if comp else ""
+                st.markdown(f"- **{title}** — {details}{suffix}")
+
+    if not events:
+        st.info("No matches scheduled in the next 60 days. Add one to get started!")
+
 
 
 __all__ = ["show_calendar", "_maps_search_url"]
