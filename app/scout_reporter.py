@@ -68,7 +68,8 @@ def _inject_css_once(key: str, css_html: str):
         st.session_state[sskey] = True
 
 # ---------------- Supabase: shortlistit ----------------
-def list_shortlists() -> List[str]:
+@st.cache_data(show_spinner=False, ttl=30)
+def _cached_shortlist_names() -> List[str]:
     client = get_client()
     if not client:
         return []
@@ -76,7 +77,15 @@ def list_shortlists() -> List[str]:
     names = [r.get("name") for r in (res.data or []) if r.get("name")]
     return sorted(set(names))
 
-def get_shortlist_members(shortlist_name: str) -> List[str]:
+
+def list_shortlists(*, force_refresh: bool = False) -> List[str]:
+    if force_refresh:
+        _cached_shortlist_names.clear()
+    return _cached_shortlist_names()
+
+
+@st.cache_data(show_spinner=False, ttl=30)
+def _cached_shortlist_members(shortlist_name: str) -> List[str]:
     client = get_client()
     if not client:
         return []
@@ -88,6 +97,14 @@ def get_shortlist_members(shortlist_name: str) -> List[str]:
     )
     return [str(r.get("player_id")) for r in (res.data or []) if r.get("player_id")]
 
+
+def get_shortlist_members(shortlist_name: str, *, force_refresh: bool = False) -> List[str]:
+    if not shortlist_name:
+        return []
+    if force_refresh:
+        _cached_shortlist_members.clear()
+    return _cached_shortlist_members(shortlist_name)
+
 # ---------------- Pelaajadata koosteeksi ----------------
 def _normalize_player_record(p: Dict[str, Any]) -> Dict[str, Any]:
     return {
@@ -97,7 +114,8 @@ def _normalize_player_record(p: Dict[str, Any]) -> Dict[str, Any]:
         "position": str(p.get("position") or p.get("Position") or "").strip(),
     }
 
-def get_all_players() -> List[Dict[str, Any]]:
+@st.cache_data(show_spinner=False, ttl=30)
+def _cached_all_players() -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for t in list_teams() or []:
         try:
@@ -120,11 +138,18 @@ def get_all_players() -> List[Dict[str, Any]]:
         uniq.append(p)
     return uniq
 
+
+def get_all_players(*, force_refresh: bool = False) -> List[Dict[str, Any]]:
+    if force_refresh:
+        _cached_all_players.clear()
+    return _cached_all_players()
+
 # ---------------- Ottelut & raportit (Supabase) ----------------
 from postgrest.exceptions import APIError
 
 
-def list_matches() -> List[Dict[str, Any]]:
+@st.cache_data(show_spinner=False, ttl=20)
+def _cached_matches() -> List[Dict[str, Any]]:
     client = get_client()
     if not client:
         return []
@@ -150,6 +175,12 @@ def list_matches() -> List[Dict[str, Any]]:
         st.error("Supabase SELECT epäonnistui. Varmista taulu, sarake 'kickoff_at' ja RLS.")
         st.exception(e)
         return []
+
+
+def list_matches(*, force_refresh: bool = False) -> List[Dict[str, Any]]:
+    if force_refresh:
+        _cached_matches.clear()
+    return _cached_matches()
 
 def insert_match(m: Dict[str, Any]) -> None:
     client = get_client()
@@ -194,6 +225,7 @@ def insert_match(m: Dict[str, Any]) -> None:
             new_item[key] = value
     try:
         client.table(MATCHES).insert(new_item).execute()
+        _cached_matches.clear()
     except Exception:
         st.error("❌ Save failed")
         st.code("".join(traceback.format_exc()), language="text")
@@ -207,7 +239,8 @@ def _warn_api_error(e: APIError, ctx: str):
     st.warning(f"PostgREST error in {ctx}: {msg or str(e)}")
 
 
-def list_reports(match_id: str | None = None) -> List[Dict[str, Any]]:
+@st.cache_data(show_spinner=False, ttl=20)
+def _cached_reports(match_id: str | None) -> List[Dict[str, Any]]:
     client = get_client()
     if not client:
         return []
@@ -241,6 +274,13 @@ def list_reports(match_id: str | None = None) -> List[Dict[str, Any]]:
     return out
 
 
+def list_reports(match_id: str | None = None, *, force_refresh: bool = False) -> List[Dict[str, Any]]:
+    if force_refresh:
+        _cached_reports.clear()
+        list_matches(force_refresh=True)
+    return _cached_reports(match_id)
+
+
 def save_report(records: List[Dict[str, Any]]) -> None:
     client = get_client()
     if not client or not records:
@@ -248,6 +288,7 @@ def save_report(records: List[Dict[str, Any]]) -> None:
     payload = clean_jsonable(records)
     try:
         client.table(SCOUT_REPORTS).upsert(payload, on_conflict="id").execute()
+        _cached_reports.clear()
     except Exception:
         st.error("❌ Save failed")
         st.code("".join(traceback.format_exc()), language="text")
@@ -260,6 +301,7 @@ def delete_reports(ids: List[str]) -> None:
         return
     try:
         client.table(SCOUT_REPORTS).delete().in_("id", [str(i) for i in ids]).execute()
+        _cached_reports.clear()
     except Exception:
         st.error("❌ Delete failed")
         st.code("".join(traceback.format_exc()), language="text")
@@ -385,7 +427,7 @@ def show_scout_match_reporter():
                     }
                 )
                 st.success(f"Match {home} vs {away} added.")
-                matches = list_matches()
+                matches = list_matches(force_refresh=True)
             else:
                 st.warning("Home and Away required.")
     if not matches:
