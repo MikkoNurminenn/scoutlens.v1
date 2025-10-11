@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import base64
 from datetime import datetime
 from inspect import signature
 from typing import Any, Dict, Iterable, List, Optional
@@ -249,19 +250,7 @@ def show_calendar() -> None:
     if mode == "Browser (mobile/phone)":
         if st.button("Export JSON"):
             rows = cal.list_events()
-            payload = json.dumps(rows, ensure_ascii=False)
-            streamlit_js_eval(
-                js_expressions=(
-                    "(() => {\n"
-                    "  const data = new Blob([`" + payload.replace("`", "\\`") + "`], {type: 'application/json'});\n"
-                    "  const url = URL.createObjectURL(data);\n"
-                    "  const a = document.createElement('a');\n"
-                    "  a.href = url; a.download = 'scoutlens_calendar_backup.json';\n"
-                    "  a.click(); URL.revokeObjectURL(url);\n"
-                    "})()"
-                ),
-                key="calendar_export_json",
-            )
+            _browser_export_events(rows, key="calendar_export_json")
             st.toast("Exported JSON")
 
         uploaded = st.file_uploader("Import JSON", type=["json"], accept_multiple_files=False)
@@ -295,6 +284,30 @@ def show_calendar() -> None:
                 st.rerun()
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Import failed: {exc}")
+
+
+def _browser_export_events(rows: Iterable[Any], *, key: str) -> None:
+    js_expressions = _build_browser_export_js(rows)
+    streamlit_js_eval(
+        js_expressions=js_expressions,
+        key=key,
+    )
+
+
+def _build_browser_export_js(rows: Iterable[Any]) -> tuple[str, ...]:
+    payload = json.dumps(list(rows), ensure_ascii=False)
+    payload_base64 = base64.b64encode(payload.encode("utf-8")).decode("ascii")
+    return (
+        "(() => {\n",
+        f"  const decoded = atob('{payload_base64}');\n",
+        "  const bytes = Uint8Array.from(decoded, (c) => c.charCodeAt(0));\n",
+        "  const data = new Blob([bytes], {type: 'application/json'});\n",
+        "  const url = URL.createObjectURL(data);\n",
+        "  const a = document.createElement('a');\n",
+        "  a.href = url; a.download = 'scoutlens_calendar_backup.json';\n",
+        "  a.click(); URL.revokeObjectURL(url);\n",
+        "})()",
+    )
 
 
 __all__ = ["show_calendar"]
