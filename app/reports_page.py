@@ -114,6 +114,38 @@ def _load_players() -> List[Dict[str, Any]]:
         )
     return norm
 
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _load_match_target_players(match_id: str) -> List[Dict[str, Any]]:
+    if not match_id:
+        return []
+    client = get_client()
+    try:
+        res = (
+            client.table("match_targets")
+            .select("player_id,player:player_id(name,current_club)")
+            .eq("match_id", match_id)
+            .execute()
+        )
+    except APIError as e:
+        st.error(f"Failed to load match targets: {getattr(e, 'message', e)}")
+        return []
+
+    rows = res.data or []
+    players: List[Dict[str, Any]] = []
+    for row in rows:
+        pid = row.get("player_id")
+        player_info = row.get("player") or {}
+        if pid:
+            players.append(
+                {
+                    "id": pid,
+                    "name": player_info.get("name"),
+                    "current_club": player_info.get("current_club"),
+                }
+            )
+    return players
+
 def render_add_player_form(on_success: Callable | None = None) -> None:
     with st.form(key="players__add_form", border=True):
         name = st.text_input("Name*", "", autocomplete="off")
@@ -181,7 +213,19 @@ def show_reports_page() -> None:
     with st.expander("➕ Add Player", expanded=False):
         render_add_player_form(on_success=_on_player_created)
 
+    prefill_match_id = st.session_state.get("report_prefill_match_id")
+    target_players = _load_match_target_players(prefill_match_id) if prefill_match_id else []
+    target_ids = [p.get("id") for p in target_players if p.get("id")]
+
     players = _load_players()
+    if target_ids:
+        players = [p for p in players if p.get("id") in target_ids]
+        st.caption("Match prefill active — choose from saved 🎯 targets.")
+        if players and st.session_state.get("reports__selected_player_id") not in target_ids:
+            st.session_state["reports__selected_player_id"] = target_ids[0]
+    elif prefill_match_id:
+        st.info("Selected match has no saved targets yet. Add targets in Calendar to limit choices.")
+
     player_options = {p["id"]: p["name"] for p in players}
 
     # Älä näytä raporttilomaketta, jos ei ole vielä yhtään pelaajaa
@@ -221,9 +265,13 @@ def show_reports_page() -> None:
                 "location": (location or "").strip() or None,
                 "attributes": attrs,
             }
+            if prefill_match_id:
+                payload["match_id"] = prefill_match_id
             try:
                 sb.table("reports").insert(payload).execute()
                 list_latest_reports.clear()
+                if prefill_match_id:
+                    st.session_state.pop("report_prefill_match_id", None)
                 st.toast("Report saved ✅")
                 st.rerun()
             except Exception as e:

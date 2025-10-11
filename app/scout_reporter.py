@@ -131,11 +131,21 @@ def list_matches() -> List[Dict[str, Any]]:
     try:
         res = (
             client.table(MATCHES)
-            .select("*")
+            .select("*,match_targets(player_id)")
             .order("kickoff_at", desc=True)
             .execute()
         )
-        return res.data or []
+        rows = res.data or []
+        norm: List[Dict[str, Any]] = []
+        for row in rows:
+            targets = row.pop("match_targets", []) or []
+            row["targets"] = [
+                t.get("player_id")
+                for t in targets
+                if isinstance(t, dict) and t.get("player_id")
+            ]
+            norm.append(row)
+        return norm
     except APIError as e:
         st.error("Supabase SELECT epäonnistui. Varmista taulu, sarake 'kickoff_at' ja RLS.")
         st.exception(e)
@@ -145,15 +155,35 @@ def insert_match(m: Dict[str, Any]) -> None:
     client = get_client()
     if not client:
         return
+    def _none_if_blank(value):
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+    location = _none_if_blank(m.get("location"))
+    venue = _none_if_blank(m.get("venue"))
+    if not location and venue:
+        location = venue
+
     new_item = {
         "id": uuid.uuid4().hex,
         "home_team": m["home_team"],
         "away_team": m["away_team"],
-        "location": m.get("location", ""),
-        "competition": m.get("competition", ""),
+        "location": location,
+        "competition": _none_if_blank(m.get("competition")),
         "kickoff_at": m["kickoff_at"],
-        "notes": m.get("notes", ""),
+        "notes": _none_if_blank(m.get("notes")),
     }
+    optional_keys = {
+        "venue": venue,
+        "country": _none_if_blank(m.get("country")),
+        "tz_name": _none_if_blank(m.get("tz_name")),
+        "ends_at_utc": m.get("ends_at_utc"),
+    }
+    for key, value in optional_keys.items():
+        if value:
+            new_item[key] = value
     try:
         client.table(MATCHES).insert(new_item).execute()
     except Exception:
