@@ -125,7 +125,6 @@ def _safe_import(what: str, mod: str, attr: str):
         st.stop()
 
 show_reports_page = _safe_import("reports page", "app.reports_page", "show_reports_page")
-show_calendar = _safe_import("calendar", "app.calendar_ui", "show_calendar")
 show_inspect_player = _safe_import("inspect player", "app.inspect_player", "show_inspect_player")
 show_shortlists_page = _safe_import("shortlists", "app.shortlists_page", "show_shortlists_page")
 show_player_management_page = _safe_import(
@@ -199,7 +198,6 @@ def _render_sidebar_guard_report() -> None:
 # --------- Nav
 NAV_KEYS = [
     "Reports",
-    "Calendar",
     "Inspect Player",
     "Shortlists",
     "Manage Shortlists",
@@ -209,7 +207,6 @@ NAV_KEYS = [
 ]
 NAV_LABELS = {
     "Reports": "Reports",
-    "Calendar": "Calendar",
     "Inspect Player": "Inspect Player",
     "Shortlists": "Shortlists",
     "Manage Shortlists": "Manage Shortlists",
@@ -219,7 +216,6 @@ NAV_LABELS = {
 }
 NAV_ICONS = {
     "Reports": "\uf201",
-    "Calendar": "\uf073",
     "Inspect Player": "\uf002",
     "Shortlists": "\uf0ca",
     "Manage Shortlists": "\uf0ad",
@@ -233,11 +229,9 @@ LEGACY_REMAP = {
     "scout_reporter": "Reports",
     "shortlists": "Shortlists",
     "player_editor": "Shortlists",
-    "calendar": "Calendar",
 }
 PAGE_FUNCS = {
     "Reports": show_reports_page,
-    "Calendar": show_calendar,
     "Inspect Player": show_inspect_player,
     "Shortlists": show_shortlists_page,
     "Manage Shortlists": show_shortlist_management_page,

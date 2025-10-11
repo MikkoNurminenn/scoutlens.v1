@@ -315,7 +315,7 @@ def show_reports_page() -> None:
         if players and st.session_state.get("reports__selected_player_id") not in target_ids:
             st.session_state["reports__selected_player_id"] = target_ids[0]
     elif prefill_match_id:
-        st.info("Selected match has no saved targets yet. Add targets in Calendar to limit choices.")
+        st.info("Selected match has no saved targets yet. Add targets to limit choices.")
 
     player_options = {p["id"]: p["name"] for p in players}
 
