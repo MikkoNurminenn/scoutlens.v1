@@ -7,6 +7,7 @@ import calendar as pycal
 from dataclasses import dataclass, field
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote_plus
 
 import pandas as pd
 import streamlit as st
@@ -123,6 +124,16 @@ def _disp(dt: Optional[datetime], tz: str) -> str:
     except Exception:
         pass
     return dt.strftime("%Y-%m-%d %H:%M")
+
+# -------------- External links --------------
+def _maps_search_url(*parts: Optional[str]) -> Optional[str]:
+    """Return a Google Maps search link combining the provided parts."""
+
+    values = [str(p).strip() for p in parts if p and str(p).strip()]
+    if not values:
+        return None
+    query = ", ".join(values)
+    return f"https://www.google.com/maps/search/?api=1&query={quote_plus(query)}"
 
 # -------------- Data helpers --------------
 def _load_matches() -> List[Dict[str, Any]]:
@@ -293,6 +304,16 @@ def _grid(matches: List[Dict[str, Any]], year: int, month: int, tz: str):
                     dt_src = _parse_dt(m.get("date"), m.get("time"), m.get("tz"))
                     dt_disp = _disp(dt_src, tz)
                     lines.append(f"- {m.get('home','—')} vs {m.get('away','—')}  \n  <small>{dt_disp}</small>")
+                    loc_label = ", ".join(
+                        [x for x in (m.get("location"), m.get("city")) if x]
+                    )
+                    maps_url = _maps_search_url(loc_label)
+                    if maps_url:
+                        lines.append(
+                            f"  <small>📍 [{loc_label}]({maps_url})</small>"
+                        )
+                    elif loc_label:
+                        lines.append(f"  <small>📍 {loc_label}</small>")
                 if len(items) > 3:
                     lines.append(f"- … +{len(items)-3} more")
                 cells.append("  \n".join(lines))
@@ -305,16 +326,20 @@ def _card(m: Dict[str, Any], tz: str):
     cap_bits = []
     if m.get("competition"):
         cap_bits.append(m["competition"])
-    loc_bits = [m.get("location", ""), m.get("city", "")]
-    loc_bits = [x for x in loc_bits if x]
-    if loc_bits:
-        cap_bits.append(", ".join(loc_bits))
     if m.get("tz"):
         cap_bits.append(f"{m['tz']} → {tz}")
 
     st.markdown(f"**{m.get('home','—')} vs {m.get('away','—')}**")
     st.caption(f"{m.get('date','—')} {m.get('time','')}  •  {', '.join(cap_bits)}")
     st.caption(f"🕒 Display: {dt_disp}")
+
+    loc_label_parts = [m.get("location"), m.get("city")]
+    maps_url = _maps_search_url(*loc_label_parts)
+    loc_label = ", ".join([x for x in loc_label_parts if x])
+    if maps_url:
+        st.caption(f"📍 [{loc_label}]({maps_url})")
+    elif loc_label:
+        st.caption(f"📍 {loc_label}")
 
     c1, c2, _ = st.columns([1, 1, 2])
     with c1:
