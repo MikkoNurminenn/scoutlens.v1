@@ -5,3 +5,4 @@ plotly
 matplotlib
 supabase>=2.5.0
 postgrest>=0.15
+streamlit-calendar
