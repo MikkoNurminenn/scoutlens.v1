@@ -12,7 +12,6 @@ Guidelines:
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from decimal import Decimal
 from typing import Any, Dict, List, Callable
 
 import pandas as pd
@@ -24,6 +23,7 @@ from app.supabase_client import get_client
 from app.db_tables import PLAYERS
 from app.services.players import insert_player
 from app.perf import track
+from app.report_payload import build_report_payload, serialize_report_attributes
 
 
 bootstrap_sidebar_auto_collapse()
@@ -187,31 +187,6 @@ def render_add_player_form(on_success: Callable | None = None) -> None:
 # Page
 # ---------------------------------------------------------------------------
 
-def _serialize_attributes(attrs: Dict[str, Any]) -> Dict[str, Any]:
-    """Ensure report attributes only contain JSON-serializable primitives."""
-
-    if not isinstance(attrs, dict):
-        return {}
-
-    def _fallback(value: Any) -> Any:
-        if value is None:
-            return None
-        if isinstance(value, Decimal):
-            return float(value)
-        if isinstance(value, (str, int, float, bool)):
-            return value
-        if isinstance(value, (date, datetime)):
-            return value.isoformat()
-        return str(value)
-
-    clean: Dict[str, Any] = {}
-    for key, value in attrs.items():
-        if isinstance(value, str):
-            value = value.strip()
-        clean[key] = _fallback(value)
-    return clean
-
-
 def _load_players_by_ids(ids: List[str]) -> Dict[str, Dict[str, Any]]:
     unique_ids = sorted({pid for pid in ids if pid})
     if not unique_ids:
@@ -244,47 +219,51 @@ def _load_players_by_ids(ids: List[str]) -> Dict[str, Dict[str, Any]]:
     return players
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _reports_supports_player_name() -> bool:
+    """Check whether the reports table exposes the player_name column."""
+
+    sb = get_client()
+    try:
+        sb.table("reports").select("player_name").limit(1).execute()
+        return True
+    except APIError as e:
+        message = getattr(e, "message", str(e))
+        if message and "player_name" in message:
+            print("reports.player_name missing from Supabase schema:", message)
+            return False
+        raise
+
+
 @st.cache_data(ttl=60, show_spinner=False)
-def list_latest_reports(limit: int = 50):
+def list_latest_reports(limit: int = 50, include_player_name: bool = True):
     sb = get_client()
     with track("reports:fetch"):
         try:
+            select_cols = [
+                "id",
+                "player_id",
+                "report_date",
+                "competition",
+                "opponent",
+                "position_played",
+                "rating",
+                "attributes",
+            ]
+            if include_player_name:
+                select_cols.insert(2, "player_name")
+
             response = (
                 sb.table("reports")
-                .select(
-                    "id,player_id,player_name,report_date,competition,opponent,"
-                    "position_played,rating,attributes"
-                )
+                .select(",".join(select_cols))
                 .order("report_date", desc=True)
                 .limit(limit)
                 .execute()
             )
             rows = response.data or []
         except APIError as e:
-            message = getattr(e, "message", str(e))
-            if message and "reports.player_name" in message:
-                st.warning(
-                    "Supabase schema is missing reports.player_name — run the latest migrations. "
-                    "Player names will be loaded via fallback in the meantime."
-                )
-                response = (
-                    sb.table("reports")
-                    .select(
-                        "id,player_id,report_date,competition,opponent,"
-                        "position_played,rating,attributes"
-                    )
-                    .order("report_date", desc=True)
-                    .limit(limit)
-                    .execute()
-                )
-                rows = response.data or []
-                for row in rows:
-                    row.setdefault("player_name", None)
-                print(
-                    "Supabase APIError (missing reports.player_name column):", message
-                )
-            else:
-                raise
+            st.error(f"Supabase error: {getattr(e, 'message', e)}")
+            return []
     player_map = _load_players_by_ids([row.get("player_id") for row in rows])
 
     for row in rows:
@@ -296,7 +275,9 @@ def list_latest_reports(limit: int = 50):
                 "name": row.get("player_name"),
                 "current_club": None,
             }
-        row["attributes"] = _serialize_attributes(row.get("attributes") or {})
+        row["attributes"] = serialize_report_attributes(row.get("attributes") or {})
+        if not include_player_name:
+            row.setdefault("player_name", None)
 
     return rows
 
@@ -304,6 +285,21 @@ def list_latest_reports(limit: int = 50):
 def show_reports_page() -> None:
     """Render the reports page."""
     st.markdown("## 📝 Reports")
+
+    try:
+        supports_player_name = _reports_supports_player_name()
+    except APIError as e:
+        st.error(f"Failed to inspect reports schema: {getattr(e, 'message', e)}")
+        supports_player_name = True
+    else:
+        if not supports_player_name and not st.session_state.get(
+            "reports__player_name_warned", False
+        ):
+            st.warning(
+                "Supabase schema is missing reports.player_name — run the latest migrations. "
+                "Player names will be loaded via fallback in the meantime."
+            )
+            st.session_state["reports__player_name_warned"] = True
 
     def _on_player_created(row):
         st.session_state["reports__selected_player_id"] = row["id"]
@@ -356,33 +352,57 @@ def show_reports_page() -> None:
                 pos_clean = pos_val.strip()
                 attrs["position"] = pos_clean or None
 
-            payload = {
-                "player_id": selected_player_id,
-                "report_date": report_date.isoformat(),
-                "competition": (competition or "").strip() or None,
-                "opponent": (opponent or "").strip() or None,
-                "location": (location or "").strip() or None,
-                "attributes": _serialize_attributes(attrs),
-            }
-            if prefill_match_id:
-                payload["match_id"] = prefill_match_id
+            payload = build_report_payload(
+                player_id=selected_player_id,
+                player_name=player_options.get(selected_player_id),
+                report_date=report_date,
+                competition=competition,
+                opponent=opponent,
+                location=location,
+                attrs=attrs,
+                match_id=prefill_match_id,
+                include_player_name=supports_player_name,
+            )
+
+            inserted = False
             try:
                 sb.table("reports").insert(payload).execute()
+                inserted = True
+            except APIError as e:
+                message = getattr(e, "message", str(e))
+                if message and "player_name" in message and supports_player_name:
+                    _reports_supports_player_name.clear()
+                    supports_player_name = False
+                    st.session_state["reports__player_name_warned"] = True
+                    st.warning(
+                        "Supabase schema is missing reports.player_name — run the latest migrations. "
+                        "Player names will be loaded via fallback in the meantime."
+                    )
+                    fallback_payload = {
+                        k: v for k, v in payload.items() if k != "player_name"
+                    }
+                    try:
+                        sb.table("reports").insert(fallback_payload).execute()
+                        inserted = True
+                    except APIError as retry_err:
+                        st.error(
+                            f"Failed to save report: {getattr(retry_err, 'message', retry_err)}"
+                        )
+                else:
+                    st.error(f"Failed to save report: {message}")
+            except Exception as e:  # pragma: no cover - unexpected runtime issues
+                st.error(f"Failed to save report: {e}")
+
+            if inserted:
                 list_latest_reports.clear()
                 if prefill_match_id:
                     st.session_state.pop("report_prefill_match_id", None)
                 st.toast("Report saved ✅")
                 st.rerun()
-            except Exception as e:
-                st.error(f"Failed to save report: {e}")
 
     st.divider()
 
-    try:
-        rows = list_latest_reports()
-    except APIError as e:
-        st.error(f"Supabase error: {getattr(e, 'message', e)}")
-        rows = []
+    rows = list_latest_reports(include_player_name=supports_player_name)
 
     if rows:
         data = []
