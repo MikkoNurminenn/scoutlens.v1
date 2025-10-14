@@ -149,6 +149,9 @@ def _format_match_label(metadata: Dict[str, Any]) -> str:
     return f"{home} vs {away}"
 
 
+SELECTBOX_KEY = "calendar_selected_event_id"
+
+
 def show_calendar_page() -> None:
     """Render the calendar page inside Streamlit."""
 
@@ -177,6 +180,9 @@ def show_calendar_page() -> None:
         st.info("Matches are missing kickoff times, so there is nothing to plot yet.")
         return
 
+    selected_event_id = None
+    default_selected_id = st.session_state.get(SELECTBOX_KEY)
+
     if calendar is None:
         st.error(
             "The `streamlit-calendar` component is not installed. "
@@ -196,7 +202,6 @@ def show_calendar_page() -> None:
             "slotMaxTime": "23:00:00",
         }
         calendar_state = calendar(events=events, options=options, key="match_calendar")
-        selected_event_id = None
         if isinstance(calendar_state, dict):
             event_payload = calendar_state.get("event")
             if isinstance(event_payload, dict):
@@ -207,6 +212,8 @@ def show_calendar_page() -> None:
             if not selected_event_id:
                 selected_event_id = calendar_state.get("event_id")
         if selected_event_id and selected_event_id in metadata_map:
+            st.session_state[SELECTBOX_KEY] = selected_event_id
+            default_selected_id = selected_event_id
             st.success(
                 _format_match_label(metadata_map[selected_event_id])
             )
@@ -217,10 +224,18 @@ def show_calendar_page() -> None:
         st.caption("No match metadata available.")
         return
 
+    if default_selected_id not in detail_ids:
+        default_selected_id = detail_ids[0]
+        st.session_state[SELECTBOX_KEY] = default_selected_id
+
+    default_index = detail_ids.index(default_selected_id) if default_selected_id in detail_ids else 0
+
     selected_id = st.selectbox(
         "Select a match to inspect",
         options=detail_ids,
         format_func=lambda match_id: _format_match_label(metadata_map[match_id]),
+        index=default_index,
+        key=SELECTBOX_KEY,
     )
     selected = metadata_map.get(selected_id)
     if not selected:
