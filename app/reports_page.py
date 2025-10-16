@@ -12,7 +12,7 @@ Guidelines:
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
@@ -405,8 +405,10 @@ def show_reports_page() -> None:
     rows = list_latest_reports(include_player_name=supports_player_name)
 
     if rows:
-        data = []
-        for r in rows:
+        data: List[Dict[str, Any]] = []
+        row_lookup: Dict[str, Dict[str, Any]] = {}
+        ordered_ids: List[str] = []
+        for idx, r in enumerate(rows):
             a = r.get("attributes") or {}
             player = r.get("player") or {}
 
@@ -415,8 +417,13 @@ def show_reports_page() -> None:
             if len(txt) > 100:
                 txt = txt[:97] + "..."
 
+            row_id = str(r.get("id") or f"row-{idx}")
+            ordered_ids.append(row_id)
+            row_lookup[row_id] = r
+
             data.append(
                 {
+                    "_id": row_id,
                     "Date": r.get("report_date"),
                     "Player": player.get("name", ""),
                     "Club": player.get("current_club", ""),
@@ -519,6 +526,12 @@ def show_reports_page() -> None:
             return out
 
         df_f = _apply_filters(df)
+        filtered_ids: List[str] = []
+        if "_id" in df_f.columns:
+            filtered_ids = (
+                df_f["_id"].dropna().astype(str).tolist()
+            )
+            df_f = df_f.drop(columns=["_id"])
 
         order = [
             "Date","Player","Club","Opponent","Competition",
@@ -612,5 +625,111 @@ def show_reports_page() -> None:
                 file_name="reports_filtered.csv",
                 mime="text/csv",
             )
+
+        inspector_ids = [rid for rid in (filtered_ids or ordered_ids) if rid in row_lookup]
+
+        if inspector_ids:
+            def _format_label(row: Dict[str, Any]) -> str:
+                player_info = row.get("player") or {}
+                player_name = (
+                    player_info.get("name")
+                    or row.get("player_name")
+                    or "Unknown player"
+                )
+                date_val = row.get("report_date") or "—"
+                opponent = row.get("opponent") or ""
+                competition = row.get("competition") or ""
+                parts = [str(date_val), player_name]
+                if opponent:
+                    parts.append(f"vs {opponent}")
+                if competition:
+                    parts.append(competition)
+                return " · ".join(parts)
+
+            labels: Dict[str, str] = {}
+            for rid in inspector_ids:
+                row = row_lookup.get(rid)
+                if not row:
+                    continue
+                labels[rid] = _format_label(row)
+
+            valid_ids = [rid for rid in inspector_ids if rid in labels]
+
+            if valid_ids:
+                with st.expander("🔍 Inspect report details", expanded=False):
+                    stored_selection = st.session_state.get("reports__inspect_select")
+                    try:
+                        default_index = valid_ids.index(stored_selection)
+                    except (ValueError, TypeError):
+                        default_index = 0
+
+                    selected_id = st.selectbox(
+                        "Select report",
+                        options=valid_ids,
+                        format_func=lambda x: labels.get(x, x),
+                        index=default_index,
+                        key="reports__inspect_select",
+                    )
+
+                    selected_row = row_lookup.get(selected_id)
+                    if not selected_row:
+                        st.info("Unable to load the selected report details.")
+                    else:
+                        attrs = selected_row.get("attributes") or {}
+                        player = selected_row.get("player") or {}
+
+                        def _display_field(col, label: str, value: Optional[Any]) -> None:
+                            if value is None:
+                                display_value = "—"
+                            elif isinstance(value, str):
+                                display_value = value.strip() or "—"
+                            else:
+                                display_value = str(value)
+                            col.markdown(f"**{label}**\n\n{display_value}")
+
+                        meta_cols_top = st.columns(3)
+                        _display_field(meta_cols_top[0], "Player", player.get("name") or selected_row.get("player_name"))
+                        _display_field(meta_cols_top[1], "Club", player.get("current_club"))
+                        _display_field(meta_cols_top[2], "Report date", selected_row.get("report_date"))
+
+                        meta_cols_bottom = st.columns(3)
+                        _display_field(meta_cols_bottom[0], "Competition", selected_row.get("competition"))
+                        _display_field(meta_cols_bottom[1], "Opponent", selected_row.get("opponent"))
+                        _display_field(
+                            meta_cols_bottom[2],
+                            "Position",
+                            attrs.get("position") or selected_row.get("position_played"),
+                        )
+
+                        rating_cols = st.columns(4)
+
+                        def _fmt_rating(value: Any) -> str:
+                            try:
+                                num = float(value)
+                            except (TypeError, ValueError):
+                                return "—"
+                            if pd.isna(num):
+                                return "—"
+                            return f"{num:.1f}"
+
+                        rating_map = [
+                            ("Technique", attrs.get("technique")),
+                            ("Game intelligence", attrs.get("game_intelligence")),
+                            ("Mental", attrs.get("mental")),
+                            ("Athletic", attrs.get("athletic")),
+                        ]
+
+                        for col, (label, value) in zip(rating_cols, rating_map):
+                            col.metric(label, _fmt_rating(value))
+
+                        comment = attrs.get("comments")
+                        if comment:
+                            st.markdown("**Comments**")
+                            st.write(comment)
+                        else:
+                            st.caption("No comments recorded for this report.")
+
+                        with st.expander("Show raw attributes", expanded=False):
+                            st.json(attrs)
     else:
         st.caption("No reports yet.")
