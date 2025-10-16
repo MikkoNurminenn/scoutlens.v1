@@ -26,6 +26,28 @@ from app.perf import track
 from app.report_payload import build_report_payload, serialize_report_attributes
 
 
+FILTER_DEFAULTS: dict[str, Any] = {
+    "reports__f_opp": "",
+    "reports__f_comp": "",
+    "reports__f_ment": 1,
+    "reports__f_foot": [],
+    "reports__f_date_toggle": False,
+    "reports__f_date": None,
+}
+
+
+def _reset_report_filters() -> None:
+    """Reset all report filter widgets back to their defaults."""
+
+    for key, default in FILTER_DEFAULTS.items():
+        if default is None:
+            st.session_state.pop(key, None)
+        else:
+            st.session_state[key] = default
+    # Ensure optional selections don't keep pointing to filtered-out rows
+    st.session_state.pop("reports__inspect_select", None)
+
+
 bootstrap_sidebar_auto_collapse()
 
 
@@ -602,16 +624,7 @@ def show_reports_page() -> None:
             st.caption(f"Showing {len(df_f)} / {len(df)} reports")
         with btn_col:
             if st.button("Clear filters", key="reports__clear_filters", type="secondary"):
-                st.session_state.update(
-                    {
-                        "reports__f_opp": "",
-                        "reports__f_comp": "",
-                        "reports__f_ment": 1,
-                        "reports__f_foot": [],
-                        "reports__f_date_toggle": False,
-                        "reports__f_date": (),
-                    }
-                )
+                _reset_report_filters()
                 st.rerun()
 
         with track("reports:table"):
