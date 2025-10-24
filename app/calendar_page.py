@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any, Dict, List, Tuple
 from urllib.parse import quote_plus
 
@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from app.db_tables import MATCHES, MATCH_TARGETS
 from app.supabase_client import get_client
+from app.scout_reporter import insert_match
 
 try:
     from streamlit_calendar import calendar as third_party_calendar
@@ -318,10 +319,10 @@ def show_calendar_page() -> None:
         "Matches appear in the calendar using their local kickoff time when a timezone is available."
     )
 
+    _maybe_show_recent_success()
+    _render_add_match_form()
+
     matches = _load_matches()
-    if not matches:
-        st.info("No matches found yet. Add matches from the Reports page to populate the calendar.")
-        return
 
     events: List[Dict[str, Any]] = []
     metadata_map: Dict[str, Dict[str, Any]] = {}
@@ -335,10 +336,6 @@ def show_calendar_page() -> None:
         metadata_map[event["id"]] = metadata
         if metadata.get("match_id"):
             match_ids.append(metadata["match_id"])
-
-    if not events:
-        st.info("Matches are missing kickoff times, so there is nothing to plot yet.")
-        return
 
     targets_map = _load_match_targets(tuple(match_ids))
     for meta in metadata_map.values():
@@ -361,6 +358,9 @@ def show_calendar_page() -> None:
                 "includes `st.calendar` or install the `streamlit-calendar` package."
             )
 
+    if not events:
+        st.info("No fixtures scheduled yet. Use the form above to add your first match.")
+
     if selected_event_id and selected_event_id in metadata_map:
         st.session_state[SELECTBOX_KEY] = selected_event_id
         default_selected_id = selected_event_id
@@ -371,27 +371,42 @@ def show_calendar_page() -> None:
     st.subheader("Match details")
     detail_ids = list(metadata_map.keys())
     if not detail_ids:
-        st.caption("No match metadata available.")
-        return
+        st.caption("No match metadata available. Add a match to see its details here.")
+    else:
+        if default_selected_id not in detail_ids:
+            default_selected_id = detail_ids[0]
+            st.session_state[SELECTBOX_KEY] = default_selected_id
 
-    if default_selected_id not in detail_ids:
-        default_selected_id = detail_ids[0]
-        st.session_state[SELECTBOX_KEY] = default_selected_id
+        default_index = (
+            detail_ids.index(default_selected_id)
+            if default_selected_id in detail_ids
+            else 0
+        )
 
-    default_index = detail_ids.index(default_selected_id) if default_selected_id in detail_ids else 0
+        selected_id = st.selectbox(
+            "Select a match to inspect",
+            options=detail_ids,
+            format_func=lambda match_id: _format_match_label(metadata_map[match_id]),
+            index=default_index,
+            key=SELECTBOX_KEY,
+        )
+        selected = metadata_map.get(selected_id)
+        if not selected:
+            st.caption("Select a match to see its kickoff details.")
+            return
 
-    selected_id = st.selectbox(
-        "Select a match to inspect",
-        options=detail_ids,
-        format_func=lambda match_id: _format_match_label(metadata_map[match_id]),
-        index=default_index,
-        key=SELECTBOX_KEY,
-    )
-    selected = metadata_map.get(selected_id)
-    if not selected:
-        st.caption("Select a match to see its kickoff details.")
-        return
+        _render_match_details(selected)
 
+    _render_upcoming_and_past(matches)
+
+
+def _maybe_show_recent_success() -> None:
+    message = st.session_state.pop("calendar_recent_add", None)
+    if message:
+        st.success(message)
+
+
+def _render_match_details(selected: Dict[str, Any]) -> None:
     kickoff_local = selected.get("kickoff_local")
     kickoff_utc = selected.get("kickoff_utc")
     tz_name = selected.get("tz_name") or "UTC"
@@ -441,6 +456,169 @@ def show_calendar_page() -> None:
             if club:
                 subtitle = f"{subtitle} • {club}" if subtitle else club
             st.markdown(f"- **{name}**{f' ({subtitle})' if subtitle else ''}")
+
+
+def _render_upcoming_and_past(matches: List[Dict[str, Any]]) -> None:
+    upcoming, past = _split_matches(matches)
+
+    st.markdown("### 📆 Upcoming fixtures")
+    if not upcoming:
+        st.caption("No upcoming fixtures scheduled.")
+    else:
+        for kickoff_utc, match in upcoming:
+            st.markdown(_format_match_row(match, kickoff_utc))
+
+    st.markdown("### ⏱️ Past fixtures")
+    if not past:
+        st.caption("No past fixtures recorded yet.")
+    else:
+        for kickoff_utc, match in past:
+            st.markdown(_format_match_row(match, kickoff_utc))
+
+
+def _split_matches(matches: List[Dict[str, Any]]) -> Tuple[List[Tuple[datetime, Dict[str, Any]]], List[Tuple[datetime, Dict[str, Any]]]]:
+    now_utc = datetime.now(ZoneInfo("UTC"))
+    upcoming: List[Tuple[datetime, Dict[str, Any]]] = []
+    past: List[Tuple[datetime, Dict[str, Any]]] = []
+    for match in matches:
+        kickoff_utc = _parse_datetime(match.get("kickoff_at"))
+        if kickoff_utc is None:
+            continue
+        if kickoff_utc >= now_utc:
+            upcoming.append((kickoff_utc, match))
+        else:
+            past.append((kickoff_utc, match))
+
+    upcoming.sort(key=lambda item: item[0])
+    past.sort(key=lambda item: item[0], reverse=True)
+    return upcoming, past
+
+
+def _format_match_row(match: Dict[str, Any], kickoff_utc: datetime) -> str:
+    home = (match.get("home_team") or "").strip() or "?"
+    away = (match.get("away_team") or "").strip() or "?"
+    tz_name = (match.get("tz_name") or match.get("timezone") or "UTC").strip() or "UTC"
+    kickoff_local = _ensure_timezone(kickoff_utc, tz_name) or kickoff_utc
+    local_label = kickoff_local.strftime("%Y-%m-%d %H:%M")
+    comp = (match.get("competition") or "").strip()
+    location = (match.get("location") or match.get("venue") or "").strip()
+    parts = [f"**{home} vs {away}**", f"{local_label} ({tz_name})"]
+    if comp:
+        parts.append(comp)
+    if location:
+        parts.append(location)
+    return " • ".join(parts)
+
+
+def _render_add_match_form() -> None:
+    with st.expander("➕ Add match", expanded=False):
+        with st.form("calendar_add_match_form"):
+            c1, c2 = st.columns(2)
+            home = c1.text_input("Home team", key="calendar_add_home", autocomplete="off")
+            away = c2.text_input("Away team", key="calendar_add_away", autocomplete="off")
+
+            now = datetime.now()
+            match_date = st.date_input("Match date", now.date(), key="calendar_add_date")
+            match_time = st.time_input(
+                "Kickoff time",
+                now.replace(hour=18, minute=0, second=0, microsecond=0).time(),
+                key="calendar_add_time",
+            )
+
+            default_tz = st.session_state.get("calendar_last_tz", "UTC")
+            tz_name = st.text_input(
+                "Timezone (IANA, e.g. Europe/Helsinki)",
+                value=default_tz,
+                key="calendar_add_tz",
+                autocomplete="off",
+            )
+
+            c3, c4 = st.columns(2)
+            competition = c3.text_input(
+                "Competition (optional)", key="calendar_add_comp", autocomplete="off"
+            )
+            location = c4.text_input(
+                "Location (optional)", key="calendar_add_location", autocomplete="off"
+            )
+            venue = st.text_input("Venue (optional)", key="calendar_add_venue", autocomplete="off")
+            notes = st.text_area("Notes (optional)", key="calendar_add_notes")
+
+            submitted = st.form_submit_button("Save match", type="primary")
+            if submitted:
+                _handle_match_submission(
+                    home,
+                    away,
+                    match_date,
+                    match_time,
+                    tz_name,
+                    competition,
+                    location,
+                    venue,
+                    notes,
+                )
+
+
+def _handle_match_submission(
+    home: str,
+    away: str,
+    match_date: date,
+    match_time: time,
+    tz_name: str,
+    competition: str,
+    location: str,
+    venue: str,
+    notes: str,
+) -> None:
+    errors: List[str] = []
+    home_clean = (home or "").strip()
+    away_clean = (away or "").strip()
+    if not home_clean:
+        errors.append("Home team is required.")
+    if not away_clean:
+        errors.append("Away team is required.")
+
+    tz_clean = (tz_name or "").strip() or "UTC"
+    try:
+        tz = ZoneInfo(tz_clean)
+    except Exception:
+        errors.append("Timezone must be a valid IANA name (e.g. Europe/Helsinki).")
+        tz = None
+
+    if errors:
+        for msg in errors:
+            st.warning(msg)
+        return
+
+    kickoff_local = datetime.combine(match_date, match_time)
+    kickoff_at = kickoff_local.replace(tzinfo=tz).isoformat() if tz else kickoff_local.isoformat()
+
+    payload = {
+        "home_team": home_clean,
+        "away_team": away_clean,
+        "competition": competition,
+        "location": location,
+        "venue": venue,
+        "notes": notes,
+        "kickoff_at": kickoff_at,
+        "tz_name": tz_clean,
+    }
+
+    try:
+        insert_match(payload)
+    except APIError as exc:
+        st.error("Failed to save match. Please check your Supabase permissions.")
+        print(f"[calendar_page] Supabase error when adding match: {getattr(exc, 'message', exc)}")
+        return
+    except Exception as exc:  # noqa: BLE001
+        st.error("Unexpected error while saving the match.")
+        print(f"[calendar_page] Unexpected error when adding match: {exc}")
+        return
+
+    st.session_state["calendar_last_tz"] = tz_clean
+    st.session_state["calendar_recent_add"] = f"Match {home_clean} vs {away_clean} added."
+    _load_matches.clear()
+    _load_match_targets.clear()
+    st.experimental_rerun()
 
 
 __all__ = ["show_calendar_page"]
