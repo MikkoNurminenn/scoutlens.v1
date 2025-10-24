@@ -5,9 +5,8 @@ import io
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
-import os
 
 import pandas as pd
 import streamlit as st
@@ -147,7 +146,7 @@ def _append_note(text: str):
     client = get_client()
     try:
         client.table(NOTES).insert({
-            "ts": datetime.now().isoformat(timespec="seconds"),
+            "ts": datetime.now(ZoneInfo("UTC")).isoformat(timespec="seconds"),
             "text": txt,
         }).execute()
     except APIError as e:
