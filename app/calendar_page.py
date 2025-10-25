@@ -1,5 +1,5 @@
-# app/pages/calendar_hybrid.py
-# ScoutLens: Local matches + Google Maps (optional) + Supabase-backed match targets (players)
+# app/calendar_page.py
+# ScoutLens – Match calendar: local matches + optional Google Maps + Supabase targets
 
 from __future__ import annotations
 
@@ -17,16 +17,16 @@ import streamlit as st
 from postgrest.exceptions import APIError
 from zoneinfo import ZoneInfo
 
-# --- App integrations ---
-from app.db_tables import MATCHES, MATCH_TARGETS  # MATCHES only used for naming consistency
-from app.supabase_client import get_client  # expected to return configured Supabase client
+# --- App deps (expected in your repo) ---
+from app.db_tables import MATCHES, MATCH_TARGETS  # MATCHES used only for naming consistency
+from app.supabase_client import get_client
 
 try:
     from streamlit_calendar import calendar as third_party_calendar
 except ModuleNotFoundError:  # pragma: no cover
     third_party_calendar = None  # type: ignore[assignment]
 
-# ---- Storage config (local for matches only) ----
+# ---- Local storage config (matches only) ----
 DATA_DIR = Path("data")
 MATCHES_PATH = DATA_DIR / "matches.json"
 
@@ -35,9 +35,20 @@ SELECTBOX_KEY = "calendar_selected_event_id"
 GMAPS_API_KEY = st.secrets.get("GOOGLE_MAPS_API_KEY") or os.getenv("GOOGLE_MAPS_API_KEY")
 
 
-# =========================
-# Filesystem helpers (local matches)
-# =========================
+# ============== Infra helpers ==============
+def _safe_rerun() -> None:
+    """Version-safe rerun."""
+    rr = getattr(st, "rerun", None)
+    if callable(rr):
+        rr()
+        return
+    old = getattr(st, "experimental_rerun", None)
+    if callable(old):
+        old()
+        return
+    st.info("Please refresh the page to see updates.")
+
+
 def _ensure_data_dir() -> None:
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -52,10 +63,11 @@ def _read_json_or_default(path: Path, default: Any) -> Any:
         with path.open("r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
-        return default  # corrupted file → ignore
+        return default  # tolerate corruption
 
 
 def _write_json_atomic(path: Path, data: Any) -> None:
+    # why: atomic rename prevents partial writes
     tmp_fd, tmp_name = tempfile.mkstemp(prefix=path.name, dir=str(path.parent))
     try:
         with open(tmp_fd, "w", encoding="utf-8") as f:
@@ -65,9 +77,7 @@ def _write_json_atomic(path: Path, data: Any) -> None:
         st.error(f"Saving failed for {path.name}: {exc}")
 
 
-# =========================
-# Time helpers
-# =========================
+# ============== Time helpers ==============
 def _ensure_timezone(dt: datetime | None, tz_name: str | None) -> datetime | None:
     if dt is None:
         return None
@@ -97,9 +107,7 @@ def _parse_datetime(value: Any) -> datetime | None:
     return dt.astimezone(ZoneInfo("UTC"))
 
 
-# =========================
-# Google Maps helpers (optional)
-# =========================
+# ============== Google Maps (optional) ==============
 @st.cache_data(ttl=60 * 30, show_spinner=False)
 def _gmaps_text_search(query: str, limit: int = 5) -> List[Dict[str, str]]:
     if not GMAPS_API_KEY or not query.strip():
@@ -112,7 +120,7 @@ def _gmaps_text_search(query: str, limit: int = 5) -> List[Dict[str, str]]:
         data = resp.json()
     except Exception:
         return []
-    results = []
+    results: List[Dict[str, str]] = []
     for r in (data.get("results") or [])[:limit]:
         pid = r.get("place_id")
         name = r.get("name")
@@ -127,12 +135,14 @@ def _gmaps_place_url(name: str, place_id: str) -> str:
 
 
 def _build_google_maps_url(match: Dict[str, Any]) -> str | None:
+    # prefer explicit URL/Place ID if present
     if isinstance(match.get("google_maps_url"), str) and match["google_maps_url"].strip():
         return match["google_maps_url"].strip()
     pid = match.get("google_maps_place_id")
     pname = match.get("google_maps_name") or match.get("venue") or match.get("location")
     if isinstance(pid, str) and pid and isinstance(pname, str) and pname.strip():
         return _gmaps_place_url(pname.strip(), pid)
+    # fallback: search by text
     for key in ("venue", "stadium", "location"):
         value = match.get(key)
         if isinstance(value, str) and value.strip():
@@ -141,9 +151,7 @@ def _build_google_maps_url(match: Dict[str, Any]) -> str | None:
     return None
 
 
-# =========================
-# Domain transforms
-# =========================
+# ============== Domain transforms ==============
 def _match_to_event(match: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]] | None:
     kickoff_utc = _parse_datetime(match.get("kickoff_at"))
     if kickoff_utc is None:
@@ -162,6 +170,7 @@ def _match_to_event(match: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, An
 
     event_id = match.get("id") or f"match-{kickoff_utc.isoformat()}"
     match_id = match.get("id")
+
     maps_url = _build_google_maps_url(match)
 
     event = {
@@ -200,9 +209,7 @@ def _match_to_event(match: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, An
     return event, metadata
 
 
-# =========================
-# Local data access (matches)
-# =========================
+# ============== Local matches I/O ==============
 @st.cache_data(ttl=60, show_spinner=False)
 def _load_matches() -> List[Dict[str, Any]]:
     _ensure_data_dir()
@@ -229,9 +236,7 @@ def insert_match_local(payload: Dict[str, Any]) -> Dict[str, Any]:
     return new_row
 
 
-# =========================
-# Supabase data access (match targets / players)
-# =========================
+# ============== Supabase: match targets (players) ==============
 @st.cache_data(ttl=60, show_spinner=False)
 def _load_match_targets(match_ids: Tuple[str, ...]) -> Dict[str, List[Dict[str, Any]]]:
     ids = tuple(sorted({mid for mid in match_ids if mid}))
@@ -272,9 +277,7 @@ def _load_match_targets(match_ids: Tuple[str, ...]) -> Dict[str, List[Dict[str, 
     return targets
 
 
-# =========================
-# UI helpers
-# =========================
+# ============== UI helpers ==============
 def _format_match_label(metadata: Dict[str, Any]) -> str:
     home = metadata.get("home_team") or "?"
     away = metadata.get("away_team") or "?"
@@ -367,14 +370,10 @@ def _render_third_party_calendar(events: List[Dict[str, Any]]) -> str | None:
     return None
 
 
-# =========================
-# Page
-# =========================
+# ============== Page ==============
 def show_calendar_page() -> None:
     st.title("📅 Match calendar")
-    st.caption(
-        "Local matches + optional Google Maps. Target players are fetched from Supabase."
-    )
+    st.caption("Local matches + optional Google Maps. Target players are fetched from Supabase.")
 
     _maybe_show_recent_success()
     _render_add_match_form()
@@ -448,9 +447,7 @@ def show_calendar_page() -> None:
     _render_upcoming_and_past(matches)
 
 
-# =========================
-# UI sections
-# =========================
+# ============== UI sections ==============
 def _maybe_show_recent_success() -> None:
     message = st.session_state.pop("calendar_recent_add", None)
     if message:
@@ -587,7 +584,7 @@ def _render_add_match_form() -> None:
             venue = st.text_input("Venue (optional, e.g. stadium)", key="calendar_add_venue", autocomplete="off")
             notes = st.text_area("Notes (optional)", key="calendar_add_notes")
 
-            # Google Maps lookup
+            # Google Maps lookup (optional)
             if not GMAPS_API_KEY:
                 st.caption("Set `GOOGLE_MAPS_API_KEY` in `.streamlit/secrets.toml` to enable Google Maps search.")
             else:
@@ -638,9 +635,7 @@ def _render_add_match_form() -> None:
                 )
 
 
-# =========================
-# Submission handler
-# =========================
+# ============== Submit handler ==============
 def _handle_match_submission(
     home: str,
     away: str,
@@ -678,7 +673,7 @@ def _handle_match_submission(
     kickoff_local = datetime.combine(match_date, match_time)
     kickoff_at = kickoff_local.replace(tzinfo=tz).isoformat() if tz else kickoff_local.isoformat()
 
-    payload = {
+    payload: Dict[str, Any] = {
         "home_team": home_clean,
         "away_team": away_clean,
         "competition": competition,
@@ -704,7 +699,7 @@ def _handle_match_submission(
     st.session_state["calendar_recent_add"] = f"Match {home_clean} vs {away_clean} added."
     _load_matches.clear()
     _load_match_targets.clear()
-    st.experimental_rerun()
+    _safe_rerun()
 
 
 __all__ = ["show_calendar_page"]
