@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 
 import streamlit as st
 from supabase import AuthError
+from supabase_auth.errors import AuthApiError
 
 from app.utils.supa import get_client as _get_cached_client
 
@@ -109,10 +110,20 @@ def _clear_session_state(reason: Optional[str] = None) -> None:
         auth.pop("last_error", None)
 
 
+def _safe_get_session(client) -> Any | None:
+    """Fetch the current Supabase session, clearing state on Auth API errors."""
+    try:
+        return client.auth.get_session()
+    except AuthApiError as exc:
+        print(f"Supabase get_session failed: {exc}")
+        _clear_session_state("Your session expired. Please sign in again.")
+        return None
+
+
 def _apply_saved_session(client) -> None:
     """Sync Supabase client auth with tokens stored in session state."""
+    current = _safe_get_session(client)
     stored = st.session_state.get(_SESSION_STATE_KEY)
-    current = client.auth.get_session()
     current_access = session_value(current, "access_token") if current else None
 
     if stored:
@@ -131,7 +142,7 @@ def _apply_saved_session(client) -> None:
                 _store_session(session, user)
                 return
 
-    current = client.auth.get_session()
+    current = _safe_get_session(client)
     if current and session_value(current, "access_token"):
         _store_session(current, session_value(current, "user"))
         return
