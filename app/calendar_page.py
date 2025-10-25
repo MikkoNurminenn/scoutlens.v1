@@ -34,6 +34,8 @@ DEFAULT_MATCH_LENGTH_MINUTES = 120
 SELECTBOX_KEY = "calendar_selected_event_id"
 VISIBLE_DATE_KEY = "calendar_visible_date"
 GMAPS_API_KEY = st.secrets.get("GOOGLE_MAPS_API_KEY") or os.getenv("GOOGLE_MAPS_API_KEY")
+LOCAL_TZ_SESSION_KEY = "calendar_detected_tz"
+RECENT_TARGET_KEY = "calendar_recent_target"
 
 
 # ============== Infra helpers ==============
@@ -108,6 +110,41 @@ def _parse_datetime(value: Any) -> datetime | None:
     return dt.astimezone(ZoneInfo("UTC"))
 
 
+# ============== Local timezone helpers ==============
+def _detect_local_timezone(default: str = "UTC") -> str:
+    """Best-effort detection of the user's local timezone."""
+
+    candidates: List[str] = []
+    try:
+        tzinfo = datetime.now().astimezone().tzinfo
+    except Exception:  # pragma: no cover - defensive
+        tzinfo = None
+
+    if tzinfo is None:
+        return default
+
+    key = getattr(tzinfo, "key", None)
+    if isinstance(key, str) and key:
+        candidates.append(key)
+
+    zone = getattr(tzinfo, "zone", None)
+    if isinstance(zone, str) and zone:
+        candidates.append(zone)
+
+    tzname = tzinfo.tzname(datetime.now()) if hasattr(tzinfo, "tzname") else None
+    if isinstance(tzname, str) and tzname:
+        candidates.append(tzname)
+
+    for candidate in candidates:
+        try:
+            ZoneInfo(candidate)
+            return candidate
+        except Exception:
+            continue
+
+    return default
+
+
 # ============== Google Maps (optional) ==============
 @st.cache_data(ttl=60 * 30, show_spinner=False)
 def _gmaps_text_search(query: str, limit: int = 5) -> List[Dict[str, str]]:
@@ -127,12 +164,53 @@ def _gmaps_text_search(query: str, limit: int = 5) -> List[Dict[str, str]]:
         name = r.get("name")
         addr = r.get("formatted_address")
         if pid and name:
-            results.append({"place_id": pid, "name": name, "address": addr or ""})
+            geometry = r.get("geometry") or {}
+            location = geometry.get("location") if isinstance(geometry, dict) else {}
+            lat = location.get("lat") if isinstance(location, dict) else None
+            lng = location.get("lng") if isinstance(location, dict) else None
+            results.append(
+                {
+                    "place_id": pid,
+                    "name": name,
+                    "address": addr or "",
+                    "lat": lat,
+                    "lng": lng,
+                }
+            )
     return results
 
 
 def _gmaps_place_url(name: str, place_id: str) -> str:
     return f"https://www.google.com/maps/search/?api=1&query={quote_plus(name)}&query_place_id={quote_plus(place_id)}"
+
+
+def _gmaps_timezone_lookup(lat: float | None, lng: float | None) -> str | None:
+    if not GMAPS_API_KEY or lat is None or lng is None:
+        return None
+
+    url = "https://maps.googleapis.com/maps/api/timezone/json"
+    params = {
+        "location": f"{lat},{lng}",
+        "timestamp": int(datetime.now(ZoneInfo("UTC")).timestamp()),
+        "key": GMAPS_API_KEY,
+    }
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    if data.get("status") != "OK":
+        return None
+
+    tz_id = data.get("timeZoneId")
+    if isinstance(tz_id, str) and tz_id:
+        return tz_id
+    return None
 
 
 def _build_google_maps_url(match: Dict[str, Any]) -> str | None:
@@ -160,6 +238,8 @@ def _match_to_event(match: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, An
 
     tz_name = match.get("tz_name") or match.get("timezone") or "UTC"
     kickoff_local = _ensure_timezone(kickoff_utc, tz_name) or kickoff_utc
+    location_tz_name = (match.get("location_tz_name") or "").strip() or None
+    creator_tz_name = (match.get("creator_tz_name") or "").strip() or None
 
     ends_at = _parse_datetime(match.get("ends_at_utc"))
     if ends_at is None:
@@ -190,6 +270,8 @@ def _match_to_event(match: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, An
             "kickoff_utc": kickoff_utc.isoformat(),
             "kickoff_local": kickoff_local.isoformat(),
             "google_maps_url": maps_url,
+            "location_tz_name": location_tz_name,
+            "creator_tz_name": creator_tz_name,
         },
     }
 
@@ -204,6 +286,8 @@ def _match_to_event(match: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, An
         "kickoff_local": kickoff_local,
         "kickoff_utc": kickoff_utc,
         "tz_name": tz_name,
+        "location_tz_name": location_tz_name,
+        "creator_tz_name": creator_tz_name,
         "notes": match.get("notes"),
         "google_maps_url": maps_url,
     }
@@ -327,6 +411,76 @@ def _load_match_targets(match_ids: Tuple[str, ...]) -> Dict[str, List[Dict[str, 
     return targets
 
 
+# Additional players lookup for linking targets
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_target_player_options() -> List[Dict[str, Any]]:
+    client = get_client()
+    if not client:
+        return []
+
+    try:
+        resp = (
+            client.table(PLAYERS)
+            .select("id,name,position,current_club")
+            .order("name")
+            .limit(1000)
+            .execute()
+        )
+    except APIError as exc:
+        st.error("Failed to load players from Supabase.")
+        print(f"[calendar_page] Supabase error (players options): {getattr(exc, 'message', exc)}")
+        return []
+    except Exception as exc:  # noqa: BLE001
+        st.error("Unexpected error while loading players.")
+        print(f"[calendar_page] Unexpected error (players options): {exc}")
+        return []
+
+    rows = resp.data or []
+    options: List[Dict[str, Any]] = []
+    for row in rows:
+        pid = row.get("id")
+        if not pid:
+            continue
+        options.append(
+            {
+                "id": pid,
+                "name": row.get("name"),
+                "position": row.get("position"),
+                "current_club": row.get("current_club"),
+            }
+        )
+    return options
+
+
+def _handle_add_target_player(match_id: str, player_id: str) -> None:
+    client = get_client()
+    if not client:
+        st.error("Supabase client is not configured.")
+        return
+
+    try:
+        client.table(MATCH_TARGETS).insert({"match_id": match_id, "player_id": player_id}).execute()
+    except APIError as exc:
+        message = getattr(exc, "message", exc)
+        message_text = str(message).lower()
+        if "duplicate" in message_text and "match_targets" in message_text:
+            st.warning("That player is already linked to this match.")
+        elif "foreign key" in message_text:
+            st.error("Match or player is missing in Supabase. Sync the match before linking players.")
+        else:
+            st.error("Failed to link target player. Please try again.")
+        print(f"[calendar_page] Supabase error (add target): {message}")
+        return
+    except Exception as exc:  # noqa: BLE001
+        st.error("Unexpected error while linking target player.")
+        print(f"[calendar_page] Unexpected error (add target): {exc}")
+        return
+
+    st.session_state[RECENT_TARGET_KEY] = "Target player linked to the match."
+    _load_match_targets.clear()
+    _safe_rerun()
+
+
 # ============== UI helpers ==============
 def _format_match_label(metadata: Dict[str, Any]) -> str:
     home = metadata.get("home_team") or "?"
@@ -354,6 +508,20 @@ def _build_event_description(metadata: Dict[str, Any]) -> str:
         if names:
             parts.append("Targets: " + ", ".join(names))
     return " • ".join(parts)
+
+
+def _format_player_option(player: Dict[str, Any]) -> str:
+    name = (player.get("name") or "").strip() or "Unnamed player"
+    bits: List[str] = []
+    position = (player.get("position") or "").strip()
+    club = (player.get("current_club") or "").strip()
+    if position:
+        bits.append(position)
+    if club:
+        bits.append(club)
+    if bits:
+        return f"{name} ({' • '.join(bits)})"
+    return name
 
 
 def _normalize_calendar_date(value: Any) -> str | None:
@@ -576,16 +744,20 @@ def show_calendar_page() -> None:
 
 # ============== UI sections ==============
 def _maybe_show_recent_success() -> None:
-    message = st.session_state.pop("calendar_recent_add", None)
-    if message:
-        st.success(message)
+    for key in ("calendar_recent_add", RECENT_TARGET_KEY):
+        message = st.session_state.pop(key, None)
+        if message:
+            st.success(message)
 
 
 def _render_match_details(selected: Dict[str, Any]) -> None:
     kickoff_local = selected.get("kickoff_local")
     kickoff_utc = selected.get("kickoff_utc")
     tz_name = selected.get("tz_name") or "UTC"
-    cols = st.columns(2)
+    creator_tz_name = (selected.get("creator_tz_name") or "").strip() or None
+    location_tz_name = (selected.get("location_tz_name") or "").strip() or None
+    show_creator_metric = bool(creator_tz_name and isinstance(kickoff_utc, datetime))
+    cols = st.columns(3 if show_creator_metric else 2)
     with cols[0]:
         if isinstance(kickoff_local, datetime):
             st.metric("Local kickoff", kickoff_local.strftime("%Y-%m-%d %H:%M"), help=tz_name)
@@ -596,6 +768,13 @@ def _render_match_details(selected: Dict[str, Any]) -> None:
             st.metric("UTC kickoff", kickoff_utc.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%d %H:%M"))
         else:
             st.metric("UTC kickoff", "Unknown")
+    if show_creator_metric and isinstance(kickoff_utc, datetime):
+        with cols[2]:
+            try:
+                creator_dt = kickoff_utc.astimezone(ZoneInfo(creator_tz_name))
+                st.metric("Creator kickoff", creator_dt.strftime("%Y-%m-%d %H:%M"), help=creator_tz_name)
+            except Exception:
+                st.metric("Creator kickoff", "Unavailable", help=creator_tz_name)
 
     st.markdown("### Fixture information")
     location_display = selected.get("location") or selected.get("venue")
@@ -605,8 +784,13 @@ def _render_match_details(selected: Dict[str, Any]) -> None:
         ("Competition", selected.get("competition")),
         ("Location", location_display),
         ("Venue", selected.get("venue")),
-        ("Notes", selected.get("notes")),
+        ("Match timezone", tz_name),
     ]
+    if location_tz_name and location_tz_name != tz_name:
+        detail_rows.append(("Location timezone", location_tz_name))
+    if creator_tz_name:
+        detail_rows.append(("Creator timezone", creator_tz_name))
+    detail_rows.append(("Notes", selected.get("notes")))
     for label, value in detail_rows:
         pretty_value = value if value else "—"
         st.markdown(f"**{label}:** {pretty_value}")
@@ -647,6 +831,51 @@ def _render_match_details(selected: Dict[str, Any]) -> None:
             if club:
                 subtitle = f"{subtitle} • {club}" if subtitle else club
             st.markdown(f"- **{name}**{f' ({subtitle})' if subtitle else ''}")
+
+    match_id = selected.get("match_id")
+    if isinstance(match_id, str) and match_id:
+        st.markdown("#### Link a target player")
+        auth = st.session_state.get("auth", {})
+        if not auth.get("authenticated"):
+            st.info("Sign in to link target players to this match.")
+        else:
+            player_options = _load_target_player_options()
+            if not player_options:
+                st.caption("No players available to link yet. Create players first in the player editor.")
+            else:
+                existing_ids = {t.get("player_id") for t in targets if t.get("player_id")}
+                available_players = [
+                    p for p in player_options if p.get("id") and p.get("id") not in existing_ids
+                ]
+                if not available_players:
+                    st.caption("All available players are already linked to this match.")
+                else:
+                    with st.form(key=f"calendar_target_form_{match_id}"):
+                        option_indices = list(range(len(available_players)))
+
+                        def _label_for_index(idx: int) -> str:
+                            try:
+                                return _format_player_option(available_players[idx])
+                            except Exception:  # pragma: no cover - defensive fallback
+                                return "Unknown player"
+
+                        selection_idx = st.selectbox(
+                            "Player",
+                            options=option_indices,
+                            format_func=_label_for_index,
+                            key=f"calendar_target_select_{match_id}",
+                        )
+                        submitted = st.form_submit_button("Link player", type="primary")
+                        if submitted:
+                            if selection_idx not in option_indices:
+                                st.warning("Select a player to link.")
+                            else:
+                                candidate = available_players[selection_idx]
+                                player_id = candidate.get("id")
+                                if not isinstance(player_id, str) or not player_id:
+                                    st.error("Selected player is missing an identifier.")
+                                else:
+                                    _handle_add_target_player(match_id, player_id)
 
 
 def _render_upcoming_and_past(matches: List[Dict[str, Any]]) -> None:
@@ -702,6 +931,11 @@ def _format_match_row(match: Dict[str, Any], kickoff_utc: datetime) -> str:
 
 
 def _render_add_match_form() -> None:
+    detected_local_tz = st.session_state.get(LOCAL_TZ_SESSION_KEY)
+    if not detected_local_tz:
+        detected_local_tz = _detect_local_timezone()
+        st.session_state[LOCAL_TZ_SESSION_KEY] = detected_local_tz
+
     with st.expander("➕ Add match", expanded=False):
         with st.form("calendar_add_match_form"):
             c1, c2 = st.columns(2)
@@ -716,7 +950,12 @@ def _render_add_match_form() -> None:
                 key="calendar_add_time",
             )
 
-            default_tz = st.session_state.get("calendar_last_tz", "UTC")
+            default_tz = (
+                st.session_state.get("calendar_last_tz")
+                or st.session_state.get("calendar_add_tz")
+                or detected_local_tz
+                or "UTC"
+            )
             tz_name = st.text_input(
                 "Timezone (IANA, e.g. Europe/Helsinki)",
                 value=default_tz,
@@ -755,10 +994,20 @@ def _render_add_match_form() -> None:
                         pick = results[idx]
                         preview_url = _gmaps_place_url(pick["name"], pick["place_id"])
                         st.markdown(f"[Preview in Google Maps]({preview_url})")
+                        tz_guess = _gmaps_timezone_lookup(pick.get("lat"), pick.get("lng"))
+                        if tz_guess:
+                            st.session_state["calendar_add_tz"] = tz_guess
+                            st.session_state["calendar_last_tz"] = tz_guess
+                            st.caption(f"Detected timezone: {tz_guess}")
+                        else:
+                            st.caption("Could not determine timezone from Google Maps.")
                         st.session_state["gmaps_pick"] = {
                             "google_maps_place_id": pick["place_id"],
                             "google_maps_name": pick["name"],
                             "google_maps_url": preview_url,
+                            "timezone": tz_guess,
+                            "lat": pick.get("lat"),
+                            "lng": pick.get("lng"),
                             "resolved_location": pick.get("address", ""),
                         }
 
@@ -778,6 +1027,8 @@ def _render_add_match_form() -> None:
                     google_maps_place_id=(pick.get("google_maps_place_id") if isinstance(pick, dict) else None),
                     google_maps_name=(pick.get("google_maps_name") if isinstance(pick, dict) else None),
                     google_maps_url=(pick.get("google_maps_url") if isinstance(pick, dict) else None),
+                    location_tz_name=(pick.get("timezone") if isinstance(pick, dict) else None),
+                    creator_tz_name=st.session_state.get(LOCAL_TZ_SESSION_KEY),
                 )
 
 
@@ -795,6 +1046,8 @@ def _handle_match_submission(
     google_maps_place_id: str | None = None,
     google_maps_name: str | None = None,
     google_maps_url: str | None = None,
+    location_tz_name: str | None = None,
+    creator_tz_name: str | None = None,
 ) -> None:
     errors: List[str] = []
     home_clean = (home or "").strip()
@@ -804,20 +1057,51 @@ def _handle_match_submission(
     if not away_clean:
         errors.append("Away team is required.")
 
-    tz_clean = (tz_name or "").strip() or "UTC"
-    try:
-        tz = ZoneInfo(tz_clean)
-    except Exception:
+    manual_tz = (tz_name or "").strip()
+    location_tz_clean = (location_tz_name or "").strip() or None
+    creator_tz_clean = (creator_tz_name or "").strip() or None
+    tz_candidates: List[str] = []
+    if manual_tz:
+        tz_candidates.append(manual_tz)
+    if location_tz_clean and location_tz_clean not in tz_candidates:
+        tz_candidates.append(location_tz_clean)
+    detected_session_tz = (st.session_state.get(LOCAL_TZ_SESSION_KEY) or "").strip()
+    if detected_session_tz and detected_session_tz not in tz_candidates:
+        tz_candidates.append(detected_session_tz)
+    if "UTC" not in tz_candidates:
+        tz_candidates.append("UTC")
+
+    tz: ZoneInfo | None = None
+    tz_clean = "UTC"
+    invalid_manual = False
+    for candidate in tz_candidates:
+        try:
+            tz = ZoneInfo(candidate)
+            tz_clean = candidate
+            break
+        except Exception:
+            if candidate == manual_tz and manual_tz:
+                invalid_manual = True
+            continue
+
+    if tz is None:
         errors.append("Timezone must be a valid IANA name (e.g. Europe/Helsinki).")
-        tz = None
 
     if errors:
         for msg in errors:
             st.warning(msg)
         return
 
+    if invalid_manual and tz_clean != manual_tz:
+        if location_tz_clean and tz_clean == location_tz_clean:
+            st.info(f"Using timezone {tz_clean} detected from the selected location.")
+        elif detected_session_tz and tz_clean == detected_session_tz:
+            st.info(f"Using timezone {tz_clean} detected from your current session.")
+        else:
+            st.info(f"Using timezone {tz_clean} instead of the provided value.")
+
     kickoff_local = datetime.combine(match_date, match_time)
-    kickoff_at = kickoff_local.replace(tzinfo=tz).isoformat() if tz else kickoff_local.isoformat()
+    kickoff_at = kickoff_local.replace(tzinfo=tz).isoformat()
 
     payload: Dict[str, Any] = {
         "home_team": home_clean,
@@ -829,6 +1113,10 @@ def _handle_match_submission(
         "kickoff_at": kickoff_at,
         "tz_name": tz_clean,
     }
+    if location_tz_clean:
+        payload["location_tz_name"] = location_tz_clean
+    if creator_tz_clean:
+        payload["creator_tz_name"] = creator_tz_clean
     if google_maps_place_id and google_maps_name and google_maps_url:
         payload["google_maps_place_id"] = google_maps_place_id
         payload["google_maps_name"] = google_maps_name
