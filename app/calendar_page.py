@@ -237,6 +237,18 @@ def insert_match_local(payload: Dict[str, Any]) -> Dict[str, Any]:
     return new_row
 
 
+def delete_match_local(match_id: str) -> bool:
+    _ensure_data_dir()
+    rows = _read_json_or_default(MATCHES_PATH, default=[])
+    if not isinstance(rows, list):
+        return False
+    filtered = [row for row in rows if isinstance(row, dict) and row.get("id") != match_id]
+    if len(filtered) == len(rows):
+        return False
+    _write_json_atomic(MATCHES_PATH, filtered)
+    return True
+
+
 # ============== Supabase: match targets (players) ==============
 @st.cache_data(ttl=60, show_spinner=False)
 def _load_match_targets(match_ids: Tuple[str, ...]) -> Dict[str, List[Dict[str, Any]]]:
@@ -603,6 +615,25 @@ def _render_match_details(selected: Dict[str, Any]) -> None:
     if maps_url:
         st.markdown(f"[Open in Google Maps]({maps_url})")
 
+    match_id = selected.get("match_id")
+    if isinstance(match_id, str) and match_id:
+        delete_container = st.container()
+        with delete_container:
+            if st.button("Delete this match", key=f"delete_{match_id}", type="secondary"):
+                st.session_state["calendar_delete_candidate"] = match_id
+
+            candidate = st.session_state.get("calendar_delete_candidate")
+            if candidate == match_id:
+                st.warning("This will remove the match from the calendar. This action cannot be undone.")
+                confirm_col, cancel_col = st.columns(2)
+                with confirm_col:
+                    if st.button("Confirm delete", key=f"confirm_delete_{match_id}", type="primary"):
+                        _handle_delete_match(match_id)
+                        return
+                with cancel_col:
+                    if st.button("Cancel", key=f"cancel_delete_{match_id}"):
+                        st.session_state.pop("calendar_delete_candidate", None)
+
     st.markdown("### Target players")
     targets = selected.get("targets") or []
     if not targets:
@@ -812,6 +843,28 @@ def _handle_match_submission(
 
     st.session_state["calendar_last_tz"] = tz_clean
     st.session_state["calendar_recent_add"] = f"Match {home_clean} vs {away_clean} added."
+    _load_matches.clear()
+    _load_match_targets.clear()
+    _safe_rerun()
+
+
+def _handle_delete_match(match_id: str) -> None:
+    try:
+        removed = delete_match_local(match_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        st.error("Unexpected error while deleting the match.")
+        print(f"[calendar_page] Local delete error: {exc}")
+        st.session_state.pop("calendar_delete_candidate", None)
+        return
+
+    if not removed:
+        st.warning("Match could not be removed. It may have already been deleted.")
+        st.session_state.pop("calendar_delete_candidate", None)
+        return
+
+    st.session_state.pop("calendar_delete_candidate", None)
+    st.session_state["calendar_recent_add"] = "Match removed from the calendar."
+    st.session_state.pop(SELECTBOX_KEY, None)
     _load_matches.clear()
     _load_match_targets.clear()
     _safe_rerun()
