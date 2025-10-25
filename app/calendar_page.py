@@ -18,7 +18,7 @@ from postgrest.exceptions import APIError
 from zoneinfo import ZoneInfo
 
 # --- App deps (expected in your repo) ---
-from app.db_tables import MATCHES, MATCH_TARGETS  # MATCHES used only for naming consistency
+from app.db_tables import MATCHES, MATCH_TARGETS, PLAYERS  # MATCHES used only for naming consistency
 from app.supabase_client import get_client
 
 try:
@@ -248,7 +248,7 @@ def _load_match_targets(match_ids: Tuple[str, ...]) -> Dict[str, List[Dict[str, 
     try:
         resp = (
             client.table(MATCH_TARGETS)
-            .select("match_id, player_id, player:player_id(name, position, current_club)")
+            .select("match_id, player_id")
             .in_("match_id", list(ids))
             .execute()
         )
@@ -261,14 +261,51 @@ def _load_match_targets(match_ids: Tuple[str, ...]) -> Dict[str, List[Dict[str, 
         print(f"[calendar_page] Unexpected error (match targets): {exc}")
         return {}
 
+    rows = resp.data or []
     targets: Dict[str, List[Dict[str, Any]]] = {}
-    for row in resp.data or []:
+    player_ids = sorted({row.get("player_id") for row in rows if row.get("player_id")})
+    player_lookup: Dict[str, Dict[str, Any]] = {}
+
+    if player_ids:
+        chunk_size = 50
+        for start in range(0, len(player_ids), chunk_size):
+            chunk = player_ids[start : start + chunk_size]
+            try:
+                player_resp = (
+                    client.table(PLAYERS)
+                    .select("id, name, position, current_club")
+                    .in_("id", chunk)
+                    .execute()
+                )
+            except APIError as exc:
+                st.error("Failed to load player details from Supabase.")
+                print(f"[calendar_page] Supabase error (players lookup): {getattr(exc, 'message', exc)}")
+                player_lookup = {}
+                break
+            except Exception as exc:  # noqa: BLE001
+                st.error("Unexpected error while loading player details.")
+                print(f"[calendar_page] Unexpected error (players lookup): {exc}")
+                player_lookup = {}
+                break
+
+            for player_row in player_resp.data or []:
+                pid = player_row.get("id")
+                if not pid:
+                    continue
+                player_lookup[pid] = {
+                    "name": player_row.get("name"),
+                    "position": player_row.get("position"),
+                    "current_club": player_row.get("current_club"),
+                }
+
+    for row in rows:
         match_id = row.get("match_id")
         if not match_id:
             continue
-        player = row.get("player") or {}
+        player_id = row.get("player_id")
+        player = player_lookup.get(player_id, {})
         entry = {
-            "player_id": row.get("player_id"),
+            "player_id": player_id,
             "name": player.get("name"),
             "position": player.get("position"),
             "current_club": player.get("current_club"),
