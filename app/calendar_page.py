@@ -32,6 +32,7 @@ MATCHES_PATH = DATA_DIR / "matches.json"
 
 DEFAULT_MATCH_LENGTH_MINUTES = 120
 SELECTBOX_KEY = "calendar_selected_event_id"
+VISIBLE_DATE_KEY = "calendar_visible_date"
 GMAPS_API_KEY = st.secrets.get("GOOGLE_MAPS_API_KEY") or os.getenv("GOOGLE_MAPS_API_KEY")
 
 
@@ -343,6 +344,72 @@ def _build_event_description(metadata: Dict[str, Any]) -> str:
     return " • ".join(parts)
 
 
+def _normalize_calendar_date(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        # Accept YYYY-MM-DD or ISO timestamp strings
+        if len(text) >= 10:
+            candidate = text[:10]
+            try:
+                datetime.strptime(candidate, "%Y-%m-%d")
+            except ValueError:
+                return None
+            return candidate
+    return None
+
+
+def _remember_calendar_view(state: Any) -> None:
+    if not isinstance(state, (dict, list)):
+        return
+
+    def _candidate_from_payload(payload: Dict[str, Any]) -> str | None:
+        if not isinstance(payload, dict):
+            return None
+        view = payload.get("view")
+        if isinstance(view, dict):
+            for key in ("currentStart", "activeStart", "start"):
+                normalized = _normalize_calendar_date(view.get(key))
+                if normalized:
+                    return normalized
+        for key in (
+            "visible_date",
+            "date",
+            "start_date",
+            "initialDate",
+            "default_date",
+        ):
+            normalized = _normalize_calendar_date(payload.get(key))
+            if normalized:
+                return normalized
+        event_payload = payload.get("event")
+        if isinstance(event_payload, dict):
+            for key in ("start", "date"):
+                normalized = _normalize_calendar_date(event_payload.get(key))
+                if normalized:
+                    return normalized
+        return None
+
+    payloads: List[Dict[str, Any]] = []
+    if isinstance(state, dict):
+        payloads.append(state)
+    elif isinstance(state, list):
+        payloads.extend([item for item in state if isinstance(item, dict)])
+
+    for payload in reversed(payloads):
+        normalized = _candidate_from_payload(payload)
+        if normalized:
+            st.session_state[VISIBLE_DATE_KEY] = normalized
+            break
+
+
 def _render_native_calendar(
     events: List[Dict[str, Any]], metadata_map: Dict[str, Dict[str, Any]]
 ) -> str | None:
@@ -368,10 +435,17 @@ def _render_native_calendar(
         )
 
     selected = None
+    calendar_kwargs: Dict[str, Any] = {"events": native_events, "key": "match_calendar_native"}
+    default_date = st.session_state.get(VISIBLE_DATE_KEY)
+    if isinstance(default_date, str) and default_date:
+        calendar_kwargs["default_date"] = default_date
     try:
-        calendar_state = st.calendar("Match calendar", events=native_events, key="match_calendar_native")
+        calendar_state = st.calendar("Match calendar", **calendar_kwargs)
     except TypeError:
+        calendar_kwargs.pop("default_date", None)
         calendar_state = st.calendar(events=native_events, key="match_calendar_native")
+
+    _remember_calendar_view(calendar_state)
 
     if isinstance(calendar_state, dict):
         selected = (
@@ -397,7 +471,11 @@ def _render_third_party_calendar(events: List[Dict[str, Any]]) -> str | None:
         "slotMinTime": "06:00:00",
         "slotMaxTime": "23:00:00",
     }
+    default_date = st.session_state.get(VISIBLE_DATE_KEY)
+    if isinstance(default_date, str) and default_date:
+        options["initialDate"] = default_date
     calendar_state = third_party_calendar(events=events, options=options, key="match_calendar")
+    _remember_calendar_view(calendar_state)
     if isinstance(calendar_state, dict):
         event_payload = calendar_state.get("event")
         if isinstance(event_payload, dict):
