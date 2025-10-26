@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # file: app/app.py
 from __future__ import annotations
 from pathlib import Path
@@ -236,14 +237,14 @@ NAV_LABELS = {
     "Export": "Export",
 }
 NAV_ICONS = {
-    "Reports": "\uf201",
-    "Calendar": "\uf073",
-    "Inspect Player": "\uf002",
-    "Shortlists": "\uf0ca",
-    "Manage Shortlists": "\uf0ad",
-    "Players": "\uf0c0",
-    "Notes": "\uf249",
-    "Export": "\uf56e",
+    "Reports": "",
+    "Calendar": "",
+    "Inspect Player": "",
+    "Shortlists": "",
+    "Manage Shortlists": "",
+    "Players": "",
+    "Notes": "",
+    "Export": "",
 }
 LEGACY_REMAP = {
     "home": "Reports",
