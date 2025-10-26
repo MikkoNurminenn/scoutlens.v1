@@ -60,6 +60,7 @@ section[data-testid="stSidebar"] .sl-nav .stButton > button .sb-nav-label {
   font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 600;
   letter-spacing: 0.01em;
+  color: var(--sidebar-ink, #f8fafc);
 }
 
 section[data-testid="stSidebar"] .sl-nav .stButton > button::before {
