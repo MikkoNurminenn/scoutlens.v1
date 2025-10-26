@@ -101,12 +101,17 @@ def build_sidebar(
                     """,
                     unsafe_allow_html=True,
                 )
-                selected_option = _build_nav(
-                    current,
-                    nav_options,
-                    nav_display,
-                    icon_map,
-                )
+                try:
+                    selected_option = _build_nav(
+                        current,
+                        nav_options,
+                        nav_display,
+                        icon_map,
+                    )
+                except Exception as exc:  # why: surface UI errors from custom nav renderer
+                    st.error(f"Failed to render navigation: {exc}")
+            else:
+                st.info("No navigation sections available.")
 
             if selected_option and selected_option != current:
                 try:
