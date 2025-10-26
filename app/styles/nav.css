@@ -1,0 +1,30 @@
+/* Hide radio dots (robust selectors for multiple Streamlit versions) */
+
+/* Scope: only in the sidebar */
+section[data-testid="stSidebar"] div[role="radiogroup"] label > div:first-child {
+  display: none !important;              /* old/new DOMs */
+}
+
+/* BaseWeb wrapper (some versions) */
+section[data-testid="stSidebar"] [data-baseweb="radio"] > label > div:first-child {
+  display: none !important;
+}
+
+/* Remove leftover left padding/margin caused by the hidden dot */
+section[data-testid="stSidebar"] div[role="radiogroup"] label > div:nth-child(2),
+section[data-testid="stSidebar"] [data-baseweb="radio"] > label > div:nth-child(2) {
+  margin-left: 0 !important;
+}
+
+/* Optional: make the whole label clickable and full-width */
+section[data-testid="stSidebar"] div[role="radiogroup"] label {
+  width: 100%;
+  cursor: pointer;
+}
+
+/* Keep your pill highlight; if haluat vahvemman hoverin, aktivoi alla: */
+/*
+section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+  filter: brightness(1.05);
+}
+*/

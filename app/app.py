@@ -102,7 +102,17 @@ build_sidebar = importlib.import_module("app.ui.sidebar").__getattribute__(
     "build_sidebar"
 )
 
+def _inject_local_css(path: Path | str) -> None:
+    css_path = Path(path)
+    if css_path.exists():
+        st.markdown(
+            f"<style>{css_path.read_text(encoding='utf-8')}</style>",
+            unsafe_allow_html=True,
+        )
+
+
 st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="expanded")
+_inject_local_css(ROOT / "app" / "styles" / "nav.css")
 
 # ---- Page imports (Streamlit-safe wrapper)
 
@@ -152,7 +162,14 @@ def inject_css():
     token_file = "tokens_dark.css"
     css_imports = []
     css_blocks = []
-    for name in [token_file, "layout.css", "components.css", "sidebar.css", "animations.css"]:
+    for name in [
+        token_file,
+        "layout.css",
+        "components.css",
+        "sidebar.css",
+        "animations.css",
+        "nav.css",
+    ]:
         p = styles_dir / name
         if p.exists():
             text = p.read_text(encoding="utf-8")
