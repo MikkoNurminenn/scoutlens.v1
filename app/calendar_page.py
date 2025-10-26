@@ -10,7 +10,7 @@ import uuid
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlencode
 
 import requests
 import streamlit as st
@@ -508,6 +508,120 @@ def _build_event_description(metadata: Dict[str, Any]) -> str:
     return " • ".join(parts)
 
 
+def _calendar_event_title(metadata: Dict[str, Any]) -> str:
+    home = (metadata.get("home_team") or "").strip()
+    away = (metadata.get("away_team") or "").strip()
+    if home and away:
+        return f"{home} vs {away}"
+    competition = metadata.get("competition")
+    if isinstance(competition, str) and competition.strip():
+        return competition.strip()
+    return "Match"
+
+
+def _calendar_event_location(metadata: Dict[str, Any]) -> str | None:
+    for key in ("venue", "location"):
+        raw = metadata.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
+def _calendar_event_times(metadata: Dict[str, Any]) -> Tuple[datetime, datetime] | None:
+    kickoff_utc = metadata.get("kickoff_utc")
+    if not isinstance(kickoff_utc, datetime):
+        return None
+    end_utc = kickoff_utc + timedelta(minutes=DEFAULT_MATCH_LENGTH_MINUTES)
+    return kickoff_utc, end_utc
+
+
+def _calendar_event_details(metadata: Dict[str, Any]) -> str:
+    parts: List[str] = []
+    kickoff_local = metadata.get("kickoff_local")
+    if isinstance(kickoff_local, datetime):
+        tz_name = (metadata.get("tz_name") or "UTC").strip() or "UTC"
+        parts.append(f"Kickoff: {kickoff_local.strftime('%Y-%m-%d %H:%M')} ({tz_name})")
+    competition = metadata.get("competition")
+    if isinstance(competition, str) and competition.strip():
+        parts.append(f"Competition: {competition.strip()}")
+    location = _calendar_event_location(metadata)
+    if location:
+        parts.append(f"Location: {location}")
+    notes = metadata.get("notes")
+    if isinstance(notes, str) and notes.strip():
+        parts.append(notes.strip())
+    maps_url = metadata.get("google_maps_url")
+    if isinstance(maps_url, str) and maps_url.strip():
+        parts.append(f"Map: {maps_url.strip()}")
+    return "\n\n".join(parts).strip()
+
+
+def _format_ics_datetime(dt: datetime) -> str:
+    aware = dt if dt.tzinfo else dt.replace(tzinfo=ZoneInfo("UTC"))
+    return aware.astimezone(ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _escape_ics(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace("\r\n", "\n")
+        .replace("\n", "\\n")
+        .replace(",", "\\,")
+        .replace(";", "\\;")
+    )
+
+
+def _build_google_calendar_url(metadata: Dict[str, Any]) -> str | None:
+    window = _calendar_event_times(metadata)
+    if window is None:
+        return None
+    start_utc, end_utc = window
+    params = {
+        "action": "TEMPLATE",
+        "text": _calendar_event_title(metadata),
+        "dates": f"{_format_ics_datetime(start_utc)}/{_format_ics_datetime(end_utc)}",
+    }
+    details = _calendar_event_details(metadata)
+    if details:
+        params["details"] = details
+    location = _calendar_event_location(metadata)
+    if location:
+        params["location"] = location
+    return "https://calendar.google.com/calendar/render?" + urlencode(params, quote_via=quote_plus)
+
+
+def _build_ics_attachment(metadata: Dict[str, Any]) -> Tuple[str, bytes] | None:
+    window = _calendar_event_times(metadata)
+    if window is None:
+        return None
+    start_utc, end_utc = window
+    title = _calendar_event_title(metadata)
+    location = _calendar_event_location(metadata)
+    details = _calendar_event_details(metadata)
+    uid_source = metadata.get("match_id") or metadata.get("event_id") or uuid.uuid4().hex
+    now_utc = datetime.now(ZoneInfo("UTC"))
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//ScoutLens//Match Calendar//EN",
+        "CALSCALE:GREGORIAN",
+        "BEGIN:VEVENT",
+        f"UID:{_escape_ics(str(uid_source))}@scoutlens.app",
+        f"DTSTAMP:{_format_ics_datetime(now_utc)}",
+        f"DTSTART:{_format_ics_datetime(start_utc)}",
+        f"DTEND:{_format_ics_datetime(end_utc)}",
+        f"SUMMARY:{_escape_ics(title)}",
+    ]
+    if location:
+        lines.append(f"LOCATION:{_escape_ics(location)}")
+    if details:
+        lines.append(f"DESCRIPTION:{_escape_ics(details)}")
+    lines.extend(["END:VEVENT", "END:VCALENDAR"])
+    content = "\r\n".join(lines) + "\r\n"
+    filename = f"scoutlens-match-{_format_ics_datetime(start_utc)}.ics"
+    return filename, content.encode("utf-8")
+
+
 def _player_option_label(player: Dict[str, Any] | None) -> str:
     if not isinstance(player, dict):
         return "Unknown player"
@@ -651,8 +765,13 @@ def _render_third_party_calendar(events: List[Dict[str, Any]]) -> str | None:
         "headerToolbar": {"start": "title", "center": "", "end": "dayGridMonth,timeGridWeek,timeGridDay,listWeek"},
         "height": "auto",
         "nowIndicator": True,
-        "slotMinTime": "06:00:00",
-        "slotMaxTime": "23:00:00",
+        "expandRows": True,
+        "slotMinTime": "00:00:00",
+        "slotMaxTime": "24:00:00",
+        "slotDuration": "01:00:00",
+        "slotLabelFormat": {"hour": "2-digit", "minute": "2-digit", "hour12": False},
+        "eventTimeFormat": {"hour": "2-digit", "minute": "2-digit", "hour12": False},
+        "scrollTime": "00:00:00",
     }
     default_date = st.session_state.get(VISIBLE_DATE_KEY)
     if isinstance(default_date, str) and default_date:
@@ -826,6 +945,38 @@ def _render_match_details(selected: Dict[str, Any]) -> None:
     maps_url = selected.get("google_maps_url")
     if maps_url:
         st.markdown(f"[Open in Google Maps]({maps_url})")
+
+    google_calendar_url = _build_google_calendar_url(selected)
+    ics_payload = _build_ics_attachment(selected)
+    if google_calendar_url or ics_payload:
+        st.markdown("### Add to personal calendar")
+        container = st.container()
+        if google_calendar_url and ics_payload:
+            google_col, apple_col = container.columns(2)
+        elif google_calendar_url:
+            google_col, apple_col = container, None
+        else:
+            google_col, apple_col = None, container
+
+        if google_calendar_url and google_col is not None:
+            link_button = getattr(google_col, "link_button", None)
+            if callable(link_button):
+                link_button("Add to Google Calendar", google_calendar_url, type="primary")
+            else:  # pragma: no cover - Streamlit < 1.22 fallback
+                google_col.markdown(f"[Add to Google Calendar]({google_calendar_url})")
+
+        if ics_payload and apple_col is not None:
+            file_name, file_bytes = ics_payload
+            download_key = (
+                f"calendar_ics_{selected.get('match_id') or selected.get('event_id') or uuid.uuid4().hex}"
+            )
+            apple_col.download_button(
+                "Download .ics (Apple/Outlook)",
+                data=file_bytes,
+                file_name=file_name,
+                mime="text/calendar",
+                key=download_key,
+            )
 
     match_id = selected.get("match_id")
     if isinstance(match_id, str) and match_id:
