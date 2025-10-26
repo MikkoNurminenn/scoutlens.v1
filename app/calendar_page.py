@@ -681,17 +681,24 @@ def show_calendar_page() -> None:
     events: List[Dict[str, Any]] = []
     metadata_map: Dict[str, Dict[str, Any]] = {}
     match_ids: List[str] = []
+    enriched_matches: List[Tuple[str, Dict[str, Any]]] = []
     for match in matches:
         converted = _match_to_event(match)
         if not converted:
             continue
         event, metadata = converted
+        event_id = event.get("id")
+        if not isinstance(event_id, str) or not event_id:
+            continue
         events.append(event)
-        metadata_map[event["id"]] = metadata
+        metadata_map[event_id] = metadata
+        enriched_matches.append((event_id, match))
         if metadata.get("match_id"):
             match_ids.append(metadata["match_id"])
 
     targets_map = _load_match_targets(tuple(match_ids))
+    player_lookup: Dict[str, Dict[str, Any]] = {}
+
     for meta in metadata_map.values():
         match_id = meta.get("match_id")
         local_targets = _normalize_target_players(meta.get("targets"))
@@ -721,6 +728,57 @@ def show_calendar_page() -> None:
         else:
             meta["targets"] = []
             meta["target_player_ids"] = []
+
+        for entry in meta.get("targets") or []:
+            player_id = entry.get("player_id")
+            if isinstance(player_id, str) and player_id:
+                player_lookup.setdefault(player_id, {})
+                player_lookup[player_id].update(
+                    {
+                        "id": player_id,
+                        "name": entry.get("name"),
+                        "position": entry.get("position"),
+                        "current_club": entry.get("current_club"),
+                    }
+                )
+
+    # Include additional player metadata from Supabase to enrich the picker and filter labels.
+    supabase_players = _load_players_for_picker()
+    for player in supabase_players:
+        pid = player.get("id")
+        if isinstance(pid, str) and pid:
+            player_lookup.setdefault(pid, {})
+            player_lookup[pid].update(player)
+
+    filter_options: List[str] = []
+    if player_lookup:
+        filter_options = sorted(player_lookup.keys(), key=lambda pid: _player_option_label(player_lookup.get(pid)).lower())
+
+    selected_filter_ids: List[str] = []
+    if filter_options:
+        selected_filter_ids = st.multiselect(
+            "Filter calendar by target players",
+            options=filter_options,
+            format_func=lambda pid: _player_option_label(player_lookup.get(pid)),
+            key="calendar_filter_players",
+            help="Select one or more players to show only fixtures that target them.",
+        )
+    elif not events:
+        # Avoid showing a redundant hint when the calendar is empty.
+        pass
+    else:
+        st.caption("Add target players to matches to enable filtering by player.")
+
+    if selected_filter_ids:
+        filter_set = {pid for pid in selected_filter_ids if isinstance(pid, str) and pid}
+        filtered_event_ids = {
+            event_id
+            for event_id, meta in metadata_map.items()
+            if filter_set.intersection(meta.get("target_player_ids") or [])
+        }
+        events = [event for event in events if event.get("id") in filtered_event_ids]
+        metadata_map = {event_id: metadata_map[event_id] for event_id in filtered_event_ids}
+        enriched_matches = [item for item in enriched_matches if item[0] in filtered_event_ids]
 
     selected_event_id = None
     default_selected_id = st.session_state.get(SELECTBOX_KEY)
@@ -768,7 +826,8 @@ def show_calendar_page() -> None:
 
         _render_match_details(selected)
 
-    _render_upcoming_and_past(matches)
+    matches_for_lists = [match for _, match in enriched_matches]
+    _render_upcoming_and_past(matches_for_lists)
 
 
 # ============== UI sections ==============
