@@ -89,7 +89,6 @@ def build_sidebar(
         with st.sidebar:
             st.markdown(_build_header_html(app_title, app_tagline, logo_data_uri), unsafe_allow_html=True)
 
-            selected_option: Optional[str] = None
             if nav_options:
                 st.markdown(
                     """
@@ -100,14 +99,7 @@ def build_sidebar(
                     """,
                     unsafe_allow_html=True,
                 )
-                selected_option = _build_nav(current, nav_options, nav_display)
-
-            if selected_option and selected_option != current:
-                try:
-                    go(selected_option)
-                except Exception as exc:  # noqa: BLE001
-                    # why: don't crash UI on user callback failures
-                    st.warning(f"Navigation failed: {exc}")
+                _build_nav(current, nav_options, nav_display, go)
 
             st.markdown(_nav_behavior_script(icon_map), unsafe_allow_html=True)
 
@@ -185,15 +177,36 @@ def _build_header_html(title: str, tagline: str, logo_data_uri: str) -> str:
     )
 
 
-def _build_nav(current: str, options: List[str], display_map: Dict[str, str]) -> Optional[str]:
-    index = options.index(current) if current in options else 0
-    return st.radio(
+def _build_nav(current: str, options: List[str], display_map: Dict[str, str], go: Callable[[str], None]) -> None:
+    key = "sidebar_nav"
+
+    if key not in st.session_state:
+        default = current if current in options else options[0]
+        st.session_state[key] = default
+
+    selection = st.session_state.get(key)
+    if selection not in options:
+        selection = current if current in options else options[0]
+        st.session_state[key] = selection
+
+    def _handle_change() -> None:
+        target = st.session_state.get(key)
+        if not target or target not in options:
+            return
+        try:
+            go(target)
+        except Exception as exc:  # noqa: BLE001
+            st.warning(f"Navigation failed: {exc}")
+
+    index = options.index(selection)
+    st.radio(
         "Navigate",
         options=options,
         index=index,
-        format_func=lambda key: display_map.get(key, key),
-        key="sidebar_nav",
+        format_func=lambda k: display_map.get(k, k),
+        key=key,
         label_visibility="collapsed",
+        on_change=_handle_change,
     )
 
 
