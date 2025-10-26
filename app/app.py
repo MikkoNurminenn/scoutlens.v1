@@ -102,7 +102,10 @@ build_sidebar = importlib.import_module("app.ui.sidebar").__getattribute__(
     "build_sidebar"
 )
 
-def _inject_local_css(path: str) -> None:
+st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="expanded")
+
+
+def inject_css(path: str) -> None:
     css_path = Path(path)
     if css_path.exists():
         st.markdown(
@@ -111,8 +114,7 @@ def _inject_local_css(path: str) -> None:
         )
 
 
-st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="expanded")
-_inject_local_css("app/styles/nav.css")
+inject_css("app/styles/nav.css")
 
 # ---- Page imports (Streamlit-safe wrapper)
 
@@ -157,7 +159,7 @@ APP_VERSION = "0.9.1"
 
 # --------- CSS
 
-def inject_css():
+def inject_theme_css():
     styles_dir = ROOT / "app" / "styles"
     token_file = "tokens_dark.css"
     css_imports = []
@@ -289,7 +291,7 @@ def main() -> None:
         logout=logout,
     )
 
-    inject_css()
+    inject_theme_css()
     set_sidebar_background()
 
     page_func = PAGE_FUNCS.get(current, lambda: st.error("Page not found."))
