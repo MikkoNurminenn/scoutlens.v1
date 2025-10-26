@@ -102,7 +102,7 @@ build_sidebar = importlib.import_module("app.ui.sidebar").__getattribute__(
     "build_sidebar"
 )
 
-def _inject_local_css(path: Path | str) -> None:
+def _inject_local_css(path: str) -> None:
     css_path = Path(path)
     if css_path.exists():
         st.markdown(
@@ -112,7 +112,7 @@ def _inject_local_css(path: Path | str) -> None:
 
 
 st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="expanded")
-_inject_local_css(ROOT / "app" / "styles" / "nav.css")
+_inject_local_css("app/styles/nav.css")
 
 # ---- Page imports (Streamlit-safe wrapper)
 
@@ -168,7 +168,6 @@ def inject_css():
         "components.css",
         "sidebar.css",
         "animations.css",
-        "nav.css",
     ]:
         p = styles_dir / name
         if p.exists():
