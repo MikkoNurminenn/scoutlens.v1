@@ -79,8 +79,7 @@ def _build_loading_overlay_markup(
         html, body, .stApp {{ overflow: hidden !important; }}
         .stApp > header,
         .stApp > div[data-testid="stToolbar"],
-        .stApp > div[data-testid="stDecoration"],
-        .stApp > div[data-testid="stSidebar"] {{ display: none !important; }}
+        .stApp > div[data-testid="stDecoration"] {{ display: none !important; }}
         .sl-login-loading-overlay {{
             position: fixed;
             inset: 0;

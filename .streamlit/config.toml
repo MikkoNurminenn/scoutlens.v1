@@ -1,6 +1,9 @@
 [server]
 headless = true
 
+[client]
+showSidebarNavigation = true
+
 [theme]
 base="dark"
 primaryColor="#e0a020"

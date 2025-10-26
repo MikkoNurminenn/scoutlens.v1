@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from contextlib import nullcontext
+from html import escape
 from typing import Mapping, Sequence
 
 import streamlit as st
@@ -18,9 +19,14 @@ _NAV_ICON_SCRIPT = r"""
       return document;
     }
   }
+  function getNavRoot(doc){
+    if (!doc) return null;
+    return doc.querySelector('#sl-sidebar-nav') || doc.querySelector('section[data-testid="stSidebar"] .sl-nav');
+  }
   function apply(doc){
-    if (!doc) return;
-    const buttons = doc.querySelectorAll('section[data-testid="stSidebar"] .sl-nav .stButton > button');
+    const navRoot = getNavRoot(doc);
+    if (!navRoot) return;
+    const buttons = navRoot.querySelectorAll('.stButton > button');
     buttons.forEach((btn) => {
       if (!btn || btn.dataset.slNavIconReady === '1') {
         return;
@@ -64,8 +70,8 @@ _NAV_ICON_SCRIPT = r"""
   function ensureObserver(){
     const doc = getDoc();
     if (!doc) return;
-    const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
-    if (!sidebar) {
+    const navRoot = getNavRoot(doc) || doc.querySelector('section[data-testid="stSidebar"]');
+    if (!navRoot) {
       setTimeout(ensureObserver, 120);
       return;
     }
@@ -74,7 +80,7 @@ _NAV_ICON_SCRIPT = r"""
       return;
     }
     const observer = new MutationObserver(() => apply(doc));
-    observer.observe(sidebar, { childList: true, subtree: true });
+    observer.observe(navRoot, { childList: true, subtree: true });
     w.__slNavIconObserver = observer;
   }
   if (w.__slNavIconRefresh) {
@@ -113,10 +119,15 @@ def render_sidebar_nav(
     target = container if container is not None else st.sidebar
     ctx = target if hasattr(target, "__enter__") else nullcontext()
 
+    aria_label = heading or "Sidebar navigation"
+
     with ctx:
         if heading:
             st.subheader(heading)
-        st.markdown('<div class="sl-nav">', unsafe_allow_html=True)
+        st.markdown(
+            f"<nav id=\"sl-sidebar-nav\" class=\"sl-nav\" role=\"navigation\" aria-label=\"{escape(aria_label)}\">",
+            unsafe_allow_html=True,
+        )
 
         for name in options:
             label = (display_map.get(name) if display_map else name) or name
@@ -143,7 +154,7 @@ def render_sidebar_nav(
                 if rerun_on_click:
                     st.rerun()
 
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</nav>", unsafe_allow_html=True)
         st.markdown(_NAV_ICON_SCRIPT, unsafe_allow_html=True)
 
     return st.session_state[state_key]
