@@ -37,3 +37,41 @@ section[data-testid="stSidebar"] [role="radiogroup"] > label [aria-hidden="true"
 section[data-testid="stSidebar"] [role="radiogroup"] > label > div:last-child {
   margin-left: 0 !important;
 }
+
+/* === v3: Restore label text and hide only the dot container === */
+
+/* 0) Undo v2 rule that accidentally hid the text container */
+section[data-testid="stSidebar"] label input[type="radio"] + div {
+  display: initial !important;      /* bring text back */
+}
+
+/* 1) Hide the dot container (the div that wraps the radio input) */
+section[data-testid="stSidebar"] .stRadio label:has(> div > input[type="radio"]) > div:first-child,
+section[data-testid="stSidebar"] [data-baseweb="radio"] label:has(> div > input[type="radio"]) > div:first-child {
+  display: none !important;
+}
+
+/* 2) Remove the leftover left spacing so text aligns nicely */
+section[data-testid="stSidebar"] .stRadio label:has(> div > input[type="radio"]) > div:nth-child(2),
+section[data-testid="stSidebar"] [data-baseweb="radio"] label:has(> div > input[type="radio"]) > div:nth-child(2) {
+  margin-left: 0 !important;
+}
+
+/* 3) Make the whole row clickable */
+section[data-testid="stSidebar"] .stRadio label,
+section[data-testid="stSidebar"] [data-baseweb="radio"] label {
+  width: 100%;
+  cursor: pointer;
+}
+
+/* 4) Fallback for browsers without :has() — shrink the dot box to zero */
+@supports not selector(:has(*)) {
+  section[data-testid="stSidebar"] .stRadio label > div:first-child,
+  section[data-testid="stSidebar"] [data-baseweb="radio"] label > div:first-child {
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+  }
+}
