@@ -209,7 +209,7 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   gap: 1rem;
   width: 100%;
   box-sizing: border-box;
-  padding: 0.95rem 1.25rem 0.95rem 3.75rem;
+  padding: 0.95rem 1.25rem 0.95rem 1.5rem;
   min-height: 3.1rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--sidebar-border);
@@ -277,39 +277,12 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
 }
 
 .sb-nav-icon {
-  position: absolute;
-  left: 1.15rem;
-  top: 50%;
-  transform: translateY(-50%);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.6rem;
-  height: 2.6rem;
-  border-radius: 0.9rem;
-  background: color-mix(in srgb, var(--sidebar-accent) 32%, transparent);
-  color: color-mix(in srgb, var(--sidebar-ink) 82%, black 18%);
-  font-size: 1.1rem;
-  font-weight: 900;
-  font-family: "Font Awesome 6 Free", "Font Awesome 6 Pro", "Inter", system-ui, sans-serif;
-  pointer-events: none;
-  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+  display: none;
 }
 
 .sb-nav-icon i {
   display: inline-block;
   font-style: normal;
-}
-
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover .sb-nav-icon) {
-  background: color-mix(in srgb, var(--sidebar-accent) 42%, transparent);
-}
-
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label[data-active="true"] .sb-nav-icon),
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label[aria-current="page"] .sb-nav-icon) {
-  background: color-mix(in srgb, var(--sidebar-accent) 65%, transparent);
-  color: var(--sidebar-ink);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
 }
 
 .sb-nav-label {
@@ -318,6 +291,12 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   align-items: center;
   gap: 0.25rem;
   color: inherit;
+}
+
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label[data-active="true"] .sb-nav-label),
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label[aria-current="page"] .sb-nav-label) {
+  color: color-mix(in srgb, var(--sidebar-ink) 85%, white 15%);
+  font-weight: 700;
 }
 
 /* ===== Profile block ===== */
