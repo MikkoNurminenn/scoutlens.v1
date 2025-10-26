@@ -1,77 +1,77 @@
-/* ===== Sidebar navigation radio reset (Streamlit 1.37 compatible) ===== */
+/* === Sidebar button-based nav (no radio dots) === */
+section[data-testid="stSidebar"] .sl-nav {
+  display: flex;
+  flex-direction: column;
+}
 
-/*
-  Streamlit 1.37 refactored the radio markup so the visual bullet now lives inside
-  extra wrapper <div> elements. The previous adjacency selectors hid the entire
-  option content which in turn made the navigation appear empty and unclickable.
-  These rules keep the native radio input in the DOM for accessibility, but make
-  it invisible and allow the label container to handle clicks instead.
-*/
+section[data-testid="stSidebar"] .sl-nav .stButton {
+  margin-bottom: 0.4rem;
+}
 
-section[data-testid="stSidebar"] [role="radiogroup"] > label {
+section[data-testid="stSidebar"] .sl-nav .stButton > button {
   position: relative;
   width: 100%;
-  cursor: pointer;
+  text-align: left;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.85rem 1.25rem 0.85rem 1.65rem;
+  font-weight: 600;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease,
+    box-shadow 0.18s ease, color 0.18s ease;
 }
 
-section[data-testid="stSidebar"] [role="radiogroup"] > label input[type="radio"] {
-  position: absolute !important;
-  inset: 0;
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0 !important;
-  pointer-events: auto;
+section[data-testid="stSidebar"] .sl-nav .stButton > button::before {
+  content: "";
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.3rem;
+  height: 62%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sidebar-accent, #937cff) 55%, transparent);
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
-/* Hide Streamlit/BaseWeb specific visual wrappers when present */
-section[data-testid="stSidebar"] [role="radiogroup"] > label input[type="radio"] + *,
-section[data-testid="stSidebar"] [role="radiogroup"] > label [data-baseweb="radio"],
-section[data-testid="stSidebar"] [role="radiogroup"] > label [data-baseweb="styledradio"],
-section[data-testid="stSidebar"] [role="radiogroup"] > label svg[aria-hidden="true"],
-section[data-testid="stSidebar"] [role="radiogroup"] > label [aria-hidden="true"][role="presentation"] {
+section[data-testid="stSidebar"] .sl-nav .stButton > button:hover {
+  transform: translateX(4px);
+  filter: brightness(1.05);
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.06) 100%, transparent);
+  border-color: color-mix(in srgb, rgba(255, 255, 255, 0.08) 70%, var(--sidebar-ink, #ffffff) 30%);
+}
+
+section[data-testid="stSidebar"] .sl-nav .stButton > button:hover::before {
+  opacity: 0.5;
+}
+
+/* Active item = disabled button → korostus */
+section[data-testid="stSidebar"] .sl-nav .stButton > button:disabled {
+  opacity: 1;
+  cursor: default;
+  background: linear-gradient(135deg, rgba(147, 124, 255, 0.22), rgba(147, 124, 255, 0.08));
+  border-color: rgba(147, 124, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(147, 124, 255, 0.25) inset, var(--sidebar-shadow, none);
+  color: color-mix(in srgb, var(--sidebar-ink, #ffffff) 85%, white 15%);
+}
+
+section[data-testid="stSidebar"] .sl-nav .stButton > button:disabled::before {
+  opacity: 1;
+  transform: translateY(-50%) scaleY(1.05);
+}
+
+section[data-testid="stSidebar"] .sl-nav .stButton > button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sidebar-ring, rgba(147, 124, 255, 0.45)),
+    0 0 0 5px color-mix(in srgb, var(--sidebar-ring, rgba(147, 124, 255, 0.45)) 60%, transparent);
+}
+
+/* Remove any leftover radio hacks */
+section[data-testid="stSidebar"] .stRadio {
   display: none !important;
-}
-
-/* Ensure the visible content block always aligns flush with the sidebar edge */
-section[data-testid="stSidebar"] [role="radiogroup"] > label > div:last-child {
-  margin-left: 0 !important;
-}
-
-/* === v3: Restore label text and hide only the dot container === */
-
-/* 0) Undo v2 rule that accidentally hid the text container */
-section[data-testid="stSidebar"] label input[type="radio"] + div {
-  display: initial !important;      /* bring text back */
-}
-
-/* 1) Hide the dot container (the div that wraps the radio input) */
-section[data-testid="stSidebar"] .stRadio label:has(> div > input[type="radio"]) > div:first-child,
-section[data-testid="stSidebar"] [data-baseweb="radio"] label:has(> div > input[type="radio"]) > div:first-child {
-  display: none !important;
-}
-
-/* 2) Remove the leftover left spacing so text aligns nicely */
-section[data-testid="stSidebar"] .stRadio label:has(> div > input[type="radio"]) > div:nth-child(2),
-section[data-testid="stSidebar"] [data-baseweb="radio"] label:has(> div > input[type="radio"]) > div:nth-child(2) {
-  margin-left: 0 !important;
-}
-
-/* 3) Make the whole row clickable */
-section[data-testid="stSidebar"] .stRadio label,
-section[data-testid="stSidebar"] [data-baseweb="radio"] label {
-  width: 100%;
-  cursor: pointer;
-}
-
-/* 4) Fallback for browsers without :has() — shrink the dot box to zero */
-@supports not selector(:has(*)) {
-  section[data-testid="stSidebar"] .stRadio label > div:first-child,
-  section[data-testid="stSidebar"] [data-baseweb="radio"] label > div:first-child {
-    width: 0 !important;
-    min-width: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    overflow: hidden !important;
-  }
 }

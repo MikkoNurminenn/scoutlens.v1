@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import base64
-import json
 import re
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from functools import lru_cache
 from html import escape
@@ -12,6 +11,8 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
 
 import streamlit as st
+
+from app.ui_nav import render_sidebar_nav
 
 
 # ----------------------------- Public API --------------------------------- #
@@ -100,15 +101,18 @@ def build_sidebar(
                     """,
                     unsafe_allow_html=True,
                 )
-                selected_option = _build_nav(current, nav_options, nav_display)
+                selected_option = _build_nav(
+                    current,
+                    nav_options,
+                    nav_display,
+                    icon_map,
+                )
 
             if selected_option and selected_option != current:
                 try:
                     go(selected_option)
                 except Exception as exc:  # noqa: BLE001
                     st.warning(f"Navigation failed: {exc}")
-
-            st.markdown(_nav_behavior_script(icon_map), unsafe_allow_html=True)
 
             auth = st.session_state.get("auth", {})
             user = auth.get("user")
@@ -184,15 +188,22 @@ def _build_header_html(title: str, tagline: str, logo_data_uri: str) -> str:
     )
 
 
-def _build_nav(current: str, options: List[str], display_map: Dict[str, str]) -> Optional[str]:
-    index = options.index(current) if current in options else 0
-    return st.radio(
-        "Navigate",
-        options=options,
-        index=index,
-        format_func=lambda key: display_map.get(key, key),
-        key="sidebar_nav",
-        label_visibility="collapsed",
+def _build_nav(
+    current: str,
+    options: List[str],
+    display_map: Dict[str, str],
+    icon_map: Dict[str, str],
+) -> Optional[str]:
+    if current in options and st.session_state.get("sidebar_nav") != current:
+        st.session_state["sidebar_nav"] = current
+    return render_sidebar_nav(
+        options,
+        state_key="sidebar_nav",
+        display_map=display_map,
+        icon_map=icon_map,
+        heading=None,
+        container=nullcontext(),
+        rerun_on_click=False,
     )
 
 
@@ -235,104 +246,6 @@ def _build_footer_html(title: str, version: str) -> str:
         </footer>
         """.strip()
     )
-
-
-def _nav_behavior_script(icon_map: Dict[str, str]) -> str:
-    # why: JSON payload kept minimal & safe for embedding
-    icon_payload = json.dumps(icon_map, ensure_ascii=True, separators=(",", ":"))
-    return """
-    <script id="sl-sidebar-nav-enhancer">
-    (function(){
-      const ICON_MAP = __ICON_MAP__;
-      const w = window;
-      function getDoc(){
-        try { return (w.parent && w.parent.document) ? w.parent.document : document; }
-        catch (e) { return document; }
-      }
-      function syncNav(){
-        const doc = getDoc();
-        const sidebar = doc && doc.querySelector('section[data-testid="stSidebar"]');
-        if (!sidebar) return;
-        const group = sidebar.querySelector('[role="radiogroup"]');
-        if (!group) return;
-        group.setAttribute('aria-label', 'Primary navigation');
-        group.dataset.owner = 'scoutlens';
-        const labels = group.querySelectorAll(':scope > label');
-        labels.forEach((label) => {
-          const input = label.querySelector('input');
-          if (!input) return;
-          const value = input.value;
-          const spec = ICON_MAP[value] || '';
-          let iconSpan = label.querySelector('.sb-nav-icon');
-          if (spec) {
-            if (!iconSpan) {
-              iconSpan = doc.createElement('span');
-              iconSpan.className = 'sb-nav-icon';
-              iconSpan.setAttribute('aria-hidden', 'true');
-              iconSpan.setAttribute('role', 'presentation');
-              input.insertAdjacentElement('afterend', iconSpan);
-            }
-            if (/\\bfa-/.test(spec)) iconSpan.innerHTML = '<i class=\"' + spec + '\"></i>';
-            else iconSpan.textContent = spec;
-          } else if (iconSpan) {
-            iconSpan.remove();
-            iconSpan = null;
-          }
-          const isActive = !!input.checked;
-          label.dataset.option = value;
-          label.dataset.active = isActive ? 'true' : 'false';
-          label.setAttribute('aria-current', isActive ? 'page' : 'false');
-          let textWrap = Array.from(label.children).find((node) => {
-            if (node === iconSpan || node === input) return false;
-            return !node.contains(input);
-          }) || null;
-          if (!textWrap) {
-            textWrap = doc.createElement('div');
-            textWrap.className = 'sb-nav-label';
-            const nodes = Array.from(label.childNodes);
-            nodes.forEach((node) => {
-              if (node === textWrap || node === input || node === iconSpan) return;
-              if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) {
-                node.remove();
-                return;
-              }
-              textWrap.appendChild(node);
-            });
-            label.appendChild(textWrap);
-          }
-          if (!textWrap.classList.contains('sb-nav-label')) {
-            textWrap.classList.add('sb-nav-label');
-          }
-        });
-      }
-      w.__slSidebarIconMap = ICON_MAP;
-      w.__slSidebarNavSync = syncNav;
-
-      if (!w.__slSidebarNavObserver) {
-        const observer = new MutationObserver(() => {
-          if (typeof w.__slSidebarNavSync === 'function') w.__slSidebarNavSync();
-        });
-        w.__slSidebarNavObserver = observer;
-
-        const init = () => {
-          const doc = getDoc();
-          const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
-          if (!sidebar) { setTimeout(init, 150); return; }
-          observer.observe(sidebar, { childList: true, subtree: true });
-          if (typeof w.__slSidebarNavSync === 'function') w.__slSidebarNavSync();
-        };
-        init();
-
-        w.addEventListener('beforeunload', () => {
-          try { observer.disconnect(); } catch(_) {}
-          if (w.__slSidebarNavObserver === observer) w.__slSidebarNavObserver = null;
-        });
-      } else if (typeof w.__slSidebarNavSync === 'function') {
-        w.__slSidebarNavSync();
-      }
-    })();
-    </script>
-    """.replace("__ICON_MAP__", icon_payload)
 
 
 def _sidebar_alert_script() -> str:
