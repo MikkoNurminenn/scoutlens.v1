@@ -283,8 +283,25 @@ def _nav_behavior_script(icon_map: Dict[str, str]) -> str:
           label.dataset.option = value;
           label.dataset.active = isActive ? 'true' : 'false';
           label.setAttribute('aria-current', isActive ? 'page' : 'false');
-          const textWrap = label.querySelector(':scope > div:last-child');
-          if (textWrap && !textWrap.classList.contains('sb-nav-label')) {
+          let textWrap = Array.from(label.children).find((node) => {
+            if (node === iconSpan || node === input) return false;
+            return !node.contains(input);
+          }) || null;
+          if (!textWrap) {
+            textWrap = doc.createElement('div');
+            textWrap.className = 'sb-nav-label';
+            const nodes = Array.from(label.childNodes);
+            nodes.forEach((node) => {
+              if (node === textWrap || node === input || node === iconSpan) return;
+              if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) {
+                node.remove();
+                return;
+              }
+              textWrap.appendChild(node);
+            });
+            label.appendChild(textWrap);
+          }
+          if (!textWrap.classList.contains('sb-nav-label')) {
             textWrap.classList.add('sb-nav-label');
           }
         });

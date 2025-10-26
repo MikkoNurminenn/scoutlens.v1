@@ -1,23 +1,39 @@
-/* ===== Sidebar navigation: hide BaseWeb radio visual dot ===== */
+/* ===== Sidebar navigation radio reset (Streamlit 1.37 compatible) ===== */
 
-/* 1) Piilota varsinainen "pallo" eli inputin jälkeen tuleva visual-div */
-section[data-testid="stSidebar"] label input[type="radio"] + div {
-  display: none !important;
-}
+/*
+  Streamlit 1.37 refactored the radio markup so the visual bullet now lives inside
+  extra wrapper <div> elements. The previous adjacency selectors hid the entire
+  option content which in turn made the navigation appear empty and unclickable.
+  These rules keep the native radio input in the DOM for accessibility, but make
+  it invisible and allow the label container to handle clicks instead.
+*/
 
-/* 2) Poista tyhjä väli (seuraava content-div siirtyy vasemmalle) */
-section[data-testid="stSidebar"] label input[type="radio"] + div + div {
-  margin-left: 0 !important;
-}
-
-/* 3) Varmuuden vuoksi (eri Streamlit buildit) – piilota mahdolliset svg/piirrokset */
-section[data-testid="stSidebar"] .stRadio label svg,
-section[data-testid="stSidebar"] .stRadio label [aria-hidden="true"] {
-  display: none !important;
-}
-
-/* 4) Tee koko rivi klikattavaksi ja täyden leveyden */
-section[data-testid="stSidebar"] .stRadio label {
+section[data-testid="stSidebar"] [role="radiogroup"] > label {
+  position: relative;
   width: 100%;
   cursor: pointer;
+}
+
+section[data-testid="stSidebar"] [role="radiogroup"] > label input[type="radio"] {
+  position: absolute !important;
+  inset: 0;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0 !important;
+  pointer-events: auto;
+}
+
+/* Hide Streamlit/BaseWeb specific visual wrappers when present */
+section[data-testid="stSidebar"] [role="radiogroup"] > label input[type="radio"] + *,
+section[data-testid="stSidebar"] [role="radiogroup"] > label [data-baseweb="radio"],
+section[data-testid="stSidebar"] [role="radiogroup"] > label [data-baseweb="styledradio"],
+section[data-testid="stSidebar"] [role="radiogroup"] > label svg[aria-hidden="true"],
+section[data-testid="stSidebar"] [role="radiogroup"] > label [aria-hidden="true"][role="presentation"] {
+  display: none !important;
+}
+
+/* Ensure the visible content block always aligns flush with the sidebar edge */
+section[data-testid="stSidebar"] [role="radiogroup"] > label > div:last-child {
+  margin-left: 0 !important;
 }
