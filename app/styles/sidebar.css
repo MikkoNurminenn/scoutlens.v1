@@ -213,20 +213,40 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   min-height: 3.1rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--sidebar-border);
+  border-left: 0.3rem solid transparent;
   background: var(--sidebar-bg-elev);
   color: var(--sidebar-ink-muted);
   font-size: 0.98rem;
   font-weight: 600;
   line-height: 1.3;
   transition: transform 0.18s, background 0.18s, border-color 0.18s, color 0.18s,
-    box-shadow 0.18s;
+    box-shadow 0.18s, border-left-color 0.18s;
   cursor: pointer;
+}
+
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label)::before {
+  content: "";
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.3rem;
+  height: 62%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sidebar-accent) 55%, transparent);
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover) {
   transform: translateX(4px);
   background: var(--sidebar-bg-soft);
   border-color: color-mix(in srgb, var(--sidebar-border) 70%, var(--sidebar-ink) 30%);
+  border-left-color: color-mix(in srgb, var(--sidebar-accent) 40%, transparent);
+}
+
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover)::before {
+  opacity: 0.55;
 }
 
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label[data-active="true"]),
@@ -234,13 +254,26 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   background: linear-gradient(0deg, color-mix(in srgb, var(--sidebar-accent) 18%, transparent), transparent),
     var(--sidebar-bg-soft);
   border-color: color-mix(in srgb, var(--sidebar-accent) 35%, black 65%);
+  border-left-color: color-mix(in srgb, var(--sidebar-accent) 82%, transparent);
   box-shadow: var(--sidebar-shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
   color: var(--sidebar-ink);
+}
+
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label[data-active="true"]::before),
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label[aria-current="page"]::before) {
+  opacity: 1;
+  transform: translateY(-50%) scaleY(1.05);
 }
 
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label:focus-within) {
   outline: none;
   box-shadow: 0 0 0 2px var(--sidebar-ring), 0 0 0 5px color-mix(in srgb, var(--sidebar-ring) 60%, transparent);
+}
+
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label input[type="radio"]) {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .sb-nav-icon {
