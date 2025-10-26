@@ -279,9 +279,24 @@ def login(
 ) -> None:
     """Render the authentication form when the user is not signed in."""
 
-    _ensure_auth_state()
+    auth_state = _ensure_auth_state()
     client = get_client()
-    session = client.auth.get_session()
+    session = None
+    try:
+        session = client.auth.get_session()
+    except AuthApiError as exc:
+        print(f"Supabase get_session API error: {exc}")
+        auth_state["last_error"] = "Your session has expired. Please sign in again."
+        try:
+            supabase_sign_out()
+        except Exception as sign_out_exc:  # pragma: no cover - defensive cleanup
+            print(f"Supabase sign_out after get_session failure: {sign_out_exc}")
+    except AuthError as exc:
+        print(f"Supabase get_session auth error: {exc}")
+        auth_state["last_error"] = "Authentication error when restoring your session. Please sign in again."
+    except Exception as exc:  # pragma: no cover - unexpected runtime failures
+        print(f"Supabase get_session unexpected error: {exc}")
+        auth_state["last_error"] = "Unable to verify your session. Please try signing in again."
     if session and session_value(session, "access_token"):
         if st.session_state.pop(_POST_LOGIN_LOADING_KEY, False):
             _render_post_login_loading()
