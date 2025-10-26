@@ -1,5 +1,6 @@
 /* File: styles/tokens_light.css */
 :root {
+  --color-scheme: light;
   /* Light theme colors */
   --bg-page: #FEF4DD;
   --bg-card: #FFFFFF;
@@ -7,11 +8,13 @@
   --accent-2: #823D00;
   --fg-strong: #241700;
   --fg-muted: #5B2F00;
+  --fg-subtle: rgba(91, 47, 0, 0.72);
   --fg-on-accent: #FEF4DD;
   --accent-cyan: #3EA8B3;
   --warning: #F59E0B;
   --error: #DA3C2B;
   --divider: rgba(36, 23, 0, 0.12);
+  --divider-strong: rgba(36, 23, 0, 0.2);
   --skeleton-highlight: rgba(36, 23, 0, 0.06);
   --table-row-alt: rgba(36, 23, 0, 0.02);
 
@@ -44,6 +47,30 @@
   /* Shadows */
   --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.15);
   --shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.25);
+
+  /* Layout helpers */
+  --page-max-width: 1200px;
+  --content-padding-x: clamp(1.2rem, 4vw, 2.6rem);
+  --content-padding-y: clamp(1.25rem, 3.4vw, 2.6rem);
+  --section-gap: clamp(1.3rem, 3vw, 2.4rem);
+
+  /* Sidebar palette */
+  --sidebar-bg: #f4e7cc;
+  --sidebar-bg-elev: #fdf7eb;
+  --sidebar-bg-soft: #fff2d6;
+  --sidebar-border: rgba(36, 23, 0, 0.16);
+  --sidebar-ink: #2d1600;
+  --sidebar-ink-dim: rgba(45, 22, 0, 0.78);
+  --sidebar-ink-muted: rgba(45, 22, 0, 0.6);
+  --sidebar-ring: rgba(62, 168, 179, 0.4);
+  --sidebar-ring-strong: rgba(62, 168, 179, 0.55);
+  --sidebar-accent: #A85A00;
+  --sidebar-accent-soft: rgba(168, 90, 0, 0.14);
+  --sidebar-danger: #DA3C2B;
+  --sidebar-shadow: 0 18px 36px rgba(12, 8, 2, 0.14);
+  --sidebar-width-lg: 340px;
+  --sidebar-width-md: 292px;
+  --sidebar-width-sm: 252px;
 }
 
 /* Optional: gradient helper for hero overlays */

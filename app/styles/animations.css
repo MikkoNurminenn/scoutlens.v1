@@ -13,3 +13,9 @@
   animation: shimmer 1.2s infinite;
 }
 @keyframes shimmer { from{transform:translateX(-100%);} to{transform:translateX(100%);} }
+
+@media (prefers-reduced-motion: reduce) {
+  .lift:hover { transform: none; box-shadow: none; }
+  .fade-in { animation-duration: 0.001s; }
+  .skeleton::after { animation: none; }
+}

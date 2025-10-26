@@ -1,5 +1,6 @@
 /* File: styles/tokens_dark.css */
 :root {
+  --color-scheme: dark;
   /* Colors – tuned to /mnt/data/login_bg.png (sunset, warm amber + deep brown) */
   --bg-page: #241700;     /* tummin ruskea tausta -> maksimi kontrasti */
   --bg-card: #5B2F00;     /* hieman vaaleampi ruskea kortille */
@@ -9,12 +10,14 @@
 
   --fg-strong: #FEF4DD;   /* lämmin kerma; teksti/ikonit, hyvä AA dark‑taustaa vasten */
   --fg-muted: #E0D2BE;    /* vaimennettu beige, toissijainen teksti */
+  --fg-subtle: rgba(224, 210, 190, 0.7);
   --fg-on-accent: #241700; /* tumma teksti meripihkataustalla */
 
   --accent-cyan: #3EA8B3; /* viileä, desaturoitu teal vastapariksi lämpimälle paletille */
   --warning: #F59E0B;     /* lämmin varoitus */
   --error: #DA3C2B;       /* tiilenpunainen virheväri */
   --divider: rgba(254, 244, 221, 0.12); /* lämmin, kevyt jakaja */
+  --divider-strong: rgba(254, 244, 221, 0.28);
   --skeleton-highlight: rgba(254, 244, 221, 0.06);
   --table-row-alt: rgba(254, 244, 221, 0.02);
 
@@ -47,6 +50,30 @@
   /* Shadows */
   --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.45);
   --shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.6);
+
+  /* Layout helpers */
+  --page-max-width: 1200px;
+  --content-padding-x: clamp(1.25rem, 4vw, 2.75rem);
+  --content-padding-y: clamp(1.5rem, 4vw, 3rem);
+  --section-gap: clamp(1.4rem, 3vw, 2.6rem);
+
+  /* Sidebar palette */
+  --sidebar-bg: #101218;
+  --sidebar-bg-elev: #161922;
+  --sidebar-bg-soft: #1c1f2a;
+  --sidebar-border: rgba(124, 135, 155, 0.24);
+  --sidebar-ink: #f8fafc;
+  --sidebar-ink-dim: rgba(226, 232, 240, 0.78);
+  --sidebar-ink-muted: rgba(203, 213, 225, 0.6);
+  --sidebar-ring: rgba(99, 102, 241, 0.65);
+  --sidebar-ring-strong: rgba(99, 102, 241, 0.85);
+  --sidebar-accent: #6366f1;
+  --sidebar-accent-soft: rgba(99, 102, 241, 0.14);
+  --sidebar-danger: #ef4444;
+  --sidebar-shadow: 0 18px 42px rgba(7, 10, 18, 0.55);
+  --sidebar-width-lg: 340px;
+  --sidebar-width-md: 292px;
+  --sidebar-width-sm: 252px;
 }
 
 /* Optional: gradient helper for hero overlays matching the image */
