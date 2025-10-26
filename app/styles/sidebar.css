@@ -1,50 +1,30 @@
 /* path: app/ui/sidebar.css */
 
-/* ===== Dark Grey Sidebar (refined) ===== */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 @import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css");
 
-/* Väriteema + leveydet */
 :root {
-  color-scheme: dark;
-  --bg:        #0f1115;
-  --bg-elev:   #14171d;
-  --bg-soft:   #1a1e25;
-  --ink:       #e7eaf0;
-  --ink-dim:   #c7cbd4;
-  --muted:     #a0a7b4;
-  --border:    #242a33;
-  --ring:      #6d91ff;
-  --hi:        #8ca2ff;
-  --accent:    #3b82f6;
-  --accent-2:  #6366f1;
-  --danger:    #ef4444;
-  --shadow:    0 8px 24px rgba(0,0,0,.4);
-  --radius-lg: 20px;
-  --radius-md: 16px;
-  --radius-sm: 12px;
-
-  --sb-width-lg: 360px;
-  --sb-width-md: 300px;
-  --sb-width-sm: 260px;
+  color-scheme: var(--color-scheme, dark);
+  --sidebar-collapser-size: 2.75rem;
+  --sidebar-collapser-radius: 999px;
 }
 
-/* ===== Sidebar Collapse Button ===== */
+/* ===== Sidebar collapse button ===== */
 :where([data-testid="stSidebarCollapseButton"]) {
   position: fixed;
   top: 1rem;
   left: 1rem;
   z-index: 1300;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: var(--sidebar-collapser-size);
+  height: var(--sidebar-collapser-size);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
 }
 
-[data-testid="stSidebarCollapseButton"] > button,
-button[data-testid="stSidebarCollapseButton"] {
+:where([data-testid="stSidebarCollapseButton"] > button,
+       button[data-testid="stSidebarCollapseButton"]) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -52,79 +32,52 @@ button[data-testid="stSidebarCollapseButton"] {
   height: 100%;
   padding: 0;
   margin: 0;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.55);
-  background: rgba(19, 23, 32, 0.86);
-  color: #f8fafc;
-  box-shadow: 0 12px 32px rgba(10, 12, 18, 0.55);
-  backdrop-filter: blur(6px);
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    border-color 0.2s ease,
+  border-radius: var(--sidebar-collapser-radius);
+  border: 1px solid var(--sidebar-border);
+  background: color-mix(in srgb, var(--sidebar-bg) 92%, black 8%);
+  color: var(--sidebar-ink);
+  box-shadow: var(--sidebar-shadow);
+  backdrop-filter: blur(8px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease,
     background-color 0.2s ease;
   cursor: pointer;
+}
+
+:where([data-testid="stSidebarCollapseButton"] > button svg,
+       button[data-testid="stSidebarCollapseButton"] svg) {
+  width: 1.3rem;
+  height: 1.3rem;
+  fill: currentColor;
+}
+
+:where([data-testid="stSidebarCollapseButton"] > button:hover,
+       [data-testid="stSidebarCollapseButton"] > button:focus-visible,
+       button[data-testid="stSidebarCollapseButton"]:hover,
+       button[data-testid="stSidebarCollapseButton"]:focus-visible) {
+  transform: translateY(-1px);
+  border-color: var(--sidebar-ring);
+  background: color-mix(in srgb, var(--sidebar-bg-elev) 85%, black 15%);
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--sidebar-accent) 25%, transparent);
+  outline: none;
 }
 
 :where(section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"] > button),
 :where(.stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"] > button),
 button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"] {
-  background: #6366f1;
-  color: #0f1115;
-  border-color: rgba(99, 102, 241, 0.75);
-  box-shadow: 0 16px 36px rgba(99, 102, 241, 0.4);
-}
-
-[data-testid="stSidebarCollapseButton"] > button svg,
-button[data-testid="stSidebarCollapseButton"] svg {
-  width: 1.3rem;
-  height: 1.3rem;
-  color: inherit;
-  fill: currentColor;
-  stroke: none;
-}
-
-[data-testid="stSidebarCollapseButton"] > button span,
-button[data-testid="stSidebarCollapseButton"] span {
-  color: inherit;
-}
-
-[data-testid="stSidebarCollapseButton"] > button:hover,
-[data-testid="stSidebarCollapseButton"] > button:focus-visible,
-button[data-testid="stSidebarCollapseButton"]:hover,
-button[data-testid="stSidebarCollapseButton"]:focus-visible {
-  transform: translateY(-1px);
-  background: #1f2530;
-  border-color: rgba(99, 102, 241, 0.65);
-  box-shadow: 0 16px 36px rgba(99, 102, 241, 0.38);
-  outline: none;
+  background: var(--sidebar-accent);
+  color: var(--sidebar-bg);
+  border-color: var(--sidebar-ring-strong);
 }
 
 :where(section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"] > button:hover),
 :where(.stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"] > button:hover),
 button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
-  background: #4f46e5;
-  border-color: rgba(79, 70, 229, 0.85);
-  color: #f8fafc;
-}
-
-[data-testid="stSidebarCollapseButton"] > button:focus-visible,
-button[data-testid="stSidebarCollapseButton"]:focus-visible {
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.55), 0 16px 36px rgba(99, 102, 241, 0.38);
-  outline: 2px solid rgba(99, 102, 241, 0.45);
-  outline-offset: 2px;
-}
-
-:where(section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"] > button:focus-visible),
-:where(.stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"] > button:focus-visible),
-button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:focus-visible {
-  background: #4f46e5;
-  border-color: rgba(79, 70, 229, 0.85);
-  color: #f8fafc;
+  background: color-mix(in srgb, var(--sidebar-accent) 85%, black 15%);
+  color: var(--sidebar-ink);
 }
 
 :where([data-testid="stSidebarCollapseButton"])::after,
-:where(button[data-testid="stSidebarCollapseButton"]::after) {
+:where(button[data-testid="stSidebarCollapseButton"])::after {
   display: none;
 }
 
@@ -141,14 +94,16 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:focus-vi
   }
 }
 
-/* ===== Sidebar ===== */
+/* ===== Sidebar container ===== */
 :where(section[data-testid="stSidebar"]) {
-  background: radial-gradient(1200px 600px at 15% -10%, rgba(255,255,255,.03), transparent 60%), var(--bg);
-  color: var(--ink);
+  background: radial-gradient(1200px 600px at 15% -10%, rgba(255, 255, 255, 0.05), transparent 60%),
+    var(--sidebar-bg);
+  color: var(--sidebar-ink);
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  min-width: var(--sb-width-lg);
-  max-width: var(--sb-width-lg);
-  border-right: 1px solid var(--border);
+  min-width: var(--sidebar-width-lg);
+  max-width: var(--sidebar-width-lg);
+  border-right: 1px solid var(--sidebar-border);
+  box-shadow: var(--sidebar-shadow);
 }
 
 :where(section[data-testid="stSidebar"][aria-expanded="false"]) {
@@ -158,7 +113,9 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:focus-vi
   overflow: hidden;
 }
 
-:where([data-testid="stSidebarResizer"]) { display: none; }
+:where([data-testid="stSidebarResizer"]) {
+  display: none;
+}
 
 :where(section[data-testid="stSidebar"] .block-container) {
   padding: 0 1.1rem 1.4rem;
@@ -172,176 +129,294 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:focus-vi
 .sb-header-card {
   display: flex;
   flex-direction: column;
-  gap: .8rem;
+  gap: 0.8rem;
   padding: 1rem 1rem 1.1rem;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
+  background: var(--sidebar-bg-elev);
+  border: 1px solid var(--sidebar-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--sidebar-shadow);
 }
 
-.sb-logo{ display:flex; justify-content:center; }
-.sb-logo img{ width:100%; border-radius: 16px; box-shadow: var(--shadow); }
+.sb-logo {
+  display: flex;
+  justify-content: center;
+}
 
-.sb-title-block{ display:flex; flex-direction:column; gap:.2rem; text-align:center; }
-.sb-title{ font-size: 1.35rem; font-weight: 700; color: var(--ink); }
-.sb-tagline{ font-size: .95rem; color: var(--muted); font-weight: 500; }
+.sb-logo img {
+  width: 100%;
+  border-radius: 16px;
+  box-shadow: var(--sidebar-shadow);
+}
+
+.sb-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: center;
+}
+
+.sb-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--sidebar-ink);
+}
+
+.sb-tagline {
+  font-size: 0.95rem;
+  color: var(--sidebar-ink-muted);
+  font-weight: 500;
+}
 
 /* ===== Navigation ===== */
-.sb-nav-title{
-  display:flex; align-items:center; gap:.6rem; text-transform:uppercase; letter-spacing:.22em;
-  margin-top:.2rem; margin-bottom:.2rem;
+.sb-nav-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  margin-top: 0.2rem;
+  margin-bottom: 0.2rem;
 }
-.sb-nav-title .sb-nav-text{ font-size:.78rem; font-weight:600; color: var(--hi); }
-.sb-nav-underline{ flex:1; height:1px; background: var(--border); border-radius:999px; }
+
+.sb-nav-title .sb-nav-text {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--sidebar-ink-dim);
+}
+
+.sb-nav-underline {
+  flex: 1;
+  height: 1px;
+  background: var(--sidebar-border);
+  border-radius: 999px;
+}
 
 :where(section[data-testid="stSidebar"] div[data-testid="stRadio"]) {
-  display:flex; flex-direction:column; gap:.7rem;
-  padding:1rem .9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1rem 0.9rem;
   border-radius: var(--radius-lg);
-  border:1px solid var(--border);
-  background: var(--bg-elev);
-  box-shadow: var(--shadow);
+  border: 1px solid var(--sidebar-border);
+  background: var(--sidebar-bg-elev);
+  box-shadow: var(--sidebar-shadow);
 }
 
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label){
-  position:relative; display:flex; align-items:center; gap:1rem;
-  width:100%; box-sizing:border-box;
-  padding:.95rem 1.25rem .95rem 3.75rem;
-  min-height:3.1rem;
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label) {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.95rem 1.25rem 0.95rem 3.75rem;
+  min-height: 3.1rem;
   border-radius: var(--radius-md);
-  border:1px solid var(--border);
-  background: var(--bg-elev);
-  color:var(--ink-dim);
-  font-size:.98rem;
-  font-weight:600;
-  line-height:1.3;
-  transition: transform .18s, background .18s, border-color .18s, color .18s, box-shadow .18s;
-  cursor:pointer;
+  border: 1px solid var(--sidebar-border);
+  background: var(--sidebar-bg-elev);
+  color: var(--sidebar-ink-muted);
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.3;
+  transition: transform 0.18s, background 0.18s, border-color 0.18s, color 0.18s,
+    box-shadow 0.18s;
+  cursor: pointer;
 }
 
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover){
-  transform:translateX(4px);
-  background:var(--bg-soft);
-  border-color: color-mix(in oklab, var(--border), white 6%);
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover) {
+  transform: translateX(4px);
+  background: var(--sidebar-bg-soft);
+  border-color: color-mix(in srgb, var(--sidebar-border) 70%, var(--sidebar-ink) 30%);
 }
 
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label[data-active="true"]),
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label[aria-current="page"]){
-  background:linear-gradient(0deg, rgba(99,102,241,.06), rgba(99,102,241,.06)), var(--bg-soft);
-  border-color:color-mix(in oklab, var(--accent-2), black 65%);
-  box-shadow: var(--shadow), inset 0 0 0 1px rgba(255,255,255,.02);
-  color:var(--ink);
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label[aria-current="page"]) {
+  background: linear-gradient(0deg, color-mix(in srgb, var(--sidebar-accent) 18%, transparent), transparent),
+    var(--sidebar-bg-soft);
+  border-color: color-mix(in srgb, var(--sidebar-accent) 35%, black 65%);
+  box-shadow: var(--sidebar-shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  color: var(--sidebar-ink);
+}
+
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:focus-within) {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sidebar-ring), 0 0 0 5px color-mix(in srgb, var(--sidebar-ring) 60%, transparent);
+}
+
+.sb-nav-icon {
+  position: absolute;
+  left: 1.15rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--sidebar-accent) 32%, transparent);
+  color: color-mix(in srgb, var(--sidebar-ink) 82%, black 18%);
+  font-size: 1.1rem;
+  font-weight: 900;
+  font-family: "Font Awesome 6 Free", "Font Awesome 6 Pro", "Inter", system-ui, sans-serif;
+  pointer-events: none;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+}
+
+.sb-nav-icon i {
+  display: inline-block;
+  font-style: normal;
+}
+
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover .sb-nav-icon) {
+  background: color-mix(in srgb, var(--sidebar-accent) 42%, transparent);
 }
 
 :where(section[data-testid="stSidebar"] [role="radiogroup"] > label[data-active="true"] .sb-nav-icon),
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label[aria-current="page"] .sb-nav-icon){
-  background:color-mix(in oklab, var(--accent-2), transparent 42%);
-  color:var(--ink);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);
+:where(section[data-testid="stSidebar"] [role="radiogroup"] > label[aria-current="page"] .sb-nav-icon) {
+  background: color-mix(in srgb, var(--sidebar-accent) 65%, transparent);
+  color: var(--sidebar-ink);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
 }
 
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:focus-within){
-  outline:none;
-  box-shadow:0 0 0 2px var(--ring), 0 0 0 5px rgba(109,145,255,.18);
+.sb-nav-label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.25rem;
+  color: inherit;
 }
 
-.sb-nav-icon{
-  position:absolute;
-  left:1.15rem;
-  top:50%;
-  transform:translateY(-50%);
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  width:2.6rem;
-  height:2.6rem;
-  border-radius:.9rem;
-  background:color-mix(in oklab, var(--accent-2), transparent 68%);
-  color:color-mix(in oklab, var(--ink), black 10%);
-  font-size:1.1rem;
-  font-weight:900;
-  font-family:"Font Awesome 6 Free","Font Awesome 6 Pro","Inter",system-ui,sans-serif;
-  pointer-events:none;
-  transition:background .18s, color .18s, box-shadow .18s;
+/* ===== Profile block ===== */
+.sb-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding: 0.8rem 0.9rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--sidebar-border);
+  background: var(--sidebar-bg-elev);
+  box-shadow: var(--sidebar-shadow);
 }
 
-.sb-nav-icon i{ display:inline-block; font-style:normal; }
-
-:where(section[data-testid="stSidebar"] [role="radiogroup"] > label:hover .sb-nav-icon){
-  background:color-mix(in oklab, var(--accent-2), transparent 55%);
+.sb-profile-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #303644, #232834);
+  border: 1px solid var(--sidebar-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--sidebar-ink);
+  overflow: hidden;
 }
 
-.sb-nav-label{
-  display:flex;
-  flex:1;
-  align-items:center;
-  gap:.25rem;
-  color:inherit;
+.sb-profile-avatar::after {
+  content: attr(data-initials);
 }
 
-/* ===== Profile ===== */
-.sb-profile-card{
-  display:flex; align-items:center; gap:.75rem; margin-top:auto; padding:.8rem .9rem;
-  border-radius:var(--radius-md); border:1px solid var(--border);
-  background:var(--bg-elev); box-shadow: var(--shadow);
+.sb-profile-avatar.has-image::after {
+  content: "";
 }
-.sb-profile-avatar{ width:44px; height:44px; border-radius:50%; background:linear-gradient(180deg,#303644,#232834);
-  border:1px solid var(--border); display:flex; align-items:center; justify-content:center;
-  font-weight:600; font-size:.95rem; color:var(--ink); overflow:hidden; }
-.sb-profile-avatar::after{ content:attr(data-initials); }
-.sb-profile-avatar.has-image::after{ content:""; }
-.sb-profile-avatar img{ width:100%; height:100%; object-fit:cover; }
-.sb-profile-meta{ display:flex; flex-direction:column; gap:.15rem; }
-.sb-profile-name{ font-weight:600; color:var(--ink); }
-.sb-profile-email{ font-size:.82rem; color:var(--ink-dim); }
 
-/* ===== Sign out button ===== */
-:where(section[data-testid="stSidebar"] div[data-testid="stButton"]){ width:100%; margin-top:.7rem; }
-:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button){
-  width:100%; border-radius:999px;
-  border:1px solid color-mix(in oklab,var(--danger),black 40%);
-  background:color-mix(in oklab,var(--danger),black 88%);
-  color:color-mix(in oklab,var(--danger),white 25%);
-  font-weight:600; letter-spacing:.02em;
-  transition: background .16s, color .16s, border-color .16s, transform .12s;
+.sb-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover){
-  background:color-mix(in oklab,var(--danger),black 80%);
-  color:#ffe4e6; transform:translateY(-1px);
+
+.sb-profile-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
 }
-:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:active){
-  transform:translateY(0);
+
+.sb-profile-name {
+  font-weight: 600;
+  color: var(--sidebar-ink);
 }
-/* ✅ lisätty focus-visible saavutettavuutta varten */
-:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:focus-visible){
-  outline:none;
-  box-shadow:0 0 0 2px var(--ring), 0 0 0 5px rgba(239,68,68,.3);
+
+.sb-profile-email {
+  font-size: 0.82rem;
+  color: var(--sidebar-ink-dim);
+}
+
+/* ===== Sign-out button ===== */
+:where(section[data-testid="stSidebar"] div[data-testid="stButton"]) {
+  width: 100%;
+  margin-top: 0.7rem;
+}
+
+:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button) {
+  width: 100%;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-danger) 70%, black 30%);
+  background: color-mix(in srgb, var(--sidebar-danger) 22%, var(--sidebar-bg));
+  color: color-mix(in srgb, var(--sidebar-danger) 65%, white 35%);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: background 0.16s, color 0.16s, border-color 0.16s, transform 0.12s;
+}
+
+:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover) {
+  background: color-mix(in srgb, var(--sidebar-danger) 36%, var(--sidebar-bg));
+  color: #ffe4e6;
+  transform: translateY(-1px);
+}
+
+:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:active) {
+  transform: translateY(0);
+}
+
+:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sidebar-ring), 0 0 0 5px color-mix(in srgb, var(--sidebar-danger) 35%, transparent);
 }
 
 /* ===== Footer ===== */
-.sb-footer-line{
-  margin-top:1rem; padding-top:.9rem; border-top:1px solid var(--border);
-  display:flex; align-items:center; justify-content:space-between;
-  font-size:.74rem; letter-spacing:.12em; text-transform:uppercase;
-  color:var(--muted);
+.sb-footer-line {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--sidebar-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sidebar-ink-muted);
 }
-.sb-footer-title{ font-weight:600; }
-.sb-version{ font-weight:500; }
 
-/* ===== Responsiivisuus ===== */
-@media (max-width:900px){
-  :where(section[data-testid="stSidebar"]){
-    min-width:var(--sb-width-md);
-    max-width:var(--sb-width-md);
+.sb-footer-title {
+  font-weight: 600;
+}
+
+.sb-version {
+  font-weight: 500;
+}
+
+/* ===== Responsiveness ===== */
+@media (max-width: 900px) {
+  :where(section[data-testid="stSidebar"]) {
+    min-width: var(--sidebar-width-md);
+    max-width: var(--sidebar-width-md);
   }
 }
-@media (max-width:520px){
-  :where(section[data-testid="stSidebar"]){
-    min-width:var(--sb-width-sm);
-    max-width:var(--sb-width-sm);
+
+@media (max-width: 520px) {
+  :where(section[data-testid="stSidebar"]) {
+    min-width: var(--sidebar-width-sm);
+    max-width: var(--sidebar-width-sm);
   }
 }
-@media (prefers-reduced-motion:reduce){
-  *{ transition:none !important; animation:none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
