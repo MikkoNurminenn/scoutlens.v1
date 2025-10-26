@@ -102,8 +102,12 @@ set_sidebar_background = importlib.import_module("app.ui.sidebar_bg").__getattri
 build_sidebar = importlib.import_module("app.ui.sidebar").__getattribute__(
     "build_sidebar"
 )
+apply_theme = importlib.import_module("app.theme.codex_theme").__getattribute__(
+    "apply_theme"
+)
 
 st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="expanded")
+apply_theme()
 
 
 def inject_css(path: str) -> None:
