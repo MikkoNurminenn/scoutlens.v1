@@ -11,6 +11,15 @@
 
 .stMetric { padding: var(--space-3) var(--space-4); }
 
+.stMetric [data-testid="stMetricValue"],
+.stMetric [data-testid="stMetricDelta"] {
+  color: var(--fg-strong);
+}
+
+.stMetric [data-testid="stMetricLabel"] {
+  color: var(--fg-muted);
+}
+
 .sl-kpi {
   text-align: left;
   display: flex;
