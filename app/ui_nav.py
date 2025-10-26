@@ -7,6 +7,91 @@ from typing import Mapping, Sequence
 import streamlit as st
 
 
+_NAV_ICON_SCRIPT = r"""
+<script id="sl-nav-iconify">
+(function(){
+  const w = window;
+  function getDoc(){
+    try {
+      return (w.parent && w.parent.document) ? w.parent.document : document;
+    } catch (err) {
+      return document;
+    }
+  }
+  function apply(doc){
+    if (!doc) return;
+    const buttons = doc.querySelectorAll('section[data-testid="stSidebar"] .sl-nav .stButton > button');
+    buttons.forEach((btn) => {
+      if (!btn || btn.dataset.slNavIconReady === '1') {
+        return;
+      }
+      const raw = btn.textContent || '';
+      const trimmed = raw.replace(/^\s+/, '');
+      if (!trimmed) {
+        btn.dataset.slNavIconReady = '1';
+        return;
+      }
+      const glyphs = Array.from(trimmed);
+      if (!glyphs.length) {
+        btn.dataset.slNavIconReady = '1';
+        return;
+      }
+      const iconChar = glyphs[0];
+      const code = iconChar.codePointAt(0) || 0;
+      if (code < 0xf000 || code > 0xfaff) {
+        btn.dataset.slNavIconReady = '1';
+        return;
+      }
+      const remainder = trimmed.substring(iconChar.length).replace(/^\s+/, '');
+      const labelText = remainder || trimmed.substring(iconChar.length).replace(/^\s+/, '');
+      btn.textContent = '';
+      btn.dataset.slNavIconReady = '1';
+      btn.setAttribute('data-sl-has-icon', '1');
+      if (labelText) {
+        btn.setAttribute('aria-label', labelText);
+      }
+      const iconSpan = doc.createElement('span');
+      iconSpan.className = 'sb-nav-icon';
+      iconSpan.setAttribute('aria-hidden', 'true');
+      iconSpan.textContent = iconChar;
+      const labelSpan = doc.createElement('span');
+      labelSpan.className = 'sb-nav-label';
+      labelSpan.textContent = labelText;
+      btn.appendChild(iconSpan);
+      btn.appendChild(labelSpan);
+    });
+  }
+  function ensureObserver(){
+    const doc = getDoc();
+    if (!doc) return;
+    const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+    if (!sidebar) {
+      setTimeout(ensureObserver, 120);
+      return;
+    }
+    apply(doc);
+    if (w.__slNavIconObserver) {
+      return;
+    }
+    const observer = new MutationObserver(() => apply(doc));
+    observer.observe(sidebar, { childList: true, subtree: true });
+    w.__slNavIconObserver = observer;
+  }
+  if (w.__slNavIconRefresh) {
+    try { w.__slNavIconRefresh(); } catch (err) { /* noop */ }
+    return;
+  }
+  w.__slNavIconRefresh = function(){
+    const doc = getDoc();
+    if (!doc) return;
+    apply(doc);
+  };
+  ensureObserver();
+})();
+</script>
+"""
+
+
 def render_sidebar_nav(
     options: Sequence[str],
     state_key: str = "nav_page",
@@ -39,7 +124,7 @@ def render_sidebar_nav(
             if icon and icon.startswith("fa-"):
                 button_label = label
             elif icon:
-                button_label = f"{icon}  {label}"
+                button_label = f"{icon}\u2009{label}"
             else:
                 button_label = label
 
@@ -59,6 +144,7 @@ def render_sidebar_nav(
                     st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(_NAV_ICON_SCRIPT, unsafe_allow_html=True)
 
     return st.session_state[state_key]
 
