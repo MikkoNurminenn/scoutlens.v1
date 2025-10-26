@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from contextlib import nullcontext
 from html import escape
@@ -23,21 +24,53 @@ _NAV_ICON_SCRIPT = r"""
     if (!doc) return null;
     return doc.querySelector('#sl-sidebar-nav') || doc.querySelector('section[data-testid="stSidebar"] .sl-nav');
   }
+  function ensureIconData(){
+    const data = w.__SL_NAV_ICON_DATA;
+    if (!data || typeof data !== 'object') return {};
+    return data;
+  }
+  function createIconSpan(doc, html){
+    const span = doc.createElement('span');
+    span.className = 'sb-nav-icon';
+    span.setAttribute('aria-hidden', 'true');
+    span.innerHTML = html;
+    return span;
+  }
+  function createLabelSpan(doc, label){
+    const span = doc.createElement('span');
+    span.className = 'sb-nav-label';
+    span.textContent = label;
+    return span;
+  }
   function apply(doc){
     const navRoot = getNavRoot(doc);
     if (!navRoot) return;
+    const iconData = ensureIconData();
     const buttons = navRoot.querySelectorAll('.stButton > button');
     buttons.forEach((btn) => {
       if (!btn || btn.dataset.slNavIconReady === '1') {
         return;
       }
       const raw = btn.textContent || '';
-      const trimmed = raw.replace(/^\s+/, '');
-      if (!trimmed) {
+      const labelText = raw.replace(/^\s+/, '').replace(/\s+$/, '');
+      const iconHtml = iconData[labelText];
+      if (iconHtml) {
+        btn.innerHTML = '';
         btn.dataset.slNavIconReady = '1';
+        btn.setAttribute('data-sl-has-icon', '1');
+        if (labelText) {
+          btn.setAttribute('aria-label', labelText);
+        }
+        const iconSpan = createIconSpan(doc, iconHtml);
+        const labelSpan = createLabelSpan(doc, labelText);
+        btn.appendChild(iconSpan);
+        btn.appendChild(labelSpan);
+        if (w.lucide && typeof w.lucide.createIcons === 'function') {
+          try { w.lucide.createIcons({ root: iconSpan }); } catch (err) { /* noop */ }
+        }
         return;
       }
-      const glyphs = Array.from(trimmed);
+      const glyphs = Array.from(raw.replace(/^\s+/, ''));
       if (!glyphs.length) {
         btn.dataset.slNavIconReady = '1';
         return;
@@ -48,21 +81,17 @@ _NAV_ICON_SCRIPT = r"""
         btn.dataset.slNavIconReady = '1';
         return;
       }
-      const remainder = trimmed.substring(iconChar.length).replace(/^\s+/, '');
-      const labelText = remainder || trimmed.substring(iconChar.length).replace(/^\s+/, '');
+      const remainder = raw.substring(iconChar.length).replace(/^\s+/, '');
+      const label = remainder || raw.substring(iconChar.length).replace(/^\s+/, '');
       btn.textContent = '';
       btn.dataset.slNavIconReady = '1';
       btn.setAttribute('data-sl-has-icon', '1');
-      if (labelText) {
-        btn.setAttribute('aria-label', labelText);
+      if (label) {
+        btn.setAttribute('aria-label', label);
       }
-      const iconSpan = doc.createElement('span');
-      iconSpan.className = 'sb-nav-icon';
-      iconSpan.setAttribute('aria-hidden', 'true');
+      const iconSpan = createIconSpan(doc, iconChar);
       iconSpan.textContent = iconChar;
-      const labelSpan = doc.createElement('span');
-      labelSpan.className = 'sb-nav-label';
-      labelSpan.textContent = labelText;
+      const labelSpan = createLabelSpan(doc, label);
       btn.appendChild(iconSpan);
       btn.appendChild(labelSpan);
     });
@@ -121,6 +150,8 @@ def render_sidebar_nav(
 
     aria_label = heading or "Sidebar navigation"
 
+    icon_payload: dict[str, str] = {}
+
     with ctx:
         if heading:
             st.subheader(heading)
@@ -132,7 +163,12 @@ def render_sidebar_nav(
         for name in options:
             label = (display_map.get(name) if display_map else name) or name
             icon = (icon_map.get(name) if icon_map else "")
+            if icon and not icon.startswith("fa-"):
+                icon_payload[label] = icon
+
             if icon and icon.startswith("fa-"):
+                button_label = label
+            elif icon and "<" in icon:
                 button_label = label
             elif icon:
                 button_label = f"{icon}\u2009{label}"
@@ -155,6 +191,12 @@ def render_sidebar_nav(
                     st.rerun()
 
         st.markdown("</nav>", unsafe_allow_html=True)
+
+        data_json = json.dumps(icon_payload).replace("</", "<\\/")
+        st.markdown(
+            f"<script id='sl-nav-icon-data'>window.__SL_NAV_ICON_DATA = {data_json};</script>",
+            unsafe_allow_html=True,
+        )
         st.markdown(_NAV_ICON_SCRIPT, unsafe_allow_html=True)
 
     return st.session_state[state_key]

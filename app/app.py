@@ -102,6 +102,9 @@ set_sidebar_background = importlib.import_module("app.ui.sidebar_bg").__getattri
 build_sidebar = importlib.import_module("app.ui.sidebar").__getattribute__(
     "build_sidebar"
 )
+use_lucide = importlib.import_module("app.ui.icons").__getattribute__("use_lucide")
+lucide = importlib.import_module("app.ui.icons").__getattribute__("lucide")
+inline_icon = importlib.import_module("app.ui.icons").__getattribute__("inline_icon")
 
 st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="expanded")
 
@@ -237,14 +240,24 @@ NAV_LABELS = {
     "Export": "Export",
 }
 NAV_ICONS = {
-    "Reports": "",
-    "Calendar": "",
-    "Inspect Player": "",
-    "Shortlists": "",
-    "Manage Shortlists": "",
-    "Players": "",
-    "Notes": "",
-    "Export": "",
+    "Reports": "bar-chart-2",
+    "Calendar": "calendar",
+    "Inspect Player": "search",
+    "Shortlists": "list",
+    "Manage Shortlists": "sliders",
+    "Players": "users",
+    "Notes": "file-text",
+    "Export": "download",
+}
+INLINE_NAV_ICONS = {
+    "Reports": inline_icon("database"),
+    "Calendar": inline_icon("bell"),
+    "Inspect Player": inline_icon("search"),
+    "Shortlists": inline_icon("home"),
+    "Manage Shortlists": inline_icon("gear"),
+    "Players": inline_icon("user"),
+    "Notes": inline_icon("home", stroke=1.4),
+    "Export": inline_icon("logout"),
 }
 LEGACY_REMAP = {
     "home": "Reports",
@@ -280,11 +293,17 @@ def main() -> None:
 
     current = st.session_state.get("current_page", NAV_KEYS[0])
 
+    nav_icons = {key: lucide(icon, size=18) for key, icon in NAV_ICONS.items()}
+    try:
+        use_lucide()
+    except Exception:
+        nav_icons = INLINE_NAV_ICONS
+
     build_sidebar(
         current=current,
         nav_keys=NAV_KEYS,
         nav_labels=NAV_LABELS,
-        nav_icons=NAV_ICONS,
+        nav_icons=nav_icons,
         app_title=APP_TITLE,
         app_tagline=APP_TAGLINE,
         app_version=APP_VERSION,
