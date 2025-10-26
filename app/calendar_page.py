@@ -274,6 +274,7 @@ def _match_to_event(match: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, An
         },
     }
 
+    local_targets = _normalize_target_players(match.get("targets"))
     metadata = {
         "event_id": event_id,
         "match_id": match_id,
@@ -289,6 +290,12 @@ def _match_to_event(match: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, An
         "creator_tz_name": creator_tz_name,
         "notes": match.get("notes"),
         "google_maps_url": maps_url,
+        "targets": local_targets,
+        "target_player_ids": [
+            entry.get("player_id")
+            for entry in local_targets
+            if isinstance(entry.get("player_id"), str) and entry.get("player_id")
+        ],
     }
     return event, metadata
 
@@ -410,6 +417,68 @@ def _load_match_targets(match_ids: Tuple[str, ...]) -> Dict[str, List[Dict[str, 
     return targets
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_players_for_picker() -> List[Dict[str, Any]]:
+    client = get_client()
+    if not client:
+        return []
+    try:
+        resp = (
+            client.table(PLAYERS)
+            .select("id, name, position, current_club")
+            .order("name")
+            .limit(1000)
+            .execute()
+        )
+    except APIError as exc:
+        st.error("Failed to load players from Supabase.")
+        print(f"[calendar_page] Supabase error (players picker): {getattr(exc, 'message', exc)}")
+        return []
+    except Exception as exc:  # noqa: BLE001
+        st.error("Unexpected error while loading players.")
+        print(f"[calendar_page] Unexpected error (players picker): {exc}")
+        return []
+
+    rows = resp.data or []
+    players: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        pid = row.get("id")
+        if not pid:
+            continue
+        players.append(
+            {
+                "id": pid,
+                "name": row.get("name"),
+                "position": row.get("position"),
+                "current_club": row.get("current_club"),
+            }
+        )
+    return players
+
+
+def _normalize_target_players(raw: Any) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+    if not isinstance(raw, list):
+        return normalized
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        player_id = entry.get("player_id") or entry.get("id")
+        name = entry.get("name")
+        position = entry.get("position")
+        club = entry.get("current_club") or entry.get("club")
+        payload: Dict[str, Any] = {
+            "player_id": player_id,
+            "name": name,
+            "position": position,
+            "current_club": club,
+        }
+        normalized.append(payload)
+    return normalized
+
+
 # ============== UI helpers ==============
 def _format_match_label(metadata: Dict[str, Any]) -> str:
     home = metadata.get("home_team") or "?"
@@ -437,6 +506,25 @@ def _build_event_description(metadata: Dict[str, Any]) -> str:
         if names:
             parts.append("Targets: " + ", ".join(names))
     return " • ".join(parts)
+
+
+def _player_option_label(player: Dict[str, Any] | None) -> str:
+    if not isinstance(player, dict):
+        return "Unknown player"
+    raw_name = player.get("name")
+    name = raw_name.strip() if isinstance(raw_name, str) else ""
+    raw_position = player.get("position")
+    position = raw_position.strip() if isinstance(raw_position, str) else ""
+    raw_club = player.get("current_club")
+    club = raw_club.strip() if isinstance(raw_club, str) else ""
+    extras = [part for part in (position, club) if part]
+    if name:
+        if extras:
+            return f"{name} ({' • '.join(extras)})"
+        return name
+    if extras:
+        return " • ".join(extras)
+    return "Unnamed player"
 
 
 def _normalize_calendar_date(value: Any) -> str | None:
@@ -606,7 +694,33 @@ def show_calendar_page() -> None:
     targets_map = _load_match_targets(tuple(match_ids))
     for meta in metadata_map.values():
         match_id = meta.get("match_id")
-        meta["targets"] = targets_map.get(match_id, [])
+        local_targets = _normalize_target_players(meta.get("targets"))
+        remote_targets = _normalize_target_players(targets_map.get(match_id) or [])
+
+        combined: List[Dict[str, Any]] = []
+        seen: Dict[str, Dict[str, Any]] = {}
+
+        for entry in local_targets + remote_targets:
+            player_id = entry.get("player_id")
+            if isinstance(player_id, str) and player_id:
+                if player_id not in seen:
+                    seen[player_id] = entry
+                else:
+                    seen[player_id].update({k: v for k, v in entry.items() if v})
+            else:
+                combined.append(entry)
+
+        combined.extend(seen.values())
+        if combined:
+            meta["targets"] = combined
+            meta["target_player_ids"] = [
+                entry.get("player_id")
+                for entry in combined
+                if isinstance(entry.get("player_id"), str) and entry.get("player_id")
+            ]
+        else:
+            meta["targets"] = []
+            meta["target_player_ids"] = []
 
     selected_event_id = None
     default_selected_id = st.session_state.get(SELECTBOX_KEY)
@@ -838,6 +952,21 @@ def _render_add_match_form() -> None:
             venue = st.text_input("Venue (optional, e.g. stadium)", key="calendar_add_venue", autocomplete="off")
             notes = st.text_area("Notes (optional)", key="calendar_add_notes")
 
+            player_rows = _load_players_for_picker()
+            player_lookup: Dict[str, Dict[str, Any]] = {
+                row["id"]: row for row in player_rows if isinstance(row.get("id"), str)
+            }
+            if not player_lookup:
+                st.caption("Add players in Supabase to make them selectable as targets.")
+                selected_player_ids: List[str] = []
+            else:
+                selected_player_ids = st.multiselect(
+                    "Target players (optional)",
+                    options=list(player_lookup.keys()),
+                    format_func=lambda pid: _player_option_label(player_lookup.get(pid)),
+                    key="calendar_add_targets",
+                )
+
             # Google Maps lookup (optional)
             if not GMAPS_API_KEY:
                 st.caption("Set `GOOGLE_MAPS_API_KEY` in `.streamlit/secrets.toml` to enable Google Maps search.")
@@ -883,6 +1012,19 @@ def _render_add_match_form() -> None:
             submitted = st.form_submit_button("Save match", type="primary")
             if submitted:
                 pick = st.session_state.pop("gmaps_pick", None)
+                target_players: List[Dict[str, Any]] = []
+                for pid in selected_player_ids:
+                    player = player_lookup.get(pid)
+                    if not player:
+                        continue
+                    target_players.append(
+                        {
+                            "player_id": pid,
+                            "name": player.get("name"),
+                            "position": player.get("position"),
+                            "current_club": player.get("current_club"),
+                        }
+                    )
                 _handle_match_submission(
                     home=home,
                     away=away,
@@ -898,6 +1040,7 @@ def _render_add_match_form() -> None:
                     google_maps_url=(pick.get("google_maps_url") if isinstance(pick, dict) else None),
                     location_tz_name=(pick.get("timezone") if isinstance(pick, dict) else None),
                     creator_tz_name=st.session_state.get(LOCAL_TZ_SESSION_KEY),
+                    target_players=target_players,
                 )
 
 
@@ -917,6 +1060,7 @@ def _handle_match_submission(
     google_maps_url: str | None = None,
     location_tz_name: str | None = None,
     creator_tz_name: str | None = None,
+    target_players: List[Dict[str, Any]] | None = None,
 ) -> None:
     errors: List[str] = []
     home_clean = (home or "").strip()
@@ -990,6 +1134,25 @@ def _handle_match_submission(
         payload["google_maps_place_id"] = google_maps_place_id
         payload["google_maps_name"] = google_maps_name
         payload["google_maps_url"] = google_maps_url
+    if target_players:
+        normalized_targets = _normalize_target_players(target_players)
+        if normalized_targets:
+            dedup_targets: Dict[str, Dict[str, Any]] = {}
+            extras: List[Dict[str, Any]] = []
+            for entry in normalized_targets:
+                player_id = entry.get("player_id")
+                if isinstance(player_id, str) and player_id:
+                    if player_id not in dedup_targets:
+                        dedup_targets[player_id] = entry
+                    else:
+                        dedup_targets[player_id].update({k: v for k, v in entry.items() if v})
+                else:
+                    extras.append(entry)
+            merged_targets = extras + list(dedup_targets.values())
+            if merged_targets:
+                payload["targets"] = merged_targets
+            if dedup_targets:
+                payload["target_player_ids"] = list(dedup_targets.keys())
 
     try:
         _ = insert_match_local(payload)
