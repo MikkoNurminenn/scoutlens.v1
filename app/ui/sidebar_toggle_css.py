@@ -70,6 +70,40 @@ def improve_collapsed_toggle_visibility() -> None:
             width: 58px; height: 58px;
           }
         }
+
+        /* ----- Replace the black chevrons with a white hamburger icon ----- */
+
+        /* Kohteet: eri Streamlit-versioiden "sidebar collapsed" -napit */
+        :is([data-testid="stSidebarCollapsedControl"],
+            [data-testid="collapsedControl"]) { position: fixed !important; }
+
+        /* Piilota sisäiset ikonit (chevrons tms.) varmasti */
+        :is([data-testid="stSidebarCollapsedControl"],
+            [data-testid="collapsedControl"]) button > * {
+          opacity: 0 !important;           /* älä näytä alkuperäistä kuvitusta */
+        }
+
+        /* Lisää oma valkoinen ikoni napin päälle */
+        :is([data-testid="stSidebarCollapsedControl"],
+            [data-testid="collapsedControl"]) button::before {
+          content: "☰";                     /* hamburger-ikoni */
+          position: absolute;
+          inset: 0;
+          display: block;
+          text-align: center;
+          line-height: 54px;                /* sama kuin napin korkeus */
+          font-size: 24px;
+          color: #fff;
+          pointer-events: none;             /* klikkaus menee napille */
+        }
+
+        /* (Valinnainen) vaalea teema -> tumma ikoni */
+        @media (prefers-color-scheme: light) {
+          :is([data-testid="stSidebarCollapsedControl"],
+              [data-testid="collapsedControl"]) button::before {
+            color: #000;
+          }
+        }
         </style>
         """,
         unsafe_allow_html=True,
