@@ -105,9 +105,13 @@ build_sidebar = importlib.import_module("app.ui.sidebar").__getattribute__(
 apply_theme = importlib.import_module("app.theme.codex_theme").__getattribute__(
     "apply_theme"
 )
+ensure_fontawesome = importlib.import_module("app.ui.icon_pack").__getattribute__(
+    "ensure_fontawesome"
+)
 
 st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="expanded")
 apply_theme()
+ensure_fontawesome()
 
 
 def inject_css(path: str) -> None:
