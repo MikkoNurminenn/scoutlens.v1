@@ -96,6 +96,9 @@ go = importlib.import_module("app.ui.nav").__getattribute__("go")
 bootstrap_sidebar_auto_collapse = importlib.import_module("app.ui").__getattribute__(
     "bootstrap_sidebar_auto_collapse"
 )
+bootstrap_global_ui = importlib.import_module("app.ui.bootstrap").__getattribute__(
+    "bootstrap_global_ui"
+)
 set_sidebar_background = importlib.import_module("app.ui.sidebar_bg").__getattribute__(
     "set_sidebar_background"
 )
@@ -113,6 +116,7 @@ ensure_fontawesome = importlib.import_module("app.ui.icon_pack").__getattribute_
 )
 
 st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="collapsed")
+bootstrap_global_ui()
 apply_theme()
 ensure_fontawesome()
 render_sidebar_toggle()

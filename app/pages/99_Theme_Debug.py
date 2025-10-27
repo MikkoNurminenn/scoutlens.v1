@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.ui import init  # noqa: F401  # ensure global UI bootstrap runs
+
 from app.theme.codex_theme import DATAVIZ_10, DATAVIZ_OKABE_ITO, PALETTE, apply_theme
 
 st.set_page_config(page_title="Codex Theme Debug", page_icon="🎨", layout="wide")
