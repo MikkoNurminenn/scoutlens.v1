@@ -114,11 +114,17 @@ apply_theme = importlib.import_module("app.theme.codex_theme").__getattribute__(
 ensure_fontawesome = importlib.import_module("app.ui.icon_pack").__getattribute__(
     "ensure_fontawesome"
 )
+improve_collapsed_toggle_visibility = importlib.import_module(
+    "app.ui.sidebar_toggle_css"
+).__getattribute__(
+    "improve_collapsed_toggle_visibility"
+)
 
 st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="collapsed")
 bootstrap_global_ui()
 apply_theme()
 ensure_fontawesome()
+improve_collapsed_toggle_visibility()
 render_sidebar_toggle()
 
 
