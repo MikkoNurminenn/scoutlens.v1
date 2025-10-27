@@ -33,10 +33,17 @@
   padding: 0;
   margin: 0;
   border-radius: var(--sidebar-collapser-radius);
-  border: 1px solid var(--sidebar-border);
-  background: color-mix(in srgb, var(--sidebar-bg) 92%, black 8%);
-  color: var(--sidebar-ink);
-  box-shadow: var(--sidebar-shadow);
+  border: 1px solid color-mix(in srgb, var(--sidebar-ink) 65%, transparent);
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--sidebar-bg-elev) 55%, var(--sidebar-ink) 45%),
+      color-mix(in srgb, var(--sidebar-bg) 40%, rgba(255, 255, 255, 0.42))
+    );
+  color: color-mix(in srgb, var(--sidebar-ink) 90%, white 10%);
+  box-shadow:
+    0 18px 40px rgba(4, 10, 24, 0.55),
+    inset 0 0 0 0.6px color-mix(in srgb, var(--sidebar-ink) 35%, transparent);
   backdrop-filter: blur(8px);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease,
     background-color 0.2s ease;
@@ -55,25 +62,42 @@
        button[data-testid="stSidebarCollapseButton"]:hover,
        button[data-testid="stSidebarCollapseButton"]:focus-visible) {
   transform: translateY(-1px);
-  border-color: var(--sidebar-ring);
-  background: color-mix(in srgb, var(--sidebar-bg-elev) 85%, black 15%);
-  box-shadow: 0 16px 36px color-mix(in srgb, var(--sidebar-accent) 25%, transparent);
+  border-color: color-mix(in srgb, var(--sidebar-ring) 75%, white 25%);
+  background:
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--sidebar-bg-elev) 35%, var(--sidebar-ink) 65%),
+      color-mix(in srgb, var(--sidebar-accent) 35%, rgba(255, 255, 255, 0.6))
+    );
+  box-shadow:
+    0 20px 44px color-mix(in srgb, var(--sidebar-accent) 30%, transparent),
+    inset 0 0 0 0.8px color-mix(in srgb, var(--sidebar-ink) 45%, transparent);
   outline: none;
 }
 
 :where(section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"] > button),
 :where(.stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"] > button),
 button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"] {
-  background: var(--sidebar-accent);
-  color: var(--sidebar-bg);
-  border-color: var(--sidebar-ring-strong);
+  background:
+    linear-gradient(
+      150deg,
+      color-mix(in srgb, var(--sidebar-accent) 85%, white 15%),
+      color-mix(in srgb, var(--sidebar-accent) 65%, rgba(255, 255, 255, 0.45))
+    );
+  color: color-mix(in srgb, var(--sidebar-bg) 80%, #0b1020 20%);
+  border-color: color-mix(in srgb, var(--sidebar-ring-strong) 80%, white 20%);
 }
 
 :where(section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"] > button:hover),
 :where(.stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"] > button:hover),
 button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
-  background: color-mix(in srgb, var(--sidebar-accent) 85%, black 15%);
-  color: var(--sidebar-ink);
+  background:
+    linear-gradient(
+      150deg,
+      color-mix(in srgb, var(--sidebar-accent) 70%, white 30%),
+      color-mix(in srgb, var(--sidebar-accent) 55%, rgba(255, 255, 255, 0.55))
+    );
+  color: color-mix(in srgb, var(--sidebar-ink) 92%, white 8%);
 }
 
 :where([data-testid="stSidebarCollapseButton"])::after,
