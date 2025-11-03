@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import time
+from html import escape
 from typing import Dict
 
 import streamlit as st
@@ -33,54 +33,41 @@ _POST_LOGIN_STEPS = (
 
 
 
-def _build_loading_overlay_markup(
-    *,
-    active_index: int,
-    steps: tuple[str, ...],
-    progress_pct: int,
-) -> str:
-    """Return the HTML/CSS for the animated loading overlay."""
+
+
+def _build_loading_overlay_markup(*, steps_with_delays: tuple[tuple[str, float], ...]) -> str:
+    """Return the HTML/CSS/JS bundle for the post-login loading overlay."""
+
+    labels = [escape(label) for label, _ in steps_with_delays]
+    durations = [max(0.12, float(delay)) for _, delay in steps_with_delays]
+
+    if not labels:
+        labels = ["Preparing the ScoutLens workspace"]
+        durations = [0.4]
 
     step_items = []
-    total = len(steps)
-    for idx, label in enumerate(steps, start=1):
-        if idx < active_index:
-            state = "done"
-            status_copy = "Complete"
-        elif idx == active_index:
-            state = "active"
-            status_copy = "In progress"
-        else:
-            state = "pending"
-            status_copy = "Waiting"
+    for label in labels:
         step_items.append(
             f"""
-            <li class="sl-login-step sl-login-step--{state}">
+            <li class="sl-login-step sl-login-step--pending" data-status-pending="Waiting" data-status-active="In progress" data-status-done="Complete">
                 <span class="sl-login-step-indicator"></span>
                 <div class="sl-login-step-body">
                     <span class="sl-login-step-label">{label}</span>
-                    <span class="sl-login-step-status">{status_copy}</span>
+                    <span class="sl-login-step-status">Waiting</span>
                 </div>
             </li>
             """.strip()
         )
 
-    progress_pct = max(5, min(progress_pct, 100)) if total else 100
-    is_complete = active_index > total and total > 0
-    active_idx = min(active_index, total) if total else 0
-    current_label = steps[active_idx - 1] if active_idx else "Preparing the ScoutLens workspace"
-    pill_text = "Workspace ready — launching ScoutLens" if is_complete else current_label
-    subcopy_text = (
-        "Thanks for waiting! Opening your dashboard…" if is_complete else "We will launch your workspace as soon as each step completes."
-    )
+    durations_attr = ",".join(f"{delay:.2f}" for delay in durations)
 
-    return f"""
-        <style>
-        html, body, .stApp {{ overflow: hidden !important; }}
+    style_block = """
+        <style id="sl-login-loading-style">
+        html, body, .stApp { overflow: hidden !important; }
         .stApp > header,
         .stApp > div[data-testid="stToolbar"],
-        .stApp > div[data-testid="stDecoration"] {{ display: none !important; }}
-        .sl-login-loading-overlay {{
+        .stApp > div[data-testid="stDecoration"] { display: none !important; }
+        .sl-login-loading-overlay {
             position: fixed;
             inset: 0;
             display: grid;
@@ -91,8 +78,9 @@ def _build_loading_overlay_markup(
             backdrop-filter: blur(18px) saturate(135%);
             z-index: 1000;
             overflow: hidden;
-        }}
-        .sl-login-loading-overlay::before {{
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+        .sl-login-loading-overlay::before {
             content: "";
             position: absolute;
             width: 160%;
@@ -101,8 +89,13 @@ def _build_loading_overlay_markup(
             filter: blur(140px);
             opacity: 0.9;
             animation: sl-login-glow 16s linear infinite;
-        }}
-        .sl-login-loading-card {{
+        }
+        .sl-login-loading-overlay--fade {
+            opacity: 0;
+            transform: scale(0.985);
+            pointer-events: none;
+        }
+        .sl-login-loading-card {
             position: relative;
             background:
                 linear-gradient(172deg, rgba(15,23,42,0.88), rgba(15,23,42,0.74) 48%, rgba(15,23,42,0.68)) padding-box,
@@ -118,8 +111,8 @@ def _build_loading_overlay_markup(
             font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             backdrop-filter: blur(20px);
             overflow: hidden;
-        }}
-        .sl-login-loading-card::before {{
+        }
+        .sl-login-loading-card::before {
             content: "";
             position: absolute;
             inset: 0;
@@ -127,38 +120,38 @@ def _build_loading_overlay_markup(
                 radial-gradient(520px 320px at 88% 118%, rgba(129,140,248,0.18), transparent 70%);
             opacity: 0.75;
             pointer-events: none;
-        }}
-        .sl-login-loading-card h3 {{
+        }
+        .sl-login-loading-card h3 {
             margin: 18px 0 8px 0;
             font-size: var(--fs-22, 1.4rem);
             font-weight: 700;
             letter-spacing: -0.01em;
-        }}
-        .sl-login-loading-lede {{
+        }
+        .sl-login-loading-lede {
             margin: 0;
             font-size: var(--fs-16, 1rem);
             color: rgba(226, 232, 240, 0.88);
-        }}
-        .sl-login-loading-card p {{
+        }
+        .sl-login-loading-card p {
             margin: 0;
             font-size: var(--fs-14, 0.92rem);
             color: rgba(203, 213, 225, 0.78);
-        }}
-        .sl-login-spinner-wrap {{
+        }
+        .sl-login-spinner-wrap {
             position: relative;
             width: 68px;
             height: 68px;
             margin: 0 auto 18px;
-        }}
-        .sl-login-spinner-glow {{
+        }
+        .sl-login-spinner-glow {
             position: absolute;
             inset: -16px;
             border-radius: 50%;
             background: radial-gradient(circle, rgba(56,189,248,0.25), rgba(15,23,42,0));
             filter: blur(12px);
             opacity: 0.85;
-        }}
-        .sl-login-spinner {{
+        }
+        .sl-login-spinner {
             position: absolute;
             inset: 0;
             border-radius: 50%;
@@ -168,8 +161,8 @@ def _build_loading_overlay_markup(
             mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 6px));
             animation: sl-login-spin 0.9s linear infinite;
             box-shadow: 0 0 26px rgba(56,189,248,0.35);
-        }}
-        .sl-login-pill {{
+        }
+        .sl-login-pill {
             display: inline-flex;
             align-items: center;
             gap: 10px;
@@ -182,8 +175,8 @@ def _build_loading_overlay_markup(
             font-size: var(--fs-13, 0.82rem);
             font-weight: 500;
             letter-spacing: 0.01em;
-        }}
-        .sl-login-pill::before {{
+        }
+        .sl-login-pill::before {
             content: "";
             width: 10px;
             height: 10px;
@@ -191,43 +184,43 @@ def _build_loading_overlay_markup(
             background: linear-gradient(135deg, #38bdf8, #6366f1);
             box-shadow: 0 0 12px rgba(56,189,248,0.75);
             animation: sl-login-pulse 1.8s ease-in-out infinite;
-        }}
-        .sl-login-subcopy {{
+        }
+        .sl-login-subcopy {
             margin-top: 6px;
             font-size: var(--fs-13, 0.85rem);
             color: rgba(148, 163, 184, 0.78);
-        }}
-        .sl-login-progress {{
-            position: relative;
+        }
+        .sl-login-progress {
             margin-top: 24px;
             height: 4px;
             border-radius: 999px;
             background: rgba(148, 163, 184, 0.16);
             overflow: hidden;
-        }}
-        .sl-login-progress-bar {{
+            position: relative;
+        }
+        .sl-login-progress-bar {
             position: absolute;
             inset: 0;
-            width: {progress_pct}%;
+            width: 5%;
             border-radius: inherit;
             background: linear-gradient(120deg, rgba(56,189,248,0.75), rgba(129,140,248,0.9));
             transition: width 0.35s ease;
-        }}
-        .sl-login-step-list {{
+        }
+        .sl-login-step-list {
             list-style: none;
             padding: 0;
             margin: 22px 0 0 0;
             text-align: left;
             display: grid;
             gap: 12px;
-        }}
-        .sl-login-step {{
+        }
+        .sl-login-step {
             display: grid;
             grid-template-columns: 20px 1fr;
             gap: 12px;
             align-items: center;
-        }}
-        .sl-login-step-indicator {{
+        }
+        .sl-login-step-indicator {
             width: 12px;
             height: 12px;
             border-radius: 999px;
@@ -235,45 +228,48 @@ def _build_loading_overlay_markup(
             border: 2px solid rgba(148, 163, 184, 0.35);
             background: rgba(15,23,42,0.65);
             position: relative;
-        }}
-        .sl-login-step--done .sl-login-step-indicator {{
+        }
+        .sl-login-step--done .sl-login-step-indicator {
             border-color: rgba(56,189,248,0.65);
             background: linear-gradient(135deg, rgba(56,189,248,0.85), rgba(129,140,248,0.85));
             box-shadow: 0 0 8px rgba(56,189,248,0.35);
-        }}
-        .sl-login-step--active .sl-login-step-indicator {{
+        }
+        .sl-login-step--active .sl-login-step-indicator {
             border-color: rgba(56,189,248,0.75);
             background: radial-gradient(circle, rgba(56,189,248,0.75), rgba(15,23,42,0.15));
             box-shadow: 0 0 10px rgba(56,189,248,0.45);
             animation: sl-login-pulse 1.8s ease-in-out infinite;
-        }}
-        .sl-login-step-label {{
+        }
+        .sl-login-step-label {
             display: block;
             font-weight: 600;
             font-size: var(--fs-13, 0.85rem);
             color: rgba(226,232,240,0.92);
-        }}
-        .sl-login-step-status {{
+        }
+        .sl-login-step-status {
             display: block;
             font-size: var(--fs-12, 0.78rem);
             color: rgba(148, 163, 184, 0.78);
-        }}
-        .sl-login-step--done .sl-login-step-status {{ color: rgba(94, 234, 212, 0.78); }}
-        .sl-login-step--active .sl-login-step-status {{ color: rgba(129, 140, 248, 0.88); }}
-        @keyframes sl-login-spin {{
-            0% {{ transform: rotate(0deg); }}
-            100% {{ transform: rotate(360deg); }}
-        }}
-        @keyframes sl-login-glow {{
-            0% {{ transform: rotate(0deg); }}
-            100% {{ transform: rotate(360deg); }}
-        }}
-        @keyframes sl-login-pulse {{
-            0%, 100% {{ transform: scale(1); opacity: 0.9; }}
-            50% {{ transform: scale(1.25); opacity: 1; }}
-        }}
+        }
+        .sl-login-step--done .sl-login-step-status { color: rgba(94, 234, 212, 0.78); }
+        .sl-login-step--active .sl-login-step-status { color: rgba(129, 140, 248, 0.88); }
+        @keyframes sl-login-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes sl-login-glow {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes sl-login-pulse {
+            0%, 100% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.25); opacity: 1; }
+        }
         </style>
-        <div class="sl-login-loading-overlay">
+    """
+
+    overlay = f"""
+        <div class="sl-login-loading-overlay" id="sl-login-overlay" data-step-durations="{durations_attr}">
             <div class="sl-login-loading-card">
                 <div class="sl-login-spinner-wrap">
                     <div class="sl-login-spinner-glow"></div>
@@ -281,44 +277,139 @@ def _build_loading_overlay_markup(
                 </div>
                 <h3>Welcome back to ScoutLens</h3>
                 <p class="sl-login-loading-lede">Curating your scouting intel and syncing secure access.</p>
-                <div class="sl-login-pill">{pill_text}</div>
-                <p class="sl-login-subcopy">{subcopy_text}</p>
+                <div class="sl-login-pill" data-complete-text="Workspace ready — launching ScoutLens" data-default-text="Preparing the ScoutLens workspace">Preparing the ScoutLens workspace</div>
+                <p class="sl-login-subcopy" data-complete-text="Thanks for waiting! Opening your dashboard…">We will launch your workspace as soon as each step completes.</p>
                 <ul class="sl-login-step-list">{''.join(step_items)}</ul>
                 <div class="sl-login-progress"><span class="sl-login-progress-bar"></span></div>
             </div>
         </div>
     """
+
+    script_block = """
+        <script id="sl-login-loading-script">
+        (function(){
+          const w = window;
+          function getDoc(){
+            try { return (w.parent && w.parent.document) ? w.parent.document : document; }
+            catch (err) { return document; }
+          }
+          const doc = getDoc();
+          if (!doc) return;
+          const overlay = doc.getElementById('sl-login-overlay');
+          if (!overlay || overlay.dataset.slInit === '1') return;
+          overlay.dataset.slInit = '1';
+
+          const durations = (overlay.dataset.stepDurations || '').split(',').map(function(x){
+            const value = parseFloat(x);
+            return Number.isFinite(value) ? Math.max(0.12, value) : 0.45;
+          });
+          const steps = Array.from(overlay.querySelectorAll('.sl-login-step'));
+          const progressBar = overlay.querySelector('.sl-login-progress-bar');
+          const pill = overlay.querySelector('.sl-login-pill');
+          const subcopy = overlay.querySelector('.sl-login-subcopy');
+
+          const defaultTexts = { pending: 'Waiting', active: 'In progress', done: 'Complete' };
+
+          function setStepState(step, state){
+            step.classList.remove('sl-login-step--done', 'sl-login-step--active', 'sl-login-step--pending');
+            step.classList.add('sl-login-step--' + state);
+            const statusEl = step.querySelector('.sl-login-step-status');
+            const attrKey = 'status' + state.charAt(0).toUpperCase() + state.slice(1);
+            const attrValue = step.dataset[attrKey];
+            if (statusEl) {
+              statusEl.textContent = attrValue || defaultTexts[state] || '';
+            }
+          }
+
+          function applyState(index){
+            steps.forEach(function(step, idx){
+              if (idx < index) {
+                setStepState(step, 'done');
+              } else if (idx === index) {
+                setStepState(step, 'active');
+              } else {
+                setStepState(step, 'pending');
+              }
+            });
+
+            if (progressBar) {
+              let pct;
+              if (!steps.length) {
+                pct = 100;
+              } else if (index < 0) {
+                pct = 5;
+              } else if (index >= steps.length) {
+                pct = 100;
+              } else {
+                pct = Math.min(100, Math.round(((index + 1) / steps.length) * 100));
+              }
+              progressBar.style.width = pct + '%';
+            }
+
+            if (pill) {
+              if (index >= steps.length) {
+                pill.textContent = pill.dataset.completeText || pill.textContent;
+              } else {
+                const current = steps[index];
+                const label = current ? current.querySelector('.sl-login-step-label') : null;
+                pill.textContent = (label ? label.textContent : '') || pill.dataset.defaultText || pill.textContent;
+              }
+            }
+
+            if (subcopy && index >= steps.length) {
+              subcopy.textContent = subcopy.dataset.completeText || subcopy.textContent;
+            }
+          }
+
+          function finish(){
+            applyState(steps.length);
+            overlay.classList.add('sl-login-loading-overlay--fade');
+            setTimeout(function(){
+              if (overlay && overlay.parentNode) {
+                overlay.parentNode.removeChild(overlay);
+              }
+              const styleEl = doc.getElementById('sl-login-loading-style');
+              if (styleEl && styleEl.parentNode) {
+                styleEl.parentNode.removeChild(styleEl);
+              }
+            }, 650);
+          }
+
+          function advance(index){
+            if (!steps.length) {
+              finish();
+              return;
+            }
+            if (index >= steps.length) {
+              finish();
+              return;
+            }
+            applyState(index);
+            const delay = durations[index] || 0.45;
+            setTimeout(function(){ advance(index + 1); }, Math.max(140, delay * 1000));
+          }
+
+          applyState(-1);
+          setTimeout(function(){ advance(0); }, 100);
+        })();
+        </script>
+    """
+
+    return style_block + overlay + script_block
+
+
+def _render_post_login_loading() -> None:
+    """Inject the post-login overlay once; animation handled client-side."""
+
+    st.markdown(
+        _build_loading_overlay_markup(steps_with_delays=_POST_LOGIN_STEPS),
+        unsafe_allow_html=True,
+    )
+
 def _ensure_auth_state() -> Dict[str, object]:
     return st.session_state.setdefault("auth", {"authenticated": False, "user": None})
 
 
-
-def _render_post_login_loading() -> None:
-    placeholder = st.empty()
-    step_labels = tuple(label for label, _ in _POST_LOGIN_STEPS)
-    total_steps = len(step_labels) or 1
-    for index, (_, delay) in enumerate(_POST_LOGIN_STEPS, start=1):
-        progress_pct = int(round(index / total_steps * 100))
-        placeholder.markdown(
-            _build_loading_overlay_markup(
-                active_index=index,
-                steps=step_labels,
-                progress_pct=progress_pct,
-            ),
-            unsafe_allow_html=True,
-        )
-        time.sleep(delay)
-
-    placeholder.markdown(
-        _build_loading_overlay_markup(
-            active_index=total_steps + 1,
-            steps=step_labels,
-            progress_pct=100,
-        ),
-        unsafe_allow_html=True,
-    )
-    time.sleep(0.2)
-    placeholder.empty()
 
 def logout() -> None:
     """Terminate the Supabase session and rerun the app."""
@@ -412,7 +503,6 @@ def login(
     if session and session_value(session, "access_token"):
         if st.session_state.pop(_POST_LOGIN_LOADING_KEY, False):
             _render_post_login_loading()
-            st.rerun()
         return
 
     _inject_login_styles(background_opacity)
