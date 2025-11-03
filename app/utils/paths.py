@@ -11,9 +11,13 @@ def ensure_project_paths() -> Path:
     here = Path(__file__).resolve()
     app_dir = here.parents[1]          # .../app
     project_root = app_dir.parent      # projektin juuri
+    def _prepend(path: str) -> None:
+        if path in sys.path:
+            sys.path.remove(path)
+        sys.path.insert(0, path)
+
     for cand in (str(project_root), str(app_dir)):
-        if cand not in sys.path:
-            sys.path.append(cand)
+        _prepend(cand)
     return project_root
 
 def assert_app_paths() -> dict:
