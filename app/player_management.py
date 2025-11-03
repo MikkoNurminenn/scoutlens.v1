@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import streamlit as st
 
-from app.ui import bootstrap_sidebar_auto_collapse
+try:
+    from app.ui import bootstrap_sidebar_auto_collapse
+except ImportError:  # pragma: no cover - compatibility shim for legacy packages
+    from app.ui.sidebar import bootstrap_sidebar_auto_collapse
 from app.ui.players_delete import players_delete_panel
 
 bootstrap_sidebar_auto_collapse()

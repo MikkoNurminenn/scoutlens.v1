@@ -5,7 +5,10 @@ from __future__ import annotations
 import streamlit as st
 from postgrest.exceptions import APIError
 
-from app.ui import bootstrap_sidebar_auto_collapse
+try:
+    from app.ui import bootstrap_sidebar_auto_collapse
+except ImportError:  # pragma: no cover - compatibility shim for legacy packages
+    from app.ui.sidebar import bootstrap_sidebar_auto_collapse
 from app.supabase_client import get_client
 from app.shortlists_page import list_shortlists, list_shortlist_items
 

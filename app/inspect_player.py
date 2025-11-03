@@ -8,7 +8,10 @@ import streamlit as st
 from postgrest.exceptions import APIError
 import altair as alt
 
-from app.ui import bootstrap_sidebar_auto_collapse
+try:
+    from app.ui import bootstrap_sidebar_auto_collapse
+except ImportError:  # pragma: no cover - compatibility shim for legacy packages
+    from app.ui.sidebar import bootstrap_sidebar_auto_collapse
 from app.supabase_client import get_client
 
 bootstrap_sidebar_auto_collapse()
