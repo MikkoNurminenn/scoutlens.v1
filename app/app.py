@@ -103,7 +103,12 @@ importlib.invalidate_caches()
 
 # ---- Import resolver guard (avoid 3rd‑party package named "app")
 _spec = importlib.util.find_spec("app")
-if not _spec or not getattr(_spec, "origin", None):
+_spec_has_location = False
+if _spec is not None:
+    origin = getattr(_spec, "origin", None)
+    search_locations = getattr(_spec, "submodule_search_locations", None)
+    _spec_has_location = bool(origin or search_locations)
+if not _spec or not _spec_has_location:
     st.error(
         "Cannot resolve local package 'app'. Check repo layout and permissions.\n"
         f"ROOT={ROOT}\nPKG_DIR={PKG_DIR}\nsys.path[0:3]={sys.path[:3]}"
