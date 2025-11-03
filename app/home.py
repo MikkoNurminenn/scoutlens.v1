@@ -14,7 +14,10 @@ from postgrest.exceptions import APIError
 from app.supabase_client import get_client
 from app.time_utils import to_tz
 from app.db_tables import PLAYERS, SCOUT_REPORTS, NOTES, MATCHES
-from app.ui import bootstrap_sidebar_auto_collapse
+try:
+    from app.ui import bootstrap_sidebar_auto_collapse
+except ImportError:  # pragma: no cover - compatibility shim for legacy packages
+    from app.ui.sidebar import bootstrap_sidebar_auto_collapse
 
 
 # ---------------- Utilities ----------------

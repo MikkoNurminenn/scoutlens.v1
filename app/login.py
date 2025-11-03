@@ -14,7 +14,10 @@ from app.supabase_client import (
     sign_in as supabase_sign_in,
     sign_out as supabase_sign_out,
 )
-from app.ui import bootstrap_sidebar_auto_collapse
+try:
+    from app.ui import bootstrap_sidebar_auto_collapse
+except ImportError:  # pragma: no cover - compatibility shim for legacy packages
+    from app.ui.sidebar import bootstrap_sidebar_auto_collapse
 from app.ui.login_bg import set_login_background
 
 bootstrap_sidebar_auto_collapse()
