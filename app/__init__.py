@@ -1,2 +1,0 @@
-"""ScoutLens app package."""
-
