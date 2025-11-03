@@ -318,6 +318,7 @@ def _render_post_login_loading() -> None:
         unsafe_allow_html=True,
     )
     time.sleep(0.2)
+    placeholder.empty()
 
 def logout() -> None:
     """Terminate the Supabase session and rerun the app."""
