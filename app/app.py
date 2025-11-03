@@ -145,7 +145,7 @@ except Exception as e:
     st.error(f"Import error: app.ui.sidebar_toggle_css ({e}). Check package files.")
     raise
 
-st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="expanded")
 bootstrap_global_ui()
 apply_theme()
 ensure_fontawesome()
