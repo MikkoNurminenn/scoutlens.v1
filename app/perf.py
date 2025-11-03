@@ -1,5 +1,5 @@
-import time
 from contextlib import contextmanager
+import time
 import streamlit as st
 
 
