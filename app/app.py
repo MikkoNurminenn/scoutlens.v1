@@ -10,12 +10,31 @@ import traceback
 import streamlit as st
 
 # Kun Streamlit suorittaa tämän tiedoston "app/app.py" suoraan, Python saattaa
-# rekisteröidä väliaikaisen moduulin nimeltä "app" ilman __path__-attribuuttia.
-# Poistetaan se heti, jotta myöhemmät "from app.…" -importit eivät kaadu
-# virheilmoitukseen "'app' is not a package".
+# rekisteröidä väliaikaisen moduulin nimeltä "app" ilman __path__-attribuuttia
+# tai osoittaen johonkin muuhun asennettuun pakettiin. Poistetaan se heti,
+# jotta myöhemmät "from app.…" -importit lataavat aina projektin oman paketin.
 _existing_app_mod = sys.modules.get("app")
-if _existing_app_mod is not None and not getattr(_existing_app_mod, "__path__", None):
-    del sys.modules["app"]
+if _existing_app_mod is not None:
+    local_app_dir = Path(__file__).resolve().parent
+    candidate_paths: set[Path] = set()
+
+    pkg_paths = getattr(_existing_app_mod, "__path__", None)
+    if pkg_paths:
+        for p in pkg_paths:
+            try:
+                candidate_paths.add(Path(p).resolve())
+            except (OSError, TypeError):
+                continue
+
+    module_file = getattr(_existing_app_mod, "__file__", None)
+    if module_file:
+        try:
+            candidate_paths.add(Path(module_file).resolve().parent)
+        except (OSError, TypeError):
+            pass
+
+    if not candidate_paths or local_app_dir.resolve() not in candidate_paths:
+        del sys.modules["app"]
 
 
 def _install_sidebar_guard() -> None:
