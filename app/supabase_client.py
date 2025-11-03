@@ -8,7 +8,7 @@ import streamlit as st
 from supabase import AuthError
 from supabase_auth.errors import AuthApiError
 
-from app.utils.supa import get_client as _get_cached_client
+from app.utils.supa import SupabaseConfigError, get_client as _get_cached_client
 
 __all__ = ["get_client", "sign_in", "sign_out", "session_value"]
 
@@ -155,7 +155,19 @@ def _apply_saved_session(client) -> None:
 
 def get_client():
     """Return the shared Supabase client, restoring saved auth when present."""
-    client = _get_cached_client()
+    try:
+        client = _get_cached_client()
+    except SupabaseConfigError as exc:
+        message = str(exc) or (
+            "Supabase secrets missing. Add `[supabase].url` and `[supabase].anon_key` to "
+            "`.streamlit/secrets.toml` or set SUPABASE_URL and SUPABASE_ANON_KEY environment "
+            "variables."
+        )
+        if hasattr(st, "error") and callable(getattr(st, "error")):
+            st.error(message)
+            if hasattr(st, "stop"):
+                st.stop()
+        raise
     _apply_saved_session(client)
     return client
 

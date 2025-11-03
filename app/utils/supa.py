@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import os
 from functools import lru_cache
 
@@ -9,6 +9,17 @@ except Exception:  # pragma: no cover - allow headless usage (tests / CLI)
     st = None
 
 from supabase import create_client, Client
+
+
+class SupabaseConfigError(RuntimeError):
+    """Raised when Supabase credentials are missing from secrets or env."""
+
+
+_MISSING_CONFIG_MSG = (
+    "Supabase secrets missing. Add `[supabase].url` and `[supabase].anon_key` to "
+    "`.streamlit/secrets.toml` or set SUPABASE_URL and SUPABASE_ANON_KEY environment "
+    "variables."
+)
 
 
 def _read_supabase_config() -> Dict[str, str]:
@@ -35,11 +46,11 @@ def _read_supabase_config() -> Dict[str, str]:
     key = key or os.getenv("SUPABASE_ANON_KEY")
 
     if not url or not key:
-        raise RuntimeError(
-            "Supabase config missing. Provide Streamlit secrets supabase.url & supabase.anon_key "
-            "or env SUPABASE_URL & SUPABASE_ANON_KEY."
-        )
+        raise SupabaseConfigError(_MISSING_CONFIG_MSG)
+
     return {"url": url, "anon_key": key}
+
+
 if st is not None:
 
     @st.cache_resource  # type: ignore[misc]
@@ -69,3 +80,6 @@ def first_row(rows: Any) -> Optional[Dict[str, Any]]:
         first = data[0]
         return first if isinstance(first, dict) else None
     return None
+
+
+__all__ = ["get_client", "first_row", "SupabaseConfigError"]
