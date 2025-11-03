@@ -67,17 +67,26 @@ def _install_sidebar_guard() -> None:
     st.sidebar = proxy  # type: ignore[assignment]
 
 
+# --- Polkutarkistus + sys.path varmistus ---
+try:
+    from app.utils.paths import ensure_project_paths, assert_app_paths
+except Exception:
+    # Fallback jos polut eivät vielä toimi
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _root = _Path(__file__).resolve().parent.parent
+    for _cand in (str(_root), str(_root / "app")):
+        if _cand not in _sys.path:
+            _sys.path.append(_cand)
+    from app.utils.paths import ensure_project_paths, assert_app_paths
+
+ROOT = ensure_project_paths()
+paths_ok = assert_app_paths()
+PKG_DIR = ROOT / "app"
+
 _install_sidebar_guard()
 
-# ---- Peruspolut (MUST run before any local imports)
-ROOT = Path(__file__).resolve().parent.parent
-PKG_DIR = ROOT / "app"
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))  # why: ensure local package wins over site-packages
-try:
-    (PKG_DIR / "__init__.py").touch(exist_ok=True)  # why: mark as package if missing
-except OSError:
-    pass
 importlib.invalidate_caches()
 
 # ---- Import resolver guard (avoid 3rd‑party package named "app")
@@ -114,11 +123,15 @@ apply_theme = importlib.import_module("app.theme.codex_theme").__getattribute__(
 ensure_fontawesome = importlib.import_module("app.ui.icon_pack").__getattribute__(
     "ensure_fontawesome"
 )
-improve_collapsed_toggle_visibility = importlib.import_module(
-    "app.ui.sidebar_toggle_css"
-).__getattribute__(
-    "improve_collapsed_toggle_visibility"
-)
+try:
+    improve_collapsed_toggle_visibility = importlib.import_module(
+        "app.ui.sidebar_toggle_css"
+    ).__getattribute__(
+        "improve_collapsed_toggle_visibility"
+    )
+except Exception as e:
+    st.error(f"Import error: app.ui.sidebar_toggle_css ({e}). Check package files.")
+    raise
 
 st.set_page_config(page_title="Main", layout="wide", initial_sidebar_state="collapsed")
 bootstrap_global_ui()
@@ -126,6 +139,9 @@ apply_theme()
 ensure_fontawesome()
 improve_collapsed_toggle_visibility()
 render_sidebar_toggle()
+
+if not paths_ok.get("css_file_exists", True):
+    st.warning(f"CSS file not found at {paths_ok.get('css_file_path')}. Check paths.")
 
 
 def inject_css(path: str) -> None:
