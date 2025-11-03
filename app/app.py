@@ -9,6 +9,14 @@ import sys
 import traceback
 import streamlit as st
 
+# Kun Streamlit suorittaa tämän tiedoston "app/app.py" suoraan, Python saattaa
+# rekisteröidä väliaikaisen moduulin nimeltä "app" ilman __path__-attribuuttia.
+# Poistetaan se heti, jotta myöhemmät "from app.…" -importit eivät kaadu
+# virheilmoitukseen "'app' is not a package".
+_existing_app_mod = sys.modules.get("app")
+if _existing_app_mod is not None and not getattr(_existing_app_mod, "__path__", None):
+    del sys.modules["app"]
+
 
 def _install_sidebar_guard() -> None:
     """Wrap ``st.sidebar`` so accidental writes outside ``build_sidebar`` get logged."""
@@ -79,6 +87,10 @@ except Exception:
     for _cand in (str(_root), str(_root / "app")):
         if _cand not in _sys.path:
             _sys.path.append(_cand)
+    _cached_app = _sys.modules.get("app")
+    if _cached_app is not None and not getattr(_cached_app, "__path__", None):
+        del _sys.modules["app"]
+
     from app.utils.paths import ensure_project_paths, assert_app_paths
 
 ROOT = ensure_project_paths()
