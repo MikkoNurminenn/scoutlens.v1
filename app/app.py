@@ -119,9 +119,12 @@ if not _spec or not _spec_has_location:
 track = importlib.import_module("app.perf").__getattribute__("track")
 render_perf = importlib.import_module("app.perf").__getattribute__("render_perf")
 go = importlib.import_module("app.ui.nav").__getattribute__("go")
-bootstrap_sidebar_auto_collapse = importlib.import_module("app.ui").__getattribute__(
-    "bootstrap_sidebar_auto_collapse"
-)
+# NOTE: Some environments may bundle outdated ``app.ui`` packages without the
+# ``bootstrap_sidebar_auto_collapse`` re-export. Import the sidebar module
+# directly so we always access the canonical implementation.
+bootstrap_sidebar_auto_collapse = importlib.import_module(
+    "app.ui.sidebar"
+).__getattribute__("bootstrap_sidebar_auto_collapse")
 bootstrap_global_ui = importlib.import_module("app.ui.bootstrap").__getattribute__(
     "bootstrap_global_ui"
 )
