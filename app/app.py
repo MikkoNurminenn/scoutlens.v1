@@ -13,9 +13,9 @@ import streamlit as st
 # rekisteröidä väliaikaisen moduulin nimeltä "app" ilman __path__-attribuuttia
 # tai osoittaen johonkin muuhun asennettuun pakettiin. Poistetaan se heti,
 # jotta myöhemmät "from app.…" -importit lataavat aina projektin oman paketin.
+local_app_dir = Path(__file__).resolve().parent
 _existing_app_mod = sys.modules.get("app")
 if _existing_app_mod is not None:
-    local_app_dir = Path(__file__).resolve().parent
     candidate_paths: set[Path] = set()
 
     pkg_paths = getattr(_existing_app_mod, "__path__", None)
@@ -35,6 +35,44 @@ if _existing_app_mod is not None:
 
     if not candidate_paths or local_app_dir.resolve() not in candidate_paths:
         del sys.modules["app"]
+
+
+def _bootstrap_local_package() -> Path:
+    """Ensure project/app directories are importable before relative imports."""
+
+    project_root = local_app_dir.parent
+
+    def _prepend(path: Path) -> None:
+        path_str = str(path)
+        if path_str in sys.path:
+            sys.path.remove(path_str)
+        sys.path.insert(0, path_str)
+
+    for candidate in (project_root, local_app_dir):
+        _prepend(candidate)
+
+    cached_app = sys.modules.get("app")
+    if cached_app is not None and not getattr(cached_app, "__path__", None):
+        # If Python already cached a module named ``app`` without package data,
+        # drop it so the next import loads our local package instead of recursing
+        # into the bootstrap logic again.
+        del sys.modules["app"]
+
+    return project_root
+
+
+PROJECT_ROOT = _bootstrap_local_package()
+
+try:
+    from app.utils.paths import ensure_project_paths, assert_app_paths
+except Exception as exc:  # pragma: no cover - startup diagnostics
+    traceback.print_exc()
+    st.error(
+        "Failed to import app.utils.paths during startup.\n"
+        f"PROJECT_ROOT={PROJECT_ROOT}\n"
+        f"sys.path[0:3]={sys.path[:3]}\n{exc}"
+    )
+    raise
 
 
 def _install_sidebar_guard() -> None:
@@ -93,24 +131,6 @@ def _install_sidebar_guard() -> None:
     setattr(proxy, "_sl_guard_installed", True)
     st.sidebar = proxy  # type: ignore[assignment]
 
-
-# --- Polkutarkistus + sys.path varmistus ---
-try:
-    from app.utils.paths import ensure_project_paths, assert_app_paths
-except Exception:
-    # Fallback jos polut eivät vielä toimi
-    import sys as _sys
-    from pathlib import Path as _Path
-
-    _root = _Path(__file__).resolve().parent.parent
-    for _cand in (str(_root), str(_root / "app")):
-        if _cand not in _sys.path:
-            _sys.path.append(_cand)
-    _cached_app = _sys.modules.get("app")
-    if _cached_app is not None and not getattr(_cached_app, "__path__", None):
-        del _sys.modules["app"]
-
-    from app.utils.paths import ensure_project_paths, assert_app_paths
 
 ROOT = ensure_project_paths()
 paths_ok = assert_app_paths()
