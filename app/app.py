@@ -4,9 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import importlib
+import importlib.machinery
 import importlib.util
 import sys
 import traceback
+import types
 import streamlit as st
 
 # Kun Streamlit suorittaa tämän tiedoston "app/app.py" suoraan, Python saattaa
@@ -61,7 +63,51 @@ def _bootstrap_local_package() -> Path:
     return project_root
 
 
+def _ensure_local_package_stub() -> None:
+    """Register the local ``app`` package when executing as ``app.app``.
+
+    Some launchers import ``app.app`` directly via ``spec_from_file_location``
+    without first loading the parent ``app`` package. In that scenario Python's
+    import machinery will keep asking for ``app.utils.paths`` while the package
+    itself is still undefined, eventually exhausting the recursion limit. To
+    guard against that edge case we create (or normalise) a lightweight package
+    module that points at ``app/`` on disk before any intra-package imports run.
+    """
+
+    package_path = str(local_app_dir)
+    init_file = local_app_dir / "__init__.py"
+
+    pkg = sys.modules.get("app")
+    if pkg is None or not getattr(pkg, "__path__", None):
+        spec = importlib.util.spec_from_file_location(
+            "app",
+            init_file,
+            submodule_search_locations=[package_path],
+        )
+        module = types.ModuleType("app") if spec is None else importlib.util.module_from_spec(spec)
+        module.__file__ = str(init_file)
+        module.__package__ = "app"
+        module.__path__ = [package_path]
+        if spec is not None and spec.loader is not None:
+            spec.loader.exec_module(module)
+        sys.modules["app"] = module
+        pkg = module
+
+    # Ensure our source directory is available for subsequent imports.
+    existing_path = list(getattr(pkg, "__path__", []))
+    if package_path not in existing_path:
+        pkg.__path__ = existing_path + [package_path]
+
+    # Normalise ``__spec__`` so importlib doesn't try to recreate the package.
+    spec = getattr(pkg, "__spec__", None)
+    if spec is None or getattr(spec, "submodule_search_locations", None) is None:
+        spec = importlib.machinery.ModuleSpec("app", loader=None, is_package=True)
+        spec.submodule_search_locations = [package_path]
+        pkg.__spec__ = spec
+
+
 PROJECT_ROOT = _bootstrap_local_package()
+_ensure_local_package_stub()
 
 try:
     from app.utils.paths import ensure_project_paths, assert_app_paths
