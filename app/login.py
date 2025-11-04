@@ -288,6 +288,7 @@ def _build_loading_overlay_markup(*, steps_with_delays: tuple[tuple[str, float],
         </div>
     """
 
+
     script_block = """
         <script id="sl-login-loading-script">
         (function(){
@@ -297,86 +298,37 @@ def _build_loading_overlay_markup(*, steps_with_delays: tuple[tuple[str, float],
             catch (err) { return document; }
           }
           const doc = getDoc();
-          if (!doc) return;
+          if (!doc) { return; }
           const overlay = doc.getElementById('sl-login-overlay');
-          if (!overlay || overlay.dataset.slInit === '1') return;
-          overlay.dataset.slInit = '1';
+          if (!overlay) { return; }
 
-          const durations = (overlay.dataset.stepDurations || '').split(',').map(function(x){
-            const value = parseFloat(x);
-            return Number.isFinite(value) ? Math.max(0.12, value) : 0.45;
-          });
-          const steps = Array.from(overlay.querySelectorAll('.sl-login-step'));
-          const progressBar = overlay.querySelector('.sl-login-progress-bar');
-          const pill = overlay.querySelector('.sl-login-pill');
-          const subcopy = overlay.querySelector('.sl-login-subcopy');
-
-          const defaultTexts = { pending: 'Waiting', active: 'In progress', done: 'Complete' };
-
+          let steps = [];
+          let applyState = function(){};
           let safetyTimer = 0;
-          function scheduleSafetyTimer(){
+          let hardTimer = 0;
+          let scheduleSafetyTimer = function(){
             if (safetyTimer) {
               try { clearTimeout(safetyTimer); } catch (err) { /* noop */ }
+              safetyTimer = 0;
             }
-            const total = durations.reduce((acc, val) => acc + (Number.isFinite(val) ? val : 0.45), 0);
-            const perStep = durations.length ? total / durations.length : 0.45;
-            const fallbackDelay = Math.max(2200, (durations.length || 1) * Math.max(700, perStep * 1200));
-            safetyTimer = setTimeout(finish, fallbackDelay);
-          }
+            safetyTimer = setTimeout(finish, 3200);
+          };
 
-          function setStepState(step, state){
-            step.classList.remove('sl-login-step--done', 'sl-login-step--active', 'sl-login-step--pending');
-            step.classList.add('sl-login-step--' + state);
-            const statusEl = step.querySelector('.sl-login-step-status');
-            const attrKey = 'status' + state.charAt(0).toUpperCase() + state.slice(1);
-            const attrValue = step.dataset[attrKey];
-            if (statusEl) {
-              statusEl.textContent = attrValue || defaultTexts[state] || '';
-            }
-          }
-
-          function applyState(index){
-            steps.forEach(function(step, idx){
-              if (idx < index) {
-                setStepState(step, 'done');
-              } else if (idx === index) {
-                setStepState(step, 'active');
-              } else {
-                setStepState(step, 'pending');
+          function cleanup(){
+            try {
+              if (overlay && overlay.parentNode) {
+                overlay.parentNode.removeChild(overlay);
               }
-            });
-
-            if (progressBar) {
-              let pct;
-              if (!steps.length) {
-                pct = 100;
-              } else if (index < 0) {
-                pct = 5;
-              } else if (index >= steps.length) {
-                pct = 100;
-              } else {
-                pct = Math.min(100, Math.round(((index + 1) / steps.length) * 100));
-              }
-              progressBar.style.width = pct + '%';
-            }
-
-            if (pill) {
-              if (index >= steps.length) {
-                pill.textContent = pill.dataset.completeText || pill.textContent;
-              } else {
-                const current = steps[index];
-                const label = current ? current.querySelector('.sl-login-step-label') : null;
-                pill.textContent = (label ? label.textContent : '') || pill.dataset.defaultText || pill.textContent;
-              }
-            }
-
-            if (subcopy && index >= steps.length) {
-              subcopy.textContent = subcopy.dataset.completeText || subcopy.textContent;
+            } catch (err) { /* noop */ }
+            const styleEl = doc.getElementById('sl-login-loading-style');
+            if (styleEl && styleEl.parentNode) {
+              try { styleEl.parentNode.removeChild(styleEl); } catch (err) { /* noop */ }
             }
           }
 
           function finish(){
             if (!overlay || overlay.dataset.slDone === '1') {
+              cleanup();
               return;
             }
             overlay.dataset.slDone = '1';
@@ -384,36 +336,143 @@ def _build_loading_overlay_markup(*, steps_with_delays: tuple[tuple[str, float],
               try { clearTimeout(safetyTimer); } catch (err) { /* noop */ }
               safetyTimer = 0;
             }
-            applyState(steps.length);
+            if (hardTimer) {
+              try { clearTimeout(hardTimer); } catch (err) { /* noop */ }
+              hardTimer = 0;
+            }
+            try { applyState(steps.length); } catch (err) { /* noop */ }
             overlay.classList.add('sl-login-loading-overlay--fade');
-            setTimeout(function(){
-              if (overlay && overlay.parentNode) {
-                overlay.parentNode.removeChild(overlay);
-              }
-              const styleEl = doc.getElementById('sl-login-loading-style');
-              if (styleEl && styleEl.parentNode) {
-                styleEl.parentNode.removeChild(styleEl);
-              }
-            }, 650);
+            setTimeout(cleanup, 650);
           }
 
-          function advance(index){
-            if (!steps.length) {
-              finish();
-              return;
+          try {
+            overlay.dataset.slInit = overlay.dataset.slInit || String(Date.now());
+
+            const durations = (overlay.dataset.stepDurations || '').split(',').map(function(x){
+              const value = parseFloat(x);
+              return Number.isFinite(value) ? Math.max(0.12, value) : 0.45;
+            });
+            steps = Array.from(overlay.querySelectorAll('.sl-login-step'));
+            const progressBar = overlay.querySelector('.sl-login-progress-bar');
+            const pill = overlay.querySelector('.sl-login-pill');
+            const subcopy = overlay.querySelector('.sl-login-subcopy');
+
+            const defaultTexts = { pending: 'Waiting', active: 'In progress', done: 'Complete' };
+
+            const total = durations.reduce(
+              (acc, val) => acc + (Number.isFinite(val) ? val : 0.45),
+              0
+            );
+            const perStep = durations.length ? total / durations.length : 0.45;
+            const guardDelay = Math.max(900, perStep * 1300);
+            const fallbackDelay = Math.max(2600, (durations.length || 1) * guardDelay);
+
+            scheduleSafetyTimer = function(){
+              if (safetyTimer) {
+                try { clearTimeout(safetyTimer); } catch (err) { /* noop */ }
+              }
+              safetyTimer = setTimeout(finish, fallbackDelay);
+            };
+
+            hardTimer = setTimeout(finish, fallbackDelay + 1600);
+
+            function setStepState(step, state){
+              step.classList.remove('sl-login-step--done', 'sl-login-step--active', 'sl-login-step--pending');
+              step.classList.add('sl-login-step--' + state);
+              const statusEl = step.querySelector('.sl-login-step-status');
+              const attrKey = 'status' + state.charAt(0).toUpperCase() + state.slice(1);
+              const attrValue = step.dataset[attrKey];
+              if (statusEl) {
+                statusEl.textContent = attrValue || defaultTexts[state] || '';
+              }
             }
-            if (index >= steps.length) {
-              finish();
-              return;
+
+            applyState = function(index){
+              steps.forEach(function(step, idx){
+                if (idx < index) {
+                  setStepState(step, 'done');
+                } else if (idx === index) {
+                  setStepState(step, 'active');
+                } else {
+                  setStepState(step, 'pending');
+                }
+              });
+
+              if (progressBar) {
+                let pct;
+                if (!steps.length) {
+                  pct = 100;
+                } else if (index < 0) {
+                  pct = 5;
+                } else if (index >= steps.length) {
+                  pct = 100;
+                } else {
+                  pct = Math.min(100, Math.round(((index + 1) / steps.length) * 100));
+                }
+                progressBar.style.width = pct + '%';
+              }
+
+              if (pill) {
+                if (index >= steps.length) {
+                  pill.textContent = pill.dataset.completeText || pill.textContent;
+                } else {
+                  const current = steps[index];
+                  const label = current ? current.querySelector('.sl-login-step-label') : null;
+                  pill.textContent = (label ? label.textContent : '') || pill.dataset.defaultText || pill.textContent;
+                }
+              }
+
+              if (subcopy && index >= steps.length) {
+                subcopy.textContent = subcopy.dataset.completeText || subcopy.textContent;
+              }
+            };
+
+            function advance(index){
+              if (!steps.length) {
+                finish();
+                return;
+              }
+              if (index >= steps.length) {
+                finish();
+                return;
+              }
+              try {
+                applyState(index);
+              } catch (err) {
+                finish();
+                return;
+              }
+              scheduleSafetyTimer();
+              const delay = durations[index] || 0.45;
+              setTimeout(function(){ advance(index + 1); }, Math.max(160, delay * 1000));
             }
-            applyState(index);
-            const delay = durations[index] || 0.45;
-            setTimeout(function(){ advance(index + 1); }, Math.max(140, delay * 1000));
+
+            applyState(-1);
+            scheduleSafetyTimer();
+            setTimeout(function(){ advance(0); }, 120);
+          } catch (err) {
+            if (typeof console !== 'undefined' && console && console.error) {
+              console.error('ScoutLens login overlay failed', err);
+            }
+            finish();
+            return;
           }
 
-          applyState(-1);
-          scheduleSafetyTimer();
-          setTimeout(function(){ advance(0); }, 100);
+          if (overlay && overlay.dataset.slDone !== '1') {
+            w.addEventListener('pageshow', function(){
+              if (overlay && overlay.dataset.slDone !== '1') {
+                scheduleSafetyTimer();
+              }
+            }, { once: true });
+            doc.addEventListener('visibilitychange', function handler(){
+              if (!doc.hidden) {
+                if (overlay && overlay.dataset.slDone !== '1') {
+                  scheduleSafetyTimer();
+                }
+                doc.removeEventListener('visibilitychange', handler);
+              }
+            });
+          }
         })();
         </script>
     """
