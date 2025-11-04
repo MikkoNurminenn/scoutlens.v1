@@ -39,6 +39,8 @@ FILTER_DEFAULTS: dict[str, Any] = {
     "reports__f_date": None,
 }
 
+FILTER_RESET_FLAG = "reports__reset_filters"
+
 
 def _reset_report_filters() -> None:
     """Reset all report filter widgets back to their defaults."""
@@ -47,9 +49,17 @@ def _reset_report_filters() -> None:
         if default is None:
             st.session_state.pop(key, None)
         else:
-            st.session_state[key] = default
+            if isinstance(default, list):
+                st.session_state[key] = list(default)
+            elif isinstance(default, dict):
+                st.session_state[key] = dict(default)
+            elif isinstance(default, set):
+                st.session_state[key] = set(default)
+            else:
+                st.session_state[key] = default
     # Ensure optional selections don't keep pointing to filtered-out rows
     st.session_state.pop("reports__inspect_select", None)
+    st.session_state.pop(FILTER_RESET_FLAG, None)
 
 
 bootstrap_sidebar_auto_collapse()
@@ -466,6 +476,9 @@ def show_reports_page() -> None:
             )
         df = pd.DataFrame(data)
 
+        if st.session_state.pop(FILTER_RESET_FLAG, False):
+            _reset_report_filters()
+
         c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
         with c1:
             q_opp = st.text_input(
@@ -628,7 +641,7 @@ def show_reports_page() -> None:
             st.caption(f"Showing {len(df_f)} / {len(df)} reports")
         with btn_col:
             if st.button("Clear filters", key="reports__clear_filters", type="secondary"):
-                _reset_report_filters()
+                st.session_state[FILTER_RESET_FLAG] = True
                 st.rerun()
 
         with track("reports:table"):
