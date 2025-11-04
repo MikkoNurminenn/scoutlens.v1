@@ -313,6 +313,17 @@ def _build_loading_overlay_markup(*, steps_with_delays: tuple[tuple[str, float],
 
           const defaultTexts = { pending: 'Waiting', active: 'In progress', done: 'Complete' };
 
+          let safetyTimer = 0;
+          function scheduleSafetyTimer(){
+            if (safetyTimer) {
+              try { clearTimeout(safetyTimer); } catch (err) { /* noop */ }
+            }
+            const total = durations.reduce((acc, val) => acc + (Number.isFinite(val) ? val : 0.45), 0);
+            const perStep = durations.length ? total / durations.length : 0.45;
+            const fallbackDelay = Math.max(2200, (durations.length || 1) * Math.max(700, perStep * 1200));
+            safetyTimer = setTimeout(finish, fallbackDelay);
+          }
+
           function setStepState(step, state){
             step.classList.remove('sl-login-step--done', 'sl-login-step--active', 'sl-login-step--pending');
             step.classList.add('sl-login-step--' + state);
@@ -365,6 +376,14 @@ def _build_loading_overlay_markup(*, steps_with_delays: tuple[tuple[str, float],
           }
 
           function finish(){
+            if (!overlay || overlay.dataset.slDone === '1') {
+              return;
+            }
+            overlay.dataset.slDone = '1';
+            if (safetyTimer) {
+              try { clearTimeout(safetyTimer); } catch (err) { /* noop */ }
+              safetyTimer = 0;
+            }
             applyState(steps.length);
             overlay.classList.add('sl-login-loading-overlay--fade');
             setTimeout(function(){
@@ -393,6 +412,7 @@ def _build_loading_overlay_markup(*, steps_with_delays: tuple[tuple[str, float],
           }
 
           applyState(-1);
+          scheduleSafetyTimer();
           setTimeout(function(){ advance(0); }, 100);
         })();
         </script>
