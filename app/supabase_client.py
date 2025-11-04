@@ -6,7 +6,14 @@ from typing import Any, Dict, Optional
 
 import streamlit as st
 from supabase import AuthError
-from supabase_auth.errors import AuthApiError
+
+try:  # pragma: no cover - import path differs between versions
+    from supabase import AuthApiError  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - fallback for legacy packages
+    try:
+        from supabase_auth.errors import AuthApiError  # type: ignore[attr-defined]
+    except ImportError:  # pragma: no cover - best-effort compatibility
+        AuthApiError = None  # type: ignore[assignment]
 
 from app.utils.supa import SupabaseConfigError, get_client as _get_cached_client
 
@@ -114,10 +121,12 @@ def _safe_get_session(client) -> Any | None:
     """Fetch the current Supabase session, clearing state on Auth API errors."""
     try:
         return client.auth.get_session()
-    except AuthApiError as exc:
-        print(f"Supabase get_session failed: {exc}")
-        _clear_session_state("Your session expired. Please sign in again.")
-        return None
+    except Exception as exc:  # pragma: no cover - network error path
+        if AuthApiError is not None and isinstance(exc, AuthApiError):
+            print(f"Supabase get_session failed: {exc}")
+            _clear_session_state("Your session expired. Please sign in again.")
+            return None
+        raise
 
 
 def _apply_saved_session(client) -> None:
