@@ -206,6 +206,30 @@
   box-shadow: 0 0 0 1px var(--accent-1);
 }
 
+.stPopover,
+[data-baseweb="popover"] {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--divider);
+  box-shadow: var(--shadow-card);
+  color: var(--fg-strong);
+}
+
+.stPopover label,
+.stPopover p,
+.stPopover span,
+[data-baseweb="popover"] label,
+[data-baseweb="popover"] p,
+[data-baseweb="popover"] span {
+  color: var(--fg-strong);
+}
+
+.stPopover ::placeholder,
+[data-baseweb="popover"] ::placeholder {
+  color: color-mix(in srgb, var(--fg-strong) 78%, transparent);
+  opacity: 0.9;
+}
+
 .stSelectbox > div > div[data-baseweb="select"] {
   border-radius: var(--radius-sm);
   border: 1px solid var(--divider);
