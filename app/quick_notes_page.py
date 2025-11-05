@@ -200,11 +200,13 @@ def show_quick_notes_page() -> None:
     pending_search_key = PAGE_KEY + "pending_search"
     filter_key = PAGE_KEY + "note_filter"
     sort_key = PAGE_KEY + "note_sort"
+    add_modal_key = PAGE_KEY + "add_player_modal_open"
     st.session_state.setdefault(sel_id_key, None)
     st.session_state.setdefault(sel_label_key, None)
     st.session_state.setdefault(pending_search_key, None)
     st.session_state.setdefault(filter_key, "")
     st.session_state.setdefault(sort_key, "Newest update")
+    st.session_state.setdefault(add_modal_key, False)
 
     try:
         st.subheader("Player")
@@ -243,31 +245,73 @@ def show_quick_notes_page() -> None:
                 st.session_state[sel_label_key] = selected_option
 
         with col_add:
-            with st.popover("＋ New Player"):
-                # Scoped styling wrapper for this specific form (targets .sl-form-variant)
-                st.markdown('<div class="sl-form-variant">', unsafe_allow_html=True)
-                with st.form(PAGE_KEY + "add_player_form", clear_on_submit=True):
-                    name = st.text_input("Name*", value="", autocomplete="off", placeholder="Full name")
-                    colp = st.columns(2)
-                    position = colp[0].text_input("Position", value="", autocomplete="off", placeholder="e.g. CM")
-                    current_club = colp[1].text_input("Current club", value="", autocomplete="off", placeholder="e.g. Ajax")
-                    coln = st.columns(2)
-                    nationality = coln[0].text_input("Nationality", value="", autocomplete="off", placeholder="e.g. Finland")
-                    preferred_foot = coln[1].selectbox("Preferred foot", ["", "Right", "Left", "Both"])
-                    if st.form_submit_button("Create"):
-                        if not name.strip():
-                            st.warning("Name is required")
-                        else:
-                            new_id = _create_player_minimal(
-                                name, position, current_club, nationality, preferred_foot
-                            )
-                            if new_id:
-                                st.toast(f"Player '{name}' created", icon="✅")
-                                st.session_state[sel_id_key] = new_id
-                                st.session_state[sel_label_key] = f"{name} ({current_club or '—'})"
-                                st.session_state[pending_search_key] = name
-                                st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown('<div class="sl-add-player-cta">', unsafe_allow_html=True)
+            if st.button(
+                "＋ New Player",
+                key=PAGE_KEY + "open_add_player",
+                type="primary",
+                use_container_width=True,
+            ):
+                st.session_state[add_modal_key] = True
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            if st.session_state.get(add_modal_key):
+                with st.container():
+                    st.markdown(
+                        '<div class="sl-add-player-panel"><div class="sl-form-variant">',
+                        unsafe_allow_html=True,
+                    )
+                    with st.form(PAGE_KEY + "add_player_form", clear_on_submit=True):
+                        name = st.text_input(
+                            "Name*", value="", autocomplete="off", placeholder="Full name"
+                        )
+                        colp = st.columns(2)
+                        position = colp[0].text_input(
+                            "Position", value="", autocomplete="off", placeholder="e.g. CM"
+                        )
+                        current_club = colp[1].text_input(
+                            "Current club", value="", autocomplete="off", placeholder="e.g. Ajax"
+                        )
+                        coln = st.columns(2)
+                        nationality = coln[0].text_input(
+                            "Nationality",
+                            value="",
+                            autocomplete="off",
+                            placeholder="e.g. Finland",
+                        )
+                        preferred_foot = coln[1].selectbox(
+                            "Preferred foot", ["", "Right", "Left", "Both"]
+                        )
+
+                        action_cols = st.columns([1, 1])
+                        create_clicked = action_cols[0].form_submit_button(
+                            "Create", type="primary"
+                        )
+                        cancel_clicked = action_cols[1].form_submit_button(
+                            "Cancel", type="secondary"
+                        )
+
+                        if cancel_clicked:
+                            st.session_state[add_modal_key] = False
+                            st.rerun()
+
+                        if create_clicked:
+                            if not name.strip():
+                                st.warning("Name is required")
+                            else:
+                                new_id = _create_player_minimal(
+                                    name, position, current_club, nationality, preferred_foot
+                                )
+                                if new_id:
+                                    st.toast(f"Player '{name}' created", icon="✅")
+                                    st.session_state[sel_id_key] = new_id
+                                    st.session_state[sel_label_key] = (
+                                        f"{name} ({current_club or '—'})"
+                                    )
+                                    st.session_state[pending_search_key] = name
+                                    st.session_state[add_modal_key] = False
+                                    st.rerun()
+                    st.markdown("</div></div>", unsafe_allow_html=True)
 
         player_id = st.session_state.get(sel_id_key)
         if not player_id:
