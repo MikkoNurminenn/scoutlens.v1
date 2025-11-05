@@ -1,3 +1,84 @@
+/* .components.css
+   Global Streamlit theme + components + Add Player form variant.
+   Uses CSS variables with light/dark modes.
+*/
+
+/* ===== Base tokens ===== */
+:root {
+  /* Palette */
+  --fg-strong: #0f172a;
+  --fg-muted: #334155;
+  --fg-subtle: #64748b;
+  --fg-on-accent: #ffffff;
+
+  --bg-app: #f7f8fb;
+  --bg-card: #ffffff;
+
+  --accent-1: #6366f1;
+  --accent-2: #8b5cf6;
+  --accent-cyan: #06b6d4;
+
+  --warning: #f59e0b;
+  --error: #ef4444;
+
+  --divider: #e5e7eb;
+  --divider-strong: #cbd5e1;
+
+  --table-row-alt: #fafafa;
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Shadow */
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-hover: 0 6px 18px rgba(0,0,0,0.12);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+
+  /* Typography */
+  --fs-12: 12px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-32: 32px;
+}
+
+/* Dark scheme */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg-strong: #e5e7eb;
+    --fg-muted: #cbd5e1;
+    --fg-subtle: #94a3b8;
+    --fg-on-accent: #0b1020;
+
+    --bg-app: #0b1020;
+    --bg-card: #0f172a;
+
+    --accent-1: #7c3aed;
+    --accent-2: #22d3ee;
+    --accent-cyan: #22d3ee;
+
+    --warning: #fbbf24;
+    --error: #f87171;
+
+    --divider: #1f2937;
+    --divider-strong: #334155;
+
+    --table-row-alt: #0c142a;
+
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.5);
+    --shadow-hover: 0 8px 22px rgba(0,0,0,0.6);
+  }
+}
+
+/* App background (optional, looks cleaner) */
+body { background: var(--bg-app); }
+
 /* ===== Cards, KPI & Metrics ===== */
 .sl-card,
 .stMetric,
@@ -160,9 +241,7 @@
   box-shadow: none;
 }
 
-.sl-table table {
-  width: 100%;
-}
+.sl-table table { width: 100%; }
 
 .sl-table thead tr {
   position: sticky;
@@ -206,6 +285,7 @@
   box-shadow: 0 0 0 1px var(--accent-1);
 }
 
+/* Popover container */
 .stPopover,
 [data-baseweb="popover"] {
   background: var(--bg-card);
@@ -230,12 +310,12 @@
   opacity: 0.9;
 }
 
+/* Selectbox shell */
 .stSelectbox > div > div[data-baseweb="select"] {
   border-radius: var(--radius-sm);
   border: 1px solid var(--divider);
   background: var(--bg-card);
 }
-
 .stSelectbox > div > div[data-baseweb="select"]:focus-within {
   border-color: var(--accent-1);
   box-shadow: 0 0 0 1px var(--accent-1);
@@ -274,4 +354,28 @@
   height: 1px;
   background: var(--divider-strong);
   margin: var(--space-3) 0;
+}
+
+/* ===== Add Player variant (scoped to the popover form wrapper) ===== */
+.sl-form-variant label { color: var(--fg-strong); }
+.sl-form-variant ::placeholder { color: color-mix(in srgb, var(--fg-strong) 70%, transparent); }
+
+.sl-form-variant .stTextInput input,
+.sl-form-variant .stTextArea textarea,
+.sl-form-variant .stSelectbox > div > div[data-baseweb="select"] {
+  border-color: var(--divider);
+}
+
+.sl-form-variant .stTextInput input:focus,
+.sl-form-variant .stTextArea textarea:focus,
+.sl-form-variant .stSelectbox > div > div[data-baseweb="select"]:focus-within {
+  border-color: var(--accent-1);
+  box-shadow: 0 0 0 1px var(--accent-1);
+}
+
+/* Compact vertical rhythm for dense forms */
+.sl-form-variant .stTextInput,
+.sl-form-variant .stTextArea,
+.sl-form-variant .stSelectbox {
+  margin-bottom: var(--space-2);
 }
