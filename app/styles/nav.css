@@ -1,175 +1,78 @@
-/* nav.css — Sidebar button-based nav (theme-aware, accessible) */
+/* path: app/ui/nav.css  — override Streamlit blue & poista FA-riippuvuus navissa */
 
-/* ===== Tokens (override these in your global CSS if needed) ===== */
-:root {
-  --sidebar-bg: #0b1020;
-  --sidebar-ink: #f8fafc;
-  --sidebar-accent: #937cff;
-  --sidebar-ring: color-mix(in srgb, var(--sidebar-accent) 55%, transparent);
-  --sidebar-shadow: none;
+/* Tokenit (voit jo omistaa nämä component.css:ssä; tämä on varmistus) */
+:root{
+  --sidebar-bg:#0b1020;
+  --sidebar-ink:#f8fafc;
+  --sidebar-ink-dim:#94a3b8;
+  --sidebar-accent:#6b62f6; /* valitse oma */
+  --sidebar-ring: color-mix(in srgb, var(--sidebar-accent) 45%, transparent);
 }
 
-/* Auto-dark via user preference: adjust only if you don't already set globals */
-@media (prefers-color-scheme: light) {
-  :root {
-    --sidebar-bg: #f6f7fb;
-    --sidebar-ink: #0b1020;
-    --sidebar-accent: #6b62f6;
-    --sidebar-ring: color-mix(in srgb, var(--sidebar-accent) 45%, transparent);
-  }
+/* NAV KÄÄRE */
+#sl-sidebar-nav{
+  display:flex;
+  flex-direction:column;
+  gap:0.5rem;
 }
 
-/* ===== Container ===== */
-#sl-sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem; /* replaces margin on child buttons */
+/* ——— KILL THE BLUE: yliaja napit vain sivupalkissa ——— */
+section[data-testid="stSidebar"] .stButton > button{
+  /* layout */
+  width:100% !important;
+  text-align:left !important;
+  display:flex !important;
+  align-items:center !important;
+  gap:.75rem !important;
+  padding:.9rem 1.2rem .9rem 1.2rem !important;
+  border-radius:16px !important;
+
+  /* look */
+  background: color-mix(in srgb, #fff 4%, var(--sidebar-bg)) !important;
+  border:1px solid color-mix(in srgb, var(--sidebar-ink) 10%, transparent) !important;
+  color: var(--sidebar-ink) !important;
+  box-shadow:none !important;
+
+  /* typography */
+  font:600 0.95rem/1.15 "Inter","Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,sans-serif !important;
+
+  /* transitions */
+  transition: transform .18s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease !important;
 }
 
-/* ===== Button ===== */
-#sl-sidebar-nav :where(.stButton) { margin: 0; }
-
-#sl-sidebar-nav :where(.stButton > button) {
-  position: relative;
-  width: 100%;
-  text-align: left;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-ink) 8%, transparent);
-  background: color-mix(in srgb, #fff 3%, var(--sidebar-bg));
-  padding: 0.85rem 1.25rem 0.85rem 1.65rem;
-  font: 600 0.95rem/1.2 "Inter", "Font Awesome 6 Free", "Font Awesome 6 Brands",
-    "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  color: var(--sidebar-ink);
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease,
-    box-shadow 0.18s ease, color 0.18s ease;
+/* Emoji/teksti-ikonin tyyli (ensimmäinen merkki) */
+section[data-testid="stSidebar"] .stButton > button .sb-nav-label{ flex:1 1 auto; }
+section[data-testid="stSidebar"] .stButton > button .sb-nav-emoji{
+  inline-size:2.1rem; block-size:2.1rem;
+  display:inline-grid; place-items:center;
+  border-radius:14px;
+  background: color-mix(in srgb, var(--sidebar-accent) 20%, transparent);
 }
 
-/* Icon bubble */
-#sl-sidebar-nav :where(.stButton > button) .sb-nav-icon {
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  inline-size: 2.25rem;
-  block-size: 2.25rem;
-  border-radius: 14px;
-  font: 900 1.15rem/1 "Font Awesome 6 Free","Font Awesome 6 Brands",inherit;
-  letter-spacing: normal;
-  color: color-mix(in srgb, var(--sidebar-accent) 80%, #ffffff 20%);
-  background:
-    linear-gradient(
-      140deg,
-      color-mix(in srgb, var(--sidebar-accent) 38%, var(--sidebar-bg) 62%),
-      color-mix(in srgb, var(--sidebar-accent) 65%, rgba(255, 255, 255, 0.08))
-    );
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--sidebar-accent) 75%, rgba(255,255,255,0.18)),
-    0 12px 24px color-mix(in srgb, var(--sidebar-bg) 85%, black 15%);
-  text-shadow: 0 4px 12px rgba(12, 8, 30, 0.32);
-}
-
-/* Label */
-#sl-sidebar-nav :where(.stButton > button) .sb-nav-label {
-  flex: 1 1 auto;
-  min-block-size: 2.1rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--sidebar-ink);
-}
-
-/* Accent bar (left) */
-#sl-sidebar-nav :where(.stButton > button)::before {
-  content: "";
-  position: absolute;
-  inset-inline-start: 0.75rem;
-  inset-block-start: 50%;
-  transform: translateY(-50%);
-  inline-size: 0.3rem;
-  block-size: 62%;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--sidebar-accent) 55%, transparent);
-  opacity: 0;
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-
-/* Hover */
-#sl-sidebar-nav :where(.stButton > button:hover) {
+/* Hover / focus */
+section[data-testid="stSidebar"] .stButton > button:hover{
   transform: translateX(4px);
-  filter: brightness(1.05);
-  background: color-mix(in srgb, rgba(255, 255, 255, 0.06) 100%, var(--sidebar-bg));
-  border-color: color-mix(in srgb, rgba(255, 255, 255, 0.08) 70%, var(--sidebar-ink) 30%);
+  background: color-mix(in srgb, rgba(255,255,255,.08) 100%, var(--sidebar-bg));
+  border-color: color-mix(in srgb, var(--sidebar-ink) 18%, transparent);
+}
+section[data-testid="stSidebar"] .stButton > button:focus-visible{
+  outline:none !important;
+  box-shadow: 0 0 0 3px var(--sidebar-ring) !important;
 }
 
-#sl-sidebar-nav :where(.stButton > button:hover) .sb-nav-icon {
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--sidebar-accent) 85%, rgba(255,255,255,0.18)),
-    0 18px 28px color-mix(in srgb, var(--sidebar-bg) 78%, black 22%);
-  transform: translateY(-1px);
-}
-
-#sl-sidebar-nav :where(.stButton > button:hover)::before { opacity: 0.5; }
-
-/* ===== Active (3 ways): disabled, .is-active, or aria-current="page" ===== */
-#sl-sidebar-nav :where(.stButton > button:disabled,
-                       .stButton > button.is-active,
-                       .stButton > button[aria-current="page"]) {
-  opacity: 1;
-  cursor: default;
-  background: linear-gradient(
-    135deg,
+/* Active: käytä disabled tai .is-active */
+section[data-testid="stSidebar"] .stButton > button:disabled,
+section[data-testid="stSidebar"] .stButton > button.is-active{
+  opacity:1 !important;
+  cursor:default !important;
+  background: linear-gradient(135deg,
     color-mix(in srgb, var(--sidebar-accent) 22%, transparent),
-    color-mix(in srgb, var(--sidebar-accent) 8%, transparent)
-  );
-  border-color: color-mix(in srgb, var(--sidebar-accent) 55%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sidebar-accent) 25%, transparent) inset,
-              var(--sidebar-shadow, none);
-  color: color-mix(in srgb, var(--sidebar-ink) 92%, white 8%);
+    color-mix(in srgb, var(--sidebar-accent) 10%, transparent)) !important;
+  border-color: color-mix(in srgb, var(--sidebar-accent) 55%, transparent) !important;
+  color: color-mix(in srgb, var(--sidebar-ink) 95%, white 5%) !important;
 }
 
-#sl-sidebar-nav :where(.stButton > button:disabled .sb-nav-icon,
-                       .stButton > button.is-active .sb-nav-icon,
-                       .stButton > button[aria-current="page"] .sb-nav-icon) {
-  color: color-mix(in srgb, var(--sidebar-ink) 92%, rgba(255,255,255,0.05));
-  background:
-    linear-gradient(
-      140deg,
-      color-mix(in srgb, var(--sidebar-accent) 62%, color-mix(in srgb, var(--sidebar-bg) 72%, black 28%)),
-      color-mix(in srgb, var(--sidebar-accent) 78%, rgba(255,255,255,0.12))
-    );
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--sidebar-accent) 80%, rgba(255,255,255,0.28)),
-    0 20px 34px color-mix(in srgb, var(--sidebar-bg) 68%, black 32%);
-}
-
-#sl-sidebar-nav :where(.stButton > button:disabled::before,
-                       .stButton > button.is-active::before,
-                       .stButton > button[aria-current="page"]::before) {
-  opacity: 1;
-  transform: translateY(-50%) scaleY(1.05);
-}
-
-/* ===== Focus visible (keyboard) ===== */
-#sl-sidebar-nav :where(.stButton > button:focus-visible) {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--sidebar-ring),
-              0 0 0 6px color-mix(in srgb, var(--sidebar-ring) 45%, transparent);
-}
-
-/* ===== Reduced motion ===== */
-@media (prefers-reduced-motion: reduce) {
-  #sl-sidebar-nav :where(.stButton > button) {
-    transition: none;
-    transform: none !important;
-  }
-  #sl-sidebar-nav :where(.stButton > button:hover .sb-nav-icon) {
-    transform: none !important;
-  }
-}
-
-/* ===== RTL support (if you ever switch direction) ===== */
-:dir(rtl) #sl-sidebar-nav :where(.stButton > button)::before {
-  inset-inline-start: auto;
-  inset-inline-end: 0.75rem;
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce){
+  section[data-testid="stSidebar"] .stButton > button{ transition:none !important; transform:none !important; }
 }
