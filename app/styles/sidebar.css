@@ -1,30 +1,31 @@
 /* path: app/ui/sidebar.css */
 
-/* Imports (fontit – pidä tai siirrä globaaliin CSS:ään) */
+/* Imports (voit siirtää globaaliksi jos haluat) */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 @import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css");
 
-/* ===== Tokens & defaults (teema-agnostinen) ===== */
+/* ===== Tokens & defaults ===== */
 :root {
   color-scheme: var(--color-scheme, dark);
 
-  /* Värit */
+  /* Core palette */
   --sidebar-bg: #0b1020;
   --sidebar-bg-elev: #0e1626;
+  --sidebar-logo-bg: #0f172a;       /* ← dark background under white PNG logo */
   --sidebar-ink: #f8fafc;
   --sidebar-ink-muted: #cbd5e1;
   --sidebar-ink-dim: #94a3b8;
 
-  --sidebar-accent: #937cff;
+  --sidebar-accent: #6b62f6;
   --sidebar-danger: #ef4444;
 
   --sidebar-ring: color-mix(in srgb, var(--sidebar-accent) 45%, transparent);
   --sidebar-ring-strong: color-mix(in srgb, var(--sidebar-accent) 60%, transparent);
 
-  --sidebar-border: color-mix(in srgb, white 6%, black 94%);
+  --sidebar-border: color-mix(in srgb, #ffffff 6%, #000000 94%);
   --sidebar-shadow: 0 10px 24px rgba(10, 14, 30, 0.35);
 
-  /* Mitat & radiukset */
+  /* Dimensions */
   --sidebar-width-lg: 340px;
   --sidebar-width-md: 300px;
   --sidebar-width-sm: 280px;
@@ -36,11 +37,12 @@
   --sidebar-collapser-radius: 999px;
 }
 
-/* Light override – jos globaalissa teema-CSS:ssä jo määritelty, tämä on no-op */
+/* Light override */
 @media (prefers-color-scheme: light) {
   :root {
     --sidebar-bg: #f6f7fb;
     --sidebar-bg-elev: #ffffff;
+    --sidebar-logo-bg: #e8ebf6;
     --sidebar-ink: #0b1020;
     --sidebar-ink-muted: #334155;
     --sidebar-ink-dim: #475569;
@@ -51,7 +53,7 @@
     --sidebar-ring: color-mix(in srgb, var(--sidebar-accent) 40%, transparent);
     --sidebar-ring-strong: color-mix(in srgb, var(--sidebar-accent) 55%, transparent);
 
-    --sidebar-border: color-mix(in srgb, black 8%, white 92%);
+    --sidebar-border: color-mix(in srgb, #000 8%, #fff 92%);
     --sidebar-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
   }
 }
@@ -81,7 +83,6 @@
   margin: 0;
   border-radius: var(--sidebar-collapser-radius);
   border: 1px solid color-mix(in srgb, var(--sidebar-ring-strong) 50%, #ffffff 50%);
-  /* Elev tausta, teema-tietoinen */
   background: color-mix(in srgb, var(--sidebar-bg-elev) 85%, #ffffff 15%);
   color: color-mix(in srgb, var(--sidebar-bg) 25%, black 75%);
   box-shadow:
@@ -130,7 +131,7 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
 }
 
 :where([data-testid="stSidebarCollapseButton"])::after,
-:where(button[data-testid="stSidebarCollapseButton"])::after { display: none; }
+:where(button[data-testid="stSidebarCollapseButton"])::after) { display: none; }
 
 :where(body .stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"]) { left: 1rem; }
 
@@ -185,18 +186,35 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   box-shadow: var(--sidebar-shadow);
 }
 
-.sb-logo { display: flex; justify-content: center; }
+/* Dark background area behind white PNG logo */
+.sb-logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 14px;
+  border-radius: 16px;
+  background:
+    radial-gradient(900px 420px at 35% 15%, rgba(255,255,255,0.06), transparent 60%),
+    var(--sidebar-logo-bg);
+  border: 1px solid var(--sidebar-border);
+  box-shadow: var(--sidebar-shadow);
+}
+
 .sb-logo img {
   width: 100%;
-  border-radius: 16px;
-  box-shadow: var(--sidebar-shadow);
+  height: auto;
+  display: block;
+  border-radius: 12px;
+  background: transparent;
+  mix-blend-mode: normal;
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,0.18));
 }
 
 .sb-title-block { display: flex; flex-direction: column; gap: 0.2rem; text-align: center; }
 .sb-title { font-size: 1.35rem; font-weight: 700; color: var(--sidebar-ink); }
 .sb-tagline { font-size: 0.95rem; color: var(--sidebar-ink-muted); font-weight: 500; }
 
-/* ===== Navigation ===== */
+/* ===== Navigation title (for button/ radio based nav) ===== */
 .sb-nav-title {
   display: flex;
   align-items: center;
@@ -209,6 +227,7 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
 .sb-nav-title .sb-nav-text { font-size: 0.78rem; font-weight: 600; color: var(--sidebar-ink-dim); }
 .sb-nav-underline { flex: 1; height: 1px; background: var(--sidebar-border); border-radius: 999px; }
 
+/* Streamlit Radio container (if used somewhere) */
 :where(section[data-testid="stSidebar"] div[data-testid="stRadio"]) {
   display: flex;
   flex-direction: column;
