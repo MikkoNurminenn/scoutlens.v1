@@ -181,13 +181,13 @@
 }
 
 /* ===== Form controls ===== */
-:where(.stTextInput > div > div > input,
-       .stNumberInput > div > div > input,
-       .stDateInput > div > div > input,
+:where(.stTextInput input,
+       .stNumberInput input,
+       .stDateInput input,
        .stTextArea textarea,
        .stSelectbox select,
-       .stSelectbox > div > div[data-baseweb="select"] input,
-       .stMultiSelect > div > div > input) {
+       .stSelectbox [data-baseweb="select"] input,
+       .stMultiSelect input) {
   background: var(--bg-card);
   border-radius: var(--radius-sm);
   border: 1px solid var(--divider);
@@ -195,13 +195,13 @@
   padding: var(--space-2);
 }
 
-:where(.stTextInput > div > div > input,
-       .stNumberInput > div > div > input,
-       .stDateInput > div > div > input,
+:where(.stTextInput input,
+       .stNumberInput input,
+       .stDateInput input,
        .stTextArea textarea,
        .stSelectbox select,
-       .stSelectbox > div > div[data-baseweb="select"] input,
-       .stMultiSelect > div > div > input):focus {
+       .stSelectbox [data-baseweb="select"] input,
+       .stMultiSelect input):focus {
   border-color: var(--accent-1);
   box-shadow: 0 0 0 1px var(--accent-1);
 }
