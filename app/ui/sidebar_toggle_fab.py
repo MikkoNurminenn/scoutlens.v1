@@ -177,11 +177,11 @@ def sl_inject_sidebar_fab(
       fab.setAttribute('aria-label', 'Toggle sidebar');
       fab.setAttribute('title', 'Toggle sidebar');
       fab.dataset.icon = {json.dumps(icon_mode)};
-      fab.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${iconMarkup}</svg>${badgeMarkup}`;
+      fab.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + iconMarkup + '</svg>' + badgeMarkup;
       doc.body.appendChild(fab);
     }} else {{
       fab.dataset.icon = {json.dumps(icon_mode)};
-      fab.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${iconMarkup}</svg>${badgeMarkup}`;
+      fab.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + iconMarkup + '</svg>' + badgeMarkup;
     }}
 
     const badgeEl = fab.querySelector('.sl-badge');
