@@ -13,6 +13,7 @@ __all__ = [
     "list_quick_notes",
     "add_quick_note",
     "delete_quick_note",
+    "update_quick_note",
     "fetch_note_counts_by_player",
 ]
 
@@ -52,6 +53,22 @@ def add_quick_note(player_id: str, content: str) -> bool:
         return True
     except APIError as exc:  # pragma: no cover - network interaction
         st.error(f"Failed to add note: {exc}")
+        return False
+
+
+def update_quick_note(note_id: str, content: str) -> bool:
+    """Update an existing quick note."""
+    if not note_id:
+        return False
+    if not content or not content.strip():
+        st.warning("Note is empty.")
+        return False
+    sb = get_client()
+    try:
+        sb.table("quick_notes").update({"content": content.strip()}).eq("id", note_id).execute()
+        return True
+    except APIError as exc:  # pragma: no cover - network interaction
+        st.error(f"Failed to update note: {exc}")
         return False
 
 
