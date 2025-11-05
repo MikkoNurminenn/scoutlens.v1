@@ -1,0 +1,267 @@
+/* ============================ */
+/* file: app/ui/buttons.css     */
+/* ScoutLens — Buttons System   */
+/* ============================ */
+
+:root {
+  /* Foregrounds */
+  --sl-fg: #0f172a;
+  --sl-fg-inv: #ffffff;
+
+  /* Backgrounds */
+  --sl-bg: #ffffff;
+  --sl-bg-elev: #0f172a;
+
+  /* Brand */
+  --sl-accent: #6b62f6;
+  --sl-accent-2: #22d3ee;
+  --sl-success: #16a34a;
+  --sl-danger: #ef4444;
+  --sl-muted: #6b7280;
+
+  /* Ring / borders */
+  --sl-ring: color-mix(in srgb, var(--sl-accent) 45%, transparent);
+  --sl-brd: #e5e7eb;
+  --sl-brd-strong: #cbd5e1;
+
+  /* Radii + shadows */
+  --sl-r-sm: 8px;
+  --sl-r-md: 12px;
+  --sl-r-lg: 14px;
+  --sl-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --sl-shadow-hover: 0 8px 22px rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sl-fg: #e5e7eb;
+    --sl-fg-inv: #0b1020;
+
+    --sl-bg: #0f172a;
+    --sl-bg-elev: #111827;
+
+    --sl-accent: #7c3aed;
+    --sl-accent-2: #22d3ee;
+    --sl-success: #22c55e;
+    --sl-danger: #f87171;
+    --sl-muted: #94a3b8;
+
+    --sl-ring: color-mix(in srgb, var(--sl-accent) 50%, transparent);
+
+    --sl-brd: #1f2937;
+    --sl-brd-strong: #334155;
+
+    --sl-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --sl-shadow-hover: 0 10px 28px rgba(0, 0, 0, 0.55);
+  }
+}
+
+:where(.stButton > button),
+:where(.stDownloadButton > button),
+:where(.stLinkButton > a),
+:where(div[data-testid="stFormSubmitButton"] button),
+:where(div[role="button"][data-baseweb="button"]) {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  cursor: pointer;
+  user-select: none;
+  border-radius: var(--sl-r-md);
+  padding: 0.62rem 0.95rem;
+  font: 600 0.95rem/1.15 "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  border: 1px solid var(--sl-brd);
+  background: var(--sl-bg);
+  color: var(--sl-fg);
+  box-shadow: var(--sl-shadow);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+:where(
+    .stButton > button:hover,
+    .stDownloadButton > button:hover,
+    .stLinkButton > a:hover,
+    div[data-testid="stFormSubmitButton"] button:hover
+  ) {
+  transform: translateY(-1px);
+  box-shadow: var(--sl-shadow-hover);
+}
+
+:where(
+    .stButton > button:focus-visible,
+    .stDownloadButton > button:focus-visible,
+    .stLinkButton > a:focus-visible,
+    div[data-testid="stFormSubmitButton"] button:focus-visible
+  ) {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--sl-ring);
+}
+
+:where(
+    .stButton > button:disabled,
+    .stDownloadButton > button:disabled,
+    div[data-testid="stFormSubmitButton"] button:disabled
+  ) {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.sl-faux-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.62rem 0.95rem;
+  border-radius: var(--sl-r-md);
+  border: 1px solid var(--sl-brd);
+  background: var(--sl-bg);
+  color: var(--sl-fg);
+  text-decoration: none;
+}
+
+.sl-btn.sl-sm :where(.stButton > button,
+        .stDownloadButton > button,
+        .stLinkButton > a,
+        div[data-testid="stFormSubmitButton"] button) {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.9rem;
+  border-radius: var(--sl-r-sm);
+}
+
+.sl-btn.sl-md :where(.stButton > button,
+        .stDownloadButton > button,
+        .stLinkButton > a,
+        div[data-testid="stFormSubmitButton"] button) {
+  padding: 0.62rem 0.95rem;
+  font-size: 0.95rem;
+}
+
+.sl-btn.sl-lg :where(.stButton > button,
+        .stDownloadButton > button,
+        .stLinkButton > a,
+        div[data-testid="stFormSubmitButton"] button) {
+  padding: 0.85rem 1.15rem;
+  font-size: 1.05rem;
+  border-radius: var(--sl-r-lg);
+}
+
+.sl-btn.sl-primary :where(.stButton > button,
+        .stDownloadButton > button,
+        .stLinkButton > a,
+        div[data-testid="stFormSubmitButton"] button) {
+  background: var(--sl-accent);
+  color: var(--sl-fg-inv);
+  border-color: color-mix(in srgb, var(--sl-accent) 55%, transparent);
+}
+
+.sl-btn.sl-primary :where(
+    .stButton > button:hover,
+    .stDownloadButton > button:hover,
+    .stLinkButton > a:hover,
+    div[data-testid="stFormSubmitButton"] button:hover
+  ) {
+  background: linear-gradient(90deg, var(--sl-accent), var(--sl-accent-2));
+}
+
+.sl-btn.sl-secondary :where(.stButton > button,
+        .stDownloadButton > button,
+        .stLinkButton > a,
+        div[data-testid="stFormSubmitButton"] button) {
+  background: var(--sl-bg);
+  color: var(--sl-accent);
+  border-color: var(--sl-accent);
+}
+
+.sl-btn.sl-outline :where(.stButton > button,
+        .stDownloadButton > button,
+        .stLinkButton > a,
+        div[data-testid="stFormSubmitButton"] button) {
+  background: transparent;
+  color: var(--sl-fg);
+  border-color: var(--sl-brd-strong);
+}
+
+.sl-btn.sl-ghost :where(.stButton > button,
+        .stDownloadButton > button,
+        .stLinkButton > a,
+        div[data-testid="stFormSubmitButton"] button) {
+  background: transparent;
+  color: var(--sl-muted);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.sl-btn.sl-ghost :where(
+    .stButton > button:hover,
+    .stDownloadButton > button:hover,
+    .stLinkButton > a:hover,
+    div[data-testid="stFormSubmitButton"] button:hover
+  ) {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.sl-btn.sl-success :where(.stButton > button,
+        .stDownloadButton > button,
+        .stLinkButton > a,
+        div[data-testid="stFormSubmitButton"] button) {
+  background: color-mix(in srgb, var(--sl-success) 20%, transparent);
+  color: color-mix(in srgb, var(--sl-success) 85%, white 15%);
+  border-color: color-mix(in srgb, var(--sl-success) 55%, transparent);
+}
+
+.sl-btn.sl-success :where(
+    .stButton > button:hover,
+    .stDownloadButton > button:hover,
+    .stLinkButton > a:hover,
+    div[data-testid="stFormSubmitButton"] button:hover
+  ) {
+  background: color-mix(in srgb, var(--sl-success) 28%, transparent);
+}
+
+.sl-btn.sl-danger :where(.stButton > button,
+        .stDownloadButton > button,
+        .stLinkButton > a,
+        div[data-testid="stFormSubmitButton"] button) {
+  background: color-mix(in srgb, var(--sl-danger) 20%, transparent);
+  color: color-mix(in srgb, var(--sl-danger) 85%, white 15%);
+  border-color: color-mix(in srgb, var(--sl-danger) 55%, transparent);
+}
+
+.sl-btn.sl-danger :where(
+    .stButton > button:hover,
+    .stDownloadButton > button:hover,
+    .stLinkButton > a:hover,
+    div[data-testid="stFormSubmitButton"] button:hover
+  ) {
+  background: color-mix(in srgb, var(--sl-danger) 28%, transparent);
+}
+
+.sl-icon {
+  inline-size: 1.85rem;
+  block-size: 1.85rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+section[data-testid="stSidebar"] .sl-btn :where(.stButton > button,
+        .stDownloadButton > button,
+        .stLinkButton > a,
+        div[data-testid="stFormSubmitButton"] button) {
+  padding: 0.7rem 0.95rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(
+      .stButton > button,
+      .stDownloadButton > button,
+      .stLinkButton > a,
+      div[data-testid="stFormSubmitButton"] button
+    ) {
+    transition: none;
+    transform: none;
+  }
+}
