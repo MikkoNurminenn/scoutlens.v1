@@ -357,6 +357,16 @@ body { background: var(--bg-app); }
 }
 
 /* ===== Add Player variant (scoped to the popover form wrapper) ===== */
+.sl-add-player-panel {
+  margin-top: var(--space-2);
+  padding: var(--space-4);
+  background: var(--bg-card);
+  color: var(--fg-strong);
+  border: 1px solid color-mix(in srgb, var(--divider) 60%, transparent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-hover);
+}
+
 .sl-form-variant label { color: var(--fg-strong); }
 .sl-form-variant ::placeholder { color: color-mix(in srgb, var(--fg-strong) 70%, transparent); }
 
