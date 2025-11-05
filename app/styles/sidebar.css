@@ -1,12 +1,59 @@
 /* path: app/ui/sidebar.css */
 
+/* Imports (fontit – pidä tai siirrä globaaliin CSS:ään) */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 @import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css");
 
+/* ===== Tokens & defaults (teema-agnostinen) ===== */
 :root {
   color-scheme: var(--color-scheme, dark);
+
+  /* Värit */
+  --sidebar-bg: #0b1020;
+  --sidebar-bg-elev: #0e1626;
+  --sidebar-ink: #f8fafc;
+  --sidebar-ink-muted: #cbd5e1;
+  --sidebar-ink-dim: #94a3b8;
+
+  --sidebar-accent: #937cff;
+  --sidebar-danger: #ef4444;
+
+  --sidebar-ring: color-mix(in srgb, var(--sidebar-accent) 45%, transparent);
+  --sidebar-ring-strong: color-mix(in srgb, var(--sidebar-accent) 60%, transparent);
+
+  --sidebar-border: color-mix(in srgb, white 6%, black 94%);
+  --sidebar-shadow: 0 10px 24px rgba(10, 14, 30, 0.35);
+
+  /* Mitat & radiukset */
+  --sidebar-width-lg: 340px;
+  --sidebar-width-md: 300px;
+  --sidebar-width-sm: 280px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* Collapser */
   --sidebar-collapser-size: 2.75rem;
   --sidebar-collapser-radius: 999px;
+}
+
+/* Light override – jos globaalissa teema-CSS:ssä jo määritelty, tämä on no-op */
+@media (prefers-color-scheme: light) {
+  :root {
+    --sidebar-bg: #f6f7fb;
+    --sidebar-bg-elev: #ffffff;
+    --sidebar-ink: #0b1020;
+    --sidebar-ink-muted: #334155;
+    --sidebar-ink-dim: #475569;
+
+    --sidebar-accent: #6b62f6;
+    --sidebar-danger: #dc2626;
+
+    --sidebar-ring: color-mix(in srgb, var(--sidebar-accent) 40%, transparent);
+    --sidebar-ring-strong: color-mix(in srgb, var(--sidebar-accent) 55%, transparent);
+
+    --sidebar-border: color-mix(in srgb, black 8%, white 92%);
+    --sidebar-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+  }
 }
 
 /* ===== Sidebar collapse button ===== */
@@ -33,11 +80,12 @@
   padding: 0;
   margin: 0;
   border-radius: var(--sidebar-collapser-radius);
-  border: 1px solid color-mix(in srgb, rgba(15, 23, 42, 0.22) 60%, rgba(255, 255, 255, 0.6) 40%);
-  background: #ffffff;
-  color: color-mix(in srgb, var(--sidebar-bg, #0b1020) 25%, black 75%);
+  border: 1px solid color-mix(in srgb, var(--sidebar-ring-strong) 50%, #ffffff 50%);
+  /* Elev tausta, teema-tietoinen */
+  background: color-mix(in srgb, var(--sidebar-bg-elev) 85%, #ffffff 15%);
+  color: color-mix(in srgb, var(--sidebar-bg) 25%, black 75%);
   box-shadow:
-    0 16px 36px rgba(15, 23, 42, 0.28),
+    0 16px 36px color-mix(in srgb, var(--sidebar-bg) 35%, black 65%),
     inset 0 0 0 0.6px rgba(255, 255, 255, 0.45);
   backdrop-filter: blur(6px);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease,
@@ -57,38 +105,34 @@
        button[data-testid="stSidebarCollapseButton"]:hover,
        button[data-testid="stSidebarCollapseButton"]:focus-visible) {
   transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--sidebar-ring, rgba(62, 168, 179, 0.4)) 70%, rgba(255, 255, 255, 0.7) 30%);
-  background: #ffffff;
+  border-color: color-mix(in srgb, var(--sidebar-ring) 70%, #ffffff 30%);
+  background: color-mix(in srgb, var(--sidebar-bg-elev) 92%, #ffffff 8%);
   box-shadow:
-    0 20px 42px rgba(15, 23, 42, 0.32),
+    0 20px 42px color-mix(in srgb, var(--sidebar-bg) 30%, black 70%),
     inset 0 0 0 0.8px rgba(255, 255, 255, 0.55);
-  color: color-mix(in srgb, var(--sidebar-bg, #0b1020) 30%, black 70%);
+  color: color-mix(in srgb, var(--sidebar-bg) 30%, black 70%);
   outline: none;
 }
 
 :where(section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"] > button),
 :where(.stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"] > button),
 button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"] {
-  background: #ffffff;
-  color: color-mix(in srgb, var(--sidebar-bg, #0b1020) 20%, black 80%);
-  border-color: color-mix(in srgb, var(--sidebar-ring-strong, rgba(62, 168, 179, 0.55)) 65%, rgba(255, 255, 255, 0.7) 35%);
+  background: color-mix(in srgb, var(--sidebar-bg-elev) 95%, #ffffff 5%);
+  color: color-mix(in srgb, var(--sidebar-bg) 20%, black 80%);
+  border-color: color-mix(in srgb, var(--sidebar-ring-strong) 65%, #ffffff 35%);
 }
 
 :where(section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"] > button:hover),
 :where(.stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"] > button:hover),
 button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
-  background: #ffffff;
-  color: color-mix(in srgb, var(--sidebar-bg, #0b1020) 25%, black 75%);
+  background: color-mix(in srgb, var(--sidebar-bg-elev) 92%, #ffffff 8%);
+  color: color-mix(in srgb, var(--sidebar-bg) 25%, black 75%);
 }
 
 :where([data-testid="stSidebarCollapseButton"])::after,
-:where(button[data-testid="stSidebarCollapseButton"])::after {
-  display: none;
-}
+:where(button[data-testid="stSidebarCollapseButton"])::after { display: none; }
 
-:where(body .stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"]) {
-  left: 1rem;
-}
+:where(body .stSidebarCollapsedControl [data-testid="stSidebarCollapseButton"]) { left: 1rem; }
 
 @media (max-width: 768px) {
   :where([data-testid="stSidebarCollapseButton"]) {
@@ -101,7 +145,8 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
 
 /* ===== Sidebar container ===== */
 :where(section[data-testid="stSidebar"]) {
-  background: radial-gradient(1200px 600px at 15% -10%, rgba(255, 255, 255, 0.05), transparent 60%),
+  background:
+    radial-gradient(1200px 600px at 15% -10%, color-mix(in srgb, #ffffff 5%, transparent), transparent 60%),
     var(--sidebar-bg);
   color: var(--sidebar-ink);
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -118,9 +163,7 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   overflow: hidden;
 }
 
-:where([data-testid="stSidebarResizer"]) {
-  display: none;
-}
+:where([data-testid="stSidebarResizer"]) { display: none; }
 
 :where(section[data-testid="stSidebar"] .block-container) {
   padding: 0 1.1rem 1.4rem;
@@ -142,35 +185,16 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   box-shadow: var(--sidebar-shadow);
 }
 
-.sb-logo {
-  display: flex;
-  justify-content: center;
-}
-
+.sb-logo { display: flex; justify-content: center; }
 .sb-logo img {
   width: 100%;
   border-radius: 16px;
   box-shadow: var(--sidebar-shadow);
 }
 
-.sb-title-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  text-align: center;
-}
-
-.sb-title {
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--sidebar-ink);
-}
-
-.sb-tagline {
-  font-size: 0.95rem;
-  color: var(--sidebar-ink-muted);
-  font-weight: 500;
-}
+.sb-title-block { display: flex; flex-direction: column; gap: 0.2rem; text-align: center; }
+.sb-title { font-size: 1.35rem; font-weight: 700; color: var(--sidebar-ink); }
+.sb-tagline { font-size: 0.95rem; color: var(--sidebar-ink-muted); font-weight: 500; }
 
 /* ===== Navigation ===== */
 .sb-nav-title {
@@ -182,19 +206,8 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   margin-top: 0.2rem;
   margin-bottom: 0.2rem;
 }
-
-.sb-nav-title .sb-nav-text {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--sidebar-ink-dim);
-}
-
-.sb-nav-underline {
-  flex: 1;
-  height: 1px;
-  background: var(--sidebar-border);
-  border-radius: 999px;
-}
+.sb-nav-title .sb-nav-text { font-size: 0.78rem; font-weight: 600; color: var(--sidebar-ink-dim); }
+.sb-nav-underline { flex: 1; height: 1px; background: var(--sidebar-border); border-radius: 999px; }
 
 :where(section[data-testid="stSidebar"] div[data-testid="stRadio"]) {
   display: flex;
@@ -219,7 +232,6 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   background: var(--sidebar-bg-elev);
   box-shadow: var(--sidebar-shadow);
 }
-
 .sb-profile-avatar {
   width: 44px;
   height: 44px;
@@ -234,43 +246,19 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   color: var(--sidebar-ink);
   overflow: hidden;
 }
+.sb-profile-avatar::after { content: attr(data-initials); }
+.sb-profile-avatar.has-image::after { content: ""; }
+.sb-profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
-.sb-profile-avatar::after {
-  content: attr(data-initials);
-}
-
-.sb-profile-avatar.has-image::after {
-  content: "";
-}
-
-.sb-profile-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.sb-profile-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.sb-profile-name {
-  font-weight: 600;
-  color: var(--sidebar-ink);
-}
-
-.sb-profile-email {
-  font-size: 0.82rem;
-  color: var(--sidebar-ink-dim);
-}
+.sb-profile-meta { display: flex; flex-direction: column; gap: 0.15rem; }
+.sb-profile-name { font-weight: 600; color: var(--sidebar-ink); }
+.sb-profile-email { font-size: 0.82rem; color: var(--sidebar-ink-dim); }
 
 /* ===== Sign-out button ===== */
 :where(section[data-testid="stSidebar"] div[data-testid="stButton"]) {
   width: 100%;
   margin-top: 0.7rem;
 }
-
 :where(section[data-testid="stSidebar"] div[data-testid="stButton"] button) {
   width: 100%;
   border-radius: 999px;
@@ -281,17 +269,12 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   letter-spacing: 0.02em;
   transition: background 0.16s, color 0.16s, border-color 0.16s, transform 0.12s;
 }
-
 :where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover) {
   background: color-mix(in srgb, var(--sidebar-danger) 36%, var(--sidebar-bg));
   color: #ffe4e6;
   transform: translateY(-1px);
 }
-
-:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:active) {
-  transform: translateY(0);
-}
-
+:where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:active) { transform: translateY(0); }
 :where(section[data-testid="stSidebar"] div[data-testid="stButton"] button:focus-visible) {
   outline: none;
   box-shadow: 0 0 0 2px var(--sidebar-ring), 0 0 0 5px color-mix(in srgb, var(--sidebar-danger) 35%, transparent);
@@ -310,14 +293,8 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   text-transform: uppercase;
   color: var(--sidebar-ink-muted);
 }
-
-.sb-footer-title {
-  font-weight: 600;
-}
-
-.sb-version {
-  font-weight: 500;
-}
+.sb-footer-title { font-weight: 600; }
+.sb-version { font-weight: 500; }
 
 /* ===== Responsiveness ===== */
 @media (max-width: 900px) {
@@ -326,7 +303,6 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
     max-width: var(--sidebar-width-md);
   }
 }
-
 @media (max-width: 520px) {
   :where(section[data-testid="stSidebar"]) {
     min-width: var(--sidebar-width-sm);
@@ -334,9 +310,7 @@ button[data-testid="stSidebarCollapseButton"][data-sb-collapsed="true"]:hover {
   }
 }
 
+/* ===== Reduced motion ===== */
 @media (prefers-reduced-motion: reduce) {
-  * {
-    transition: none !important;
-    animation: none !important;
-  }
+  * { transition: none !important; animation: none !important; }
 }
