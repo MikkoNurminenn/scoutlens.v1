@@ -229,10 +229,14 @@ ensure_fontawesome = importlib.import_module("app.ui.icon_pack").__getattribute_
     "ensure_fontawesome"
 )
 try:
-    improve_collapsed_toggle_visibility = importlib.import_module(
-        "app.ui.sidebar_toggle_css"
-    ).__getattribute__(
-        "improve_collapsed_toggle_visibility"
+    _sidebar_toggle_css = importlib.import_module("app.ui.sidebar_toggle_css")
+    improve_collapsed_toggle_visibility = getattr(
+        _sidebar_toggle_css,
+        "improve_collapsed_toggle_visibility",
+    )
+    inject_collapsed_toggle_white_style = getattr(
+        _sidebar_toggle_css,
+        "inject_collapsed_toggle_white_style",
     )
 except Exception as e:
     st.error(f"Import error: app.ui.sidebar_toggle_css ({e}). Check package files.")
@@ -443,6 +447,7 @@ def main() -> None:
         page_func()
     render_perf()
     _render_sidebar_guard_report()
+    inject_collapsed_toggle_white_style()
 
 
 if __name__ == "__main__":
