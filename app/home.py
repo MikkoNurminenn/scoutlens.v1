@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
@@ -95,7 +96,7 @@ hint:    {getattr(e, 'hint', None)}""",
 
 
 # ---------------- Data loads ----------------
-@st.cache_data(show_spinner=False, ttl=10)
+@st.cache_data(show_spinner=False, ttl=60)
 def _load_players() -> List[Dict[str, Any]]:
     client = get_client()
     try:
@@ -110,7 +111,7 @@ def _load_players() -> List[Dict[str, Any]]:
         return []
 
 
-@st.cache_data(show_spinner=False, ttl=10)
+@st.cache_data(show_spinner=False, ttl=60)
 def _load_reports() -> List[Dict[str, Any]]:
     client = get_client()
     try:
@@ -125,7 +126,7 @@ def _load_reports() -> List[Dict[str, Any]]:
         return []
 
 
-@st.cache_data(show_spinner=False, ttl=10)
+@st.cache_data(show_spinner=False, ttl=60)
 def _load_notes() -> List[Dict[str, Any]]:
     """Noutaa muistiinpanot uusin ensin. Käytetään kenttää 'ts' (ISO-string)."""
     client = get_client()
@@ -159,7 +160,7 @@ def _append_note(text: str):
         st.error(f"Odottamaton virhe muistiinpanossa: {e}")
 
 
-@st.cache_data(show_spinner=False, ttl=10)
+@st.cache_data(show_spinner=False, ttl=60)
 def _load_matches() -> List[Dict[str, Any]]:
     client = get_client()
     try:
@@ -179,6 +180,7 @@ def _load_matches() -> List[Dict[str, Any]]:
         return []
 
 
+@st.cache_data(show_spinner=False, ttl=60)
 def _export_zip(players, reports, matches, notes) -> bytes:
     """Vie koko data ZIP:inä (players, reports, matches, notes)."""
     from zipfile import ZipFile, ZIP_DEFLATED
@@ -198,10 +200,16 @@ def show_home():
     st.caption("ScoutLens • LATAM scouting toolkit")
 
     # Data
-    players = _load_players()
-    reports = _load_reports()
-    notes = _load_notes()
-    matches = _load_matches()
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_players = executor.submit(_load_players)
+        future_reports = executor.submit(_load_reports)
+        future_notes = executor.submit(_load_notes)
+        future_matches = executor.submit(_load_matches)
+
+    players = future_players.result()
+    reports = future_reports.result()
+    notes = future_notes.result()
+    matches = future_matches.result()
 
     # KPI:t
     teams = {
