@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 import streamlit as st
+from httpx import HTTPError
 from supabase import AuthError
 
 try:  # pragma: no cover - import path differs between versions
@@ -15,7 +16,11 @@ except ImportError:  # pragma: no cover - fallback for legacy packages
     except ImportError:  # pragma: no cover - best-effort compatibility
         AuthApiError = None  # type: ignore[assignment]
 
-from app.utils.supa import SupabaseConfigError, get_client as _get_cached_client
+    from app.utils.supa import (
+        SupabaseConfigError,
+        SupabaseConnectionError,
+        get_client as _get_cached_client,
+    )
 
 __all__ = ["get_client", "sign_in", "sign_out", "session_value"]
 
@@ -118,13 +123,17 @@ def _clear_session_state(reason: Optional[str] = None) -> None:
 
 
 def _safe_get_session(client) -> Any | None:
-    """Fetch the current Supabase session, clearing state on Auth API errors."""
+    """Fetch the current Supabase session, clearing state on network/auth errors."""
     try:
         return client.auth.get_session()
     except Exception as exc:  # pragma: no cover - network error path
         if AuthApiError is not None and isinstance(exc, AuthApiError):
             print(f"Supabase get_session failed: {exc}")
             _clear_session_state("Your session expired. Please sign in again.")
+            return None
+        if isinstance(exc, HTTPError):
+            print(f"Supabase get_session network error: {exc}")
+            _clear_session_state("Unable to connect to Supabase. Please try again in a moment.")
             return None
         raise
 
@@ -166,7 +175,7 @@ def get_client():
     """Return the shared Supabase client, restoring saved auth when present."""
     try:
         client = _get_cached_client()
-    except SupabaseConfigError as exc:
+    except (SupabaseConfigError, SupabaseConnectionError) as exc:
         message = str(exc) or (
             "Supabase secrets missing. Add `[supabase].url` and `[supabase].anon_key` to "
             "`.streamlit/secrets.toml` or set SUPABASE_URL and SUPABASE_ANON_KEY environment "
