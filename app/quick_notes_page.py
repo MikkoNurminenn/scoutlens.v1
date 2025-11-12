@@ -486,8 +486,8 @@ def _note_form(
         if not payload["player_id"]:
             set_toast("Pelaaja on pakollinen.", "warning")
             return
-        if not payload["title"] and not payload["content"]:
-            set_toast("Otsikko tai sisältö vaaditaan.", "warning")
+        if not payload["content"]:
+            set_toast("Muistiinpanon sisältö on pakollinen.", "warning")
             return
         if on_submit(payload):
             st.rerun()
