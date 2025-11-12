@@ -106,7 +106,7 @@ def create_quick_note(payload: Dict[str, Any]) -> Dict[str, Any]:
     client = _client()
     clean_payload = _clean_payload(payload)
     try:
-        response = client.table(_TABLE).insert(clean_payload).select("*").execute()
+        response = client.table(_TABLE).insert(clean_payload).execute()
     except APIError as exc:  # pragma: no cover - direct Supabase call
         raise RuntimeError(_format_api_error("create_quick_note", exc)) from exc
 
