@@ -16,11 +16,11 @@ except ImportError:  # pragma: no cover - fallback for legacy packages
     except ImportError:  # pragma: no cover - best-effort compatibility
         AuthApiError = None  # type: ignore[assignment]
 
-    from app.utils.supa import (
-        SupabaseConfigError,
-        SupabaseConnectionError,
-        get_client as _get_cached_client,
-    )
+from app.utils.supa import (
+    SupabaseConfigError,
+    SupabaseConnectionError,
+    get_client as _get_cached_client,
+)
 
 __all__ = ["get_client", "sign_in", "sign_out", "session_value"]
 
