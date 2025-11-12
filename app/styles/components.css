@@ -1,7 +1,8 @@
-/* .components.css
+/* ============================
+   File: styles/.components.css
    Global Streamlit theme + components + Add Player form variant.
-   Uses CSS variables with light/dark modes.
-*/
+   (Dark fix: --fg-on-accent stays light)
+   ============================ */
 
 /* ===== Base tokens ===== */
 :root {
@@ -9,7 +10,7 @@
   --fg-strong: #0f172a;
   --fg-muted: #334155;
   --fg-subtle: #64748b;
-  --fg-on-accent: #ffffff;
+  --fg-on-accent: #ffffff; /* text on brand bg */
 
   --bg-app: #f7f8fb;
   --bg-card: #ffffff;
@@ -54,7 +55,8 @@
     --fg-strong: #e5e7eb;
     --fg-muted: #cbd5e1;
     --fg-subtle: #94a3b8;
-    --fg-on-accent: #0b1020;
+    /* ✅ FIX: keep text on accent light in dark mode */
+    --fg-on-accent: #f8fafc;
 
     --bg-app: #0b1020;
     --bg-card: #0f172a;
@@ -76,7 +78,7 @@
   }
 }
 
-/* App background (optional, looks cleaner) */
+/* App background */
 body { background: var(--bg-app); }
 
 /* ===== Cards, KPI & Metrics ===== */
@@ -356,7 +358,7 @@ body { background: var(--bg-app); }
   margin: var(--space-3) 0;
 }
 
-/* ===== Add Player variant (scoped to the popover form wrapper) ===== */
+/* ===== Add Player variant ===== */
 .sl-add-player-panel {
   margin-top: var(--space-2);
   padding: var(--space-4);
@@ -383,9 +385,10 @@ body { background: var(--bg-app); }
   box-shadow: 0 0 0 1px var(--accent-1);
 }
 
-/* Compact vertical rhythm for dense forms */
+/* Compact vertical rhythm */
 .sl-form-variant .stTextInput,
 .sl-form-variant .stTextArea,
 .sl-form-variant .stSelectbox {
   margin-bottom: var(--space-2);
 }
+
