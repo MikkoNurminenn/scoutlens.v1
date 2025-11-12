@@ -59,9 +59,12 @@ PALETTE_LIGHT: Dict[str, str] = {
     "text.1": "#111827",
     "text.2": "#4B5563",
 
-    # Text on accent on light bg is white for solid CTAs
+    # Solid CTA on light bg → white label
     "fg.on_accent": "#FFFFFF",
 }
+
+# Back-compat alias: legacy code imports PALETTE from this module
+PALETTE: Dict[str, str] = PALETTE_DARK  # keep legacy imports working
 
 # --------------------------- Dataviz Palettes ----------------------------- #
 
@@ -89,28 +92,20 @@ _COLORWAYS: Dict[ColorwayName, List[str]] = {
 # ------------------------------ Helpers ----------------------------------- #
 
 def _merge_palettes(base: Mapping[str, str], override: Optional[Mapping[str, str]]) -> Dict[str, str]:
-    """Shallow merge where override wins; keeps unknown keys untouched."""
     if not override:
         return dict(base)
     merged = dict(base)
     merged.update({k: v for k, v in override.items() if isinstance(v, str) and v})
     return merged
 
-
 def _style_tag(tag_id: str, css: str) -> str:
     return f'<style id="{tag_id}">{css}</style>'
-
 
 def _script_tag(tag_id: str, js: str) -> str:
     return f'<script id="{tag_id}">{js}</script>'
 
-
-def _build_css_tokens(
-    dark: Mapping[str, str],
-    light: Mapping[str, str],
-) -> str:
-    """Build CSS variables for both themes + minimal UI bindings (buttons/links/alerts)."""
-    css = f"""
+def _build_css_tokens(dark: Mapping[str, str], light: Mapping[str, str]) -> str:
+    return f"""
 :root {{
   color-scheme: light dark;
 
@@ -127,7 +122,7 @@ def _build_css_tokens(
   --status-info:    {dark['status.info']};
   --focus: {dark['focus']};
 
-  /* dark defaults (used when [data-theme] != light) */
+  /* dark defaults */
   --bg-0: {dark['bg.0']};
   --bg-1: {dark['bg.1']};
   --bg-2: {dark['bg.2']};
@@ -137,7 +132,6 @@ def _build_css_tokens(
   --fg-on-accent: {dark['fg.on_accent']};
 }}
 
-/* Explicit light theme override */
 :root[data-theme="light"], html[data-theme="light"] {{
   --bg-0: {light['bg.0']};
   --bg-1: {light['bg.1']};
@@ -148,22 +142,22 @@ def _build_css_tokens(
   --fg-on-accent: {light['fg.on_accent']};
 }}
 
-/* Base bindings */
 body, [data-testid="stAppViewContainer"] {{
   background: var(--bg-0);
   color: var(--text-1);
 }}
 section[data-testid="stSidebar"] {{ background: var(--bg-1); }}
+
 a {{ color: var(--brand-primary-500); }}
 a:hover {{ color: var(--brand-primary-600); }}
 
-/* Buttons: Streamlit primary + generic */
+/* Buttons (primary & default) + downloads */
 :where(.stButton, .stDownloadButton) > button[kind="primary"],
 :where(.stButton, .stDownloadButton) > button[data-testid="baseButton-primary"],
 :where(.stButton) > button:not([kind]) {{
   background: var(--brand-primary-600);
   border: 1px solid var(--brand-primary-600);
-  color: var(--fg-on-accent) !important; /* safety */
+  color: var(--fg-on-accent) !important;
 }}
 :where(.stButton, .stDownloadButton) > button:is(:hover, :focus-visible) {{
   background: var(--brand-primary-500);
@@ -173,23 +167,19 @@ a:hover {{ color: var(--brand-primary-600); }}
   opacity: .65; cursor: not-allowed; box-shadow: none; transform: none;
 }}
 
-/* Alerts (left border by kind) */
+/* Alerts */
 .stAlert[data-baseweb="notification"][kind="success"] {{ border-left: 4px solid var(--status-success); }}
 .stAlert[data-baseweb="notification"][kind="warning"] {{ border-left: 4px solid var(--status-warning); }}
 .stAlert[data-baseweb="notification"][kind="error"]   {{ border-left: 4px solid var(--status-danger); }}
 .stAlert[data-baseweb="notification"][kind="info"]    {{ border-left: 4px solid var(--status-info); }}
 
-/* Focus visibility */
+/* Focus */
 *:focus {{ outline: 2px solid var(--focus); outline-offset: 2px; }}
 """
-    return css
-
 
 def _force_theme_script(theme: ThemeName) -> str:
-    """Optionally force theme by writing to documentElement."""
     if theme == "auto":
         return ""
-    # Set both in iframe and parent (Streamlit runs in iframe sometimes)
     return """
 (function(){
   try {
@@ -220,52 +210,40 @@ def apply_theme(
 ) -> None:
     """
     Apply unified UI + dataviz theme.
-
-    Parameters
-    ----------
-    theme : "auto" | "dark" | "light"
-        Visual theme preference. "auto" respects existing page setting.
-    force : bool
-        If True, injects JS to set `data-theme` & `color-scheme` explicitly.
-    colorway : one of {"okabe_ito","palette_10","palette_12"}
-        Default categorical color cycle for charts.
-    overrides_dark / overrides_light : Mapping[str,str]
-        Optional per-theme token overrides (e.g. tweak brand.primary.600).
+    - theme: "auto" | "dark" | "light"
+    - force: set document data-theme via JS
+    - colorway: categorical palette for charts
+    - overrides_*: token overrides by theme
     """
     dark = _merge_palettes(PALETTE_DARK, overrides_dark)
     light = _merge_palettes(PALETTE_LIGHT, overrides_light)
 
-    # Inject theme forcing script first (optional)
     if force and theme in ("dark", "light"):
         st.markdown(_script_tag("codex-force-theme", _force_theme_script(theme)), unsafe_allow_html=True)
 
-    # Inject CSS tokens (idempotent by tag id)
-    css = _build_css_tokens(dark, light)
-    st.markdown(_style_tag("codex-theme-tokens", css), unsafe_allow_html=True)
+    st.markdown(_style_tag("codex-theme-tokens", _build_css_tokens(dark, light)), unsafe_allow_html=True)
 
-    # ---------------- Dataviz: Plotly / Altair / Matplotlib ---------------- #
     palette = _COLORWAYS[colorway]
 
-    # Plotly template
+    # Plotly
     try:
         import plotly.io as pio  # type: ignore
-        # choose token set by effective theme (dark unless explicitly light)
-        effective = light if (theme == "light") else dark
+        eff = light if (theme == "light") else dark
         pio.templates["codex_theme"] = {
             "layout": {
-                "paper_bgcolor": effective["bg.1"],
-                "plot_bgcolor": effective["bg.2"],
-                "font": {"color": effective["text.1"]},
+                "paper_bgcolor": eff["bg.1"],
+                "plot_bgcolor": eff["bg.2"],
+                "font": {"color": eff["text.1"]},
                 "colorway": palette,
-                "xaxis": {"gridcolor": effective["border"], "zerolinecolor": effective["border"]},
-                "yaxis": {"gridcolor": effective["border"], "zerolinecolor": effective["border"]},
+                "xaxis": {"gridcolor": eff["border"], "zerolinecolor": eff["border"]},
+                "yaxis": {"gridcolor": eff["border"], "zerolinecolor": eff["border"]},
             }
         }
         pio.templates.default = "codex_theme"
     except Exception:
-        pass  # Plotly optional
+        pass
 
-    # Altair theme
+    # Altair
     try:
         import altair as alt  # type: ignore
 
@@ -290,9 +268,9 @@ def apply_theme(
         alt.themes.register("codex_theme", _codex_altair)  # type: ignore
         alt.themes.enable("codex_theme")  # type: ignore
     except Exception:
-        pass  # Altair optional
+        pass
 
-    # Matplotlib rcParams
+    # Matplotlib
     try:
         import matplotlib as mpl  # type: ignore
         eff = light if (theme == "light") else dark
@@ -308,12 +286,27 @@ def apply_theme(
             "axes.prop_cycle": mpl.cycler(color=palette),
         })
     except Exception:
-        pass  # Matplotlib optional
-
+        pass
 
 def get_color(token: str, default: str = "") -> str:
-    """
-    Return a color by semantic token. Dark palette is the source of truth.
-    Use overrides via `apply_theme(...overrides_dark/light=...)` when needed.
-    """
+    """Return color by token. Prefers dark palette for legacy compatibility."""
     return PALETTE_DARK.get(token) or PALETTE_LIGHT.get(token, default)
+
+
+# File: app/theme/__init__.py
+from .codex_theme import (
+    apply_theme,
+    get_color,
+    PALETTE,         # legacy alias (dark)
+    PALETTE_DARK,
+    PALETTE_LIGHT,
+    OKABE_ITO,
+)
+__all__ = [
+    "apply_theme",
+    "get_color",
+    "PALETTE",
+    "PALETTE_DARK",
+    "PALETTE_LIGHT",
+    "OKABE_ITO",
+]
