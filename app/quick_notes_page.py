@@ -44,6 +44,7 @@ FILTER_TAGS_KEY = k("filter_tags")
 FILTER_FROM_KEY = k("filter_date_from")
 FILTER_TO_KEY = k("filter_date_to")
 PAGE_SIZE_KEY = k("page_size")
+PENDING_WIDGET_SYNC_KEY = k("pending_widget_sync")
 
 # ----------------------------- Data Models -------------------------------- #
 
@@ -104,6 +105,25 @@ def init_state() -> None:
 
     pagination: Pagination = ss[k("pagination")]
     ss.setdefault(PAGE_SIZE_KEY, pagination.page_size)
+
+    _apply_pending_widget_state()
+
+
+def _apply_pending_widget_state() -> None:
+    """Apply queued widget value updates before rendering inputs."""
+    pending = st.session_state.pop(PENDING_WIDGET_SYNC_KEY, None)
+    if not pending:
+        return
+    for key, value in pending.items():
+        st.session_state[key] = value
+
+
+def _queue_widget_state(updates: Dict[str, Any]) -> None:
+    """Queue widget value updates to be applied on the next run."""
+    if not updates:
+        return
+    pending = st.session_state.setdefault(PENDING_WIDGET_SYNC_KEY, {})
+    pending.update(updates)
 
 
 def set_toast(message: str, kind: str = "success") -> None:
@@ -491,11 +511,15 @@ def _apply_filters(
     filters.date_from = _combine_date(date_from, time.min)
     filters.date_to = _combine_date(date_to, time.max)
 
-    st.session_state[FILTER_Q_KEY] = filters.q
-    st.session_state[FILTER_PLAYER_KEY] = player_id or ""
-    st.session_state[FILTER_TAGS_KEY] = _format_tags_csv(filters.tags)
-    st.session_state[FILTER_FROM_KEY] = date_from
-    st.session_state[FILTER_TO_KEY] = date_to
+    _queue_widget_state(
+        {
+            FILTER_Q_KEY: filters.q,
+            FILTER_PLAYER_KEY: player_id or "",
+            FILTER_TAGS_KEY: _format_tags_csv(filters.tags),
+            FILTER_FROM_KEY: date_from,
+            FILTER_TO_KEY: date_to,
+        }
+    )
 
     pagination: Pagination = st.session_state[k("pagination")]
     pagination.page = 1
@@ -505,11 +529,15 @@ def _reset_filters() -> None:
     st.session_state[k("filters")] = Filters()
     pagination: Pagination = st.session_state[k("pagination")]
     pagination.page = 1
-    st.session_state[FILTER_Q_KEY] = ""
-    st.session_state[FILTER_PLAYER_KEY] = ""
-    st.session_state[FILTER_TAGS_KEY] = ""
-    st.session_state[FILTER_FROM_KEY] = None
-    st.session_state[FILTER_TO_KEY] = None
+    _queue_widget_state(
+        {
+            FILTER_Q_KEY: "",
+            FILTER_PLAYER_KEY: "",
+            FILTER_TAGS_KEY: "",
+            FILTER_FROM_KEY: None,
+            FILTER_TO_KEY: None,
+        }
+    )
 
 
 def _combine_date(value: Optional[date], fallback_time: time) -> Optional[datetime]:
