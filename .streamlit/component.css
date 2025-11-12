@@ -1,3 +1,8 @@
+/* ============================================
+   File: .streamlit/component.css
+   Scoped app components (cards/notes) + button text safety override.
+   ============================================ */
+
 :root {
   --sl-surface-elevated: rgba(15, 23, 42, 0.8);
   --sl-surface-muted: rgba(30, 41, 59, 0.65);
@@ -9,6 +14,9 @@
   --sl-text-tertiary: rgba(148, 163, 184, 0.72);
   --sl-text-contrast: #0f172a;
   --sl-text-contrast-soft: rgba(30, 41, 59, 0.72);
+
+  /* token used by the safety override; keep light */
+  --fg-on-accent: #f8fafc;
 }
 
 .sl-form-variant {
@@ -67,6 +75,7 @@
 }
 
 .sl-form-variant .stTextInput > div > div > input::placeholder,
+.sl-form-variant .sl-form-variant .stTextArea textarea::placeholder,
 .sl-form-variant .stTextArea textarea::placeholder {
   color: var(--sl-text-contrast-soft) !important;
 }
@@ -267,3 +276,16 @@
   align-items: flex-start;
 }
 
+/* ✅ Safety override: ensure white label on primary (and downloads) app-wide */
+:where(.stButton, .stDownloadButton) > button[kind="primary"],
+:where(.stButton, .stDownloadButton) > button[data-testid="baseButton-primary"] {
+  color: var(--fg-on-accent, #ffffff) !important;
+}
+:where(.stButton, .stDownloadButton) > button[kind="primary"]:hover,
+:where(.stButton, .stDownloadButton) > button[data-testid="baseButton-primary"]:hover {
+  color: var(--fg-on-accent, #ffffff) !important;
+}
+:where(.stButton, .stDownloadButton) > button[kind="primary"]:disabled,
+:where(.stButton, .stDownloadButton) > button[data-testid="baseButton-primary"]:disabled {
+  color: color-mix(in srgb, var(--fg-on-accent, #ffffff) 85%, transparent) !important;
+}
