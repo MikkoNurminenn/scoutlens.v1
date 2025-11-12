@@ -327,8 +327,14 @@ def _render_pagination_controls(total: int) -> None:
 def modal_new(players: List[Dict[str, Any]]) -> None:
     if not st.session_state.get(PAGE_KEY_PREFIX + "modal_new"):
         return
-    with st.modal("Uusi muistiinpano"):
-        _note_form(players, on_submit=_create_note, submit_label="Luo")
+    st.subheader("Uusi muistiinpano")
+    st.caption("Täytä tiedot ja tallenna muistiinpano.")
+    _note_form(
+        players,
+        on_submit=_create_note,
+        submit_label="Luo",
+        form_key_suffix="new",
+    )
 
 
 def modal_edit(players: List[Dict[str, Any]]) -> None:
@@ -336,30 +342,48 @@ def modal_edit(players: List[Dict[str, Any]]) -> None:
     if not note_id:
         return
     note = _get_note_from_cache(note_id)
-    with st.modal("Muokkaa muistiinpanoa"):
-        _note_form(
-            players,
-            on_submit=lambda data: _update_note(note_id, data),
-            submit_label="Tallenna",
-            initial=note,
-        )
+    if note is None:
+        st.warning("Muistiinpanoa ei voitu ladata muokattavaksi.")
+        if st.button(
+            "Sulje",
+            key=f"{PAGE_KEY_PREFIX}close_missing_note",
+            use_container_width=True,
+        ):
+            st.session_state[PAGE_KEY_PREFIX + "modal_edit_id"] = None
+        return
+    st.subheader("Muokkaa muistiinpanoa")
+    _note_form(
+        players,
+        on_submit=lambda data: _update_note(note_id, data),
+        submit_label="Tallenna",
+        initial=note,
+        form_key_suffix=f"edit_{note_id}",
+    )
 
 
 def modal_delete() -> None:
     note_id = st.session_state.get(PAGE_KEY_PREFIX + "modal_delete_id")
     if not note_id:
         return
-    with st.modal("Poista muistiinpano"):
-        st.warning("Oletko varma, että haluat poistaa muistiinpanon? Toimintoa ei voi perua.")
-        cols = st.columns(2)
-        with cols[0]:
-            if st.button("Poista", type="primary", use_container_width=True):
-                if _delete_note(note_id):
-                    st.session_state[PAGE_KEY_PREFIX + "modal_delete_id"] = None
-                    st.rerun()
-        with cols[1]:
-            if st.button("Peruuta", use_container_width=True):
+    st.error("Oletko varma, että haluat poistaa muistiinpanon? Toimintoa ei voi perua.")
+    cols = st.columns(2)
+    with cols[0]:
+        if st.button(
+            "Poista",
+            type="primary",
+            use_container_width=True,
+            key=f"{PAGE_KEY_PREFIX}confirm_delete",
+        ):
+            if _delete_note(note_id):
                 st.session_state[PAGE_KEY_PREFIX + "modal_delete_id"] = None
+                st.rerun()
+    with cols[1]:
+        if st.button(
+            "Peruuta",
+            use_container_width=True,
+            key=f"{PAGE_KEY_PREFIX}cancel_delete",
+        ):
+            st.session_state[PAGE_KEY_PREFIX + "modal_delete_id"] = None
 
 
 def _note_form(
@@ -368,6 +392,7 @@ def _note_form(
     on_submit,
     submit_label: str,
     initial: Optional[Dict[str, Any]] = None,
+    form_key_suffix: str,
 ) -> None:
     initial = initial or {}
     player_options = [
@@ -385,7 +410,8 @@ def _note_form(
         0,
     )
 
-    with st.form(PAGE_KEY_PREFIX + "note_form"):
+    form_key = f"{PAGE_KEY_PREFIX}note_form_{form_key_suffix}"
+    with st.form(form_key):
         title = st.text_input("Otsikko", value=initial.get("title") or "")
         content = st.text_area("Sisältö", value=initial.get("content") or "", height=200)
         selected_option = st.selectbox(
