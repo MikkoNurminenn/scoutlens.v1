@@ -1,29 +1,37 @@
-/* File: styles/tokens_dark.css */
+/* File: styles/tokens.css */
+
+/* --- Base (do not style UI with these directly) --- */
 :root {
-  --color-scheme: dark;
-  /* Colors – aligned with sidebar's deep navy palette */
-  --bg-page: #080b13;     /* matches sidebar depth for full-app background */
-  --bg-card: #121829;     /* elevated surfaces in line with sidebar cards */
+  /* Why: browser form controls, default selection */
+  color-scheme: light dark;
 
-  --accent-1: #6366f1;    /* sidebar accent (primary CTA) */
-  --accent-2: #4f46e5;    /* hover/active variation */
+  /* Color primitives (OKLCH with sRGB hex fallbacks) */
+  --clr-navy-0: #080b13;        --oklch-navy-0: oklch(22.5% 0.02 270);
+  --clr-navy-1: #101218;        --oklch-navy-1: oklch(26% 0.02 270);
+  --clr-navy-2: #121829;        --oklch-navy-2: oklch(28% 0.025 270);
+  --clr-navy-3: #1c1f2a;        --oklch-navy-3: oklch(32% 0.02 270);
 
-  --fg-strong: #f8fafc;   /* bright text on deep navy */
-  --fg-muted: #c7d2fe;    /* softened text tone */
-  --fg-subtle: rgba(199, 210, 254, 0.65);
-  --fg-on-accent: #f8fafc; /* bright text for accent surfaces */
+  --clr-ink-0:  #f8fafc;        --oklch-ink-0:  oklch(98% 0.01 255);
+  --clr-ink-1:  #e2e8f0;        --oklch-ink-1:  oklch(92% 0.02 255);
+  --clr-ink-dm: rgba(226,232,240,.78);
+  --clr-ink-mu: rgba(203,213,225,.6);
 
-  --accent-cyan: #38bdf8; /* cool accent supporting the palette */
-  --warning: #fbbf24;     /* warm warning tone with adequate contrast */
-  --error: #f87171;       /* brighter error red for dark surfaces */
-  --divider: rgba(148, 163, 184, 0.24); /* mirrors sidebar borders */
-  --divider-strong: rgba(148, 163, 184, 0.42);
-  --skeleton-highlight: rgba(148, 163, 184, 0.12);
-  --table-row-alt: rgba(99, 102, 241, 0.06);
+  --clr-violet-5: #6366f1;      --oklch-violet-5: oklch(64% 0.23 264);
+  --clr-violet-6: #4f46e5;      --oklch-violet-6: oklch(58% 0.24 264);
+  --clr-violet-sf: color-mix(in oklab, var(--oklch-violet-5) 14%, transparent);
+
+  --clr-cyan-5:   #38bdf8;      --oklch-cyan-5: oklch(78% 0.14 235);
+  --clr-warning:  #fbbf24;      --oklch-warning: oklch(78% 0.17 82);
+  --clr-error:    #f87171;      --oklch-error:   oklch(70% 0.18 28);
+
+  --clr-div-weak: rgba(148,163,184,.24);
+  --clr-div-strong: rgba(148,163,184,.42);
+  --clr-skel: rgba(148,163,184,.12);
+  --clr-row-alt: rgba(99,102,241,.06);
 
   /* Typography */
-  --font-sans: 'Inter', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --fs-12: 0.75rem;
   --fs-14: 0.875rem;
   --fs-16: 1rem;
@@ -34,7 +42,7 @@
   --lh-tight: 1.4;
   --lh-relaxed: 1.6;
 
-  /* Spacing */
+  /* Spacing scale (4pt) */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -43,40 +51,186 @@
   --space-6: 32px;
 
   /* Radius */
+  --radius-xl: 20px;
   --radius-lg: 16px;
-  --radius-md: 14px;
-  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
 
-  /* Shadows */
-  --shadow-card: 0 22px 45px rgba(4, 8, 16, 0.55);
-  --shadow-hover: 0 28px 55px rgba(4, 8, 16, 0.65);
+  /* Motion */
+  --ease-emph: cubic-bezier(.2,.7,0,1);
+  --ease-in-out: cubic-bezier(.4,0,.2,1);
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
 
-  /* Layout helpers */
+  /* Shadows (OKLab-based translucent) */
+  --shadow-elev-1: 0 8px 18px rgba(4, 8, 16, .45);
+  --shadow-elev-2: 0 18px 42px rgba(4, 8, 16, .55);
+  --shadow-elev-3: 0 28px 55px rgba(4, 8, 16, .65);
+
+  /* Z-index */
+  --z-overlay: 1000;
+  --z-popover: 1100;
+  --z-modal: 1200;
+  --z-toast: 1300;
+
+  /* Layout */
   --page-max-width: 1200px;
   --content-padding-x: clamp(1.25rem, 4vw, 2.75rem);
   --content-padding-y: clamp(1.5rem, 4vw, 3rem);
   --section-gap: clamp(1.4rem, 3vw, 2.6rem);
 
-  /* Sidebar palette */
+  /* Gradient helper */
+  --overlay-sunset: linear-gradient(180deg, rgba(8,11,19,.78) 0%, rgba(8,11,19,.58) 38%, rgba(8,11,19,.26) 100%);
+}
+
+/* --- Semantic tokens: DARK --- */
+:root,
+[data-theme="dark"],
+.theme-dark {
+  --color-scheme: dark;
+
+  /* Surfaces & ink */
+  --bg-page: var(--clr-navy-0);
+  --bg-surface-1: var(--clr-navy-2);
+  --bg-surface-2: var(--clr-navy-3);
+  --bg-elev: var(--clr-navy-1);
+
+  --ink-strong: var(--clr-ink-0);
+  --ink-muted: #c7d2fe;
+  --ink-subtle: rgba(199,210,254,.65);
+  --ink-on-accent: var(--clr-ink-0);
+
+  /* Brand & states */
+  --accent: var(--clr-violet-5);
+  --accent-hover: var(--clr-violet-6);
+  --accent-cyan: var(--clr-cyan-5);
+
+  --warning: var(--clr-warning);
+  --error: var(--clr-error);
+  --success: #22c55e;
+
+  --divider: var(--clr-div-weak);
+  --divider-strong: var(--clr-div-strong);
+  --skeleton-highlight: var(--clr-skel);
+  --table-row-alt: var(--clr-row-alt);
+
+  /* Focus ring */
+  --ring: rgba(99,102,241,.65);
+  --ring-strong: rgba(99,102,241,.85);
+  --ring-offset: 2px;
+  --ring-width: 2px;
+
+  /* Cards */
+  --card-bg: var(--bg-surface-1);
+  --card-shadow: var(--shadow-elev-2);
+  --card-shadow-hover: var(--shadow-elev-3);
+
+  /* Sidebar */
   --sidebar-bg: #101218;
   --sidebar-bg-elev: #161922;
   --sidebar-bg-soft: #1c1f2a;
-  --sidebar-border: rgba(124, 135, 155, 0.24);
-  --sidebar-ink: #f8fafc;
-  --sidebar-ink-dim: rgba(226, 232, 240, 0.78);
-  --sidebar-ink-muted: rgba(203, 213, 225, 0.6);
-  --sidebar-ring: rgba(99, 102, 241, 0.65);
-  --sidebar-ring-strong: rgba(99, 102, 241, 0.85);
-  --sidebar-accent: #6366f1;
-  --sidebar-accent-soft: rgba(99, 102, 241, 0.14);
+  --sidebar-border: rgba(124,135,155,.24);
+  --sidebar-ink: var(--ink-strong);
+  --sidebar-ink-dim: var(--clr-ink-dm);
+  --sidebar-ink-muted: var(--clr-ink-mu);
+  --sidebar-ring: var(--ring);
+  --sidebar-ring-strong: var(--ring-strong);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-soft: rgba(99,102,241,.14);
   --sidebar-danger: #ef4444;
-  --sidebar-shadow: 0 18px 42px rgba(7, 10, 18, 0.55);
+  --sidebar-shadow: 0 18px 42px rgba(7,10,18,.55);
   --sidebar-width-lg: 340px;
   --sidebar-width-md: 292px;
   --sidebar-width-sm: 252px;
+
+  /* Back-compat aliases (keeps your existing styles working) */
+  --bg-card: var(--card-bg);
+  --accent-1: var(--accent);
+  --accent-2: var(--accent-hover);
+  --fg-strong: var(--ink-strong);
+  --fg-muted: var(--ink-muted);
+  --fg-subtle: var(--ink-subtle);
+  --fg-on-accent: var(--ink-on-accent);
+  --shadow-card: var(--card-shadow);
+  --shadow-hover: var(--card-shadow-hover);
 }
 
-/* Optional: gradient helper for hero overlays matching the dark palette */
-:root {
-  --overlay-sunset: linear-gradient(180deg, rgba(8, 11, 19, 0.78) 0%, rgba(8, 11, 19, 0.58) 38%, rgba(8, 11, 19, 0.26) 100%);
+/* --- Optional: LIGHT theme tokens --- */
+[data-theme="light"],
+.theme-light {
+  --color-scheme: light;
+
+  --bg-page: #ffffff;
+  --bg-surface-1: #f7f8fb;
+  --bg-surface-2: #eef1f7;
+  --bg-elev: #ffffff;
+
+  --ink-strong: #0b1220;
+  --ink-muted: #334155;
+  --ink-subtle: rgba(15,23,42,.7);
+  --ink-on-accent: #ffffff;
+
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-cyan: #0891b2;
+
+  --warning: #b45309;
+  --error: #dc2626;
+  --success: #16a34a;
+
+  --divider: rgba(15, 23, 42, .1);
+  --divider-strong: rgba(15, 23, 42, .18);
+  --skeleton-highlight: rgba(15, 23, 42, .06);
+  --table-row-alt: rgba(79, 70, 229, .06);
+
+  --ring: rgba(79,70,229,.55);
+  --ring-strong: rgba(79,70,229,.75);
+
+  --card-bg: var(--bg-surface-1);
+  --card-shadow: 0 12px 28px rgba(2, 6, 23, .1);
+  --card-shadow-hover: 0 20px 40px rgba(2, 6, 23, .16);
+
+  /* Back-compat aliases */
+  --bg-card: var(--card-bg);
+  --accent-1: var(--accent);
+  --accent-2: var(--accent-hover);
+  --fg-strong: var(--ink-strong);
+  --fg-muted: var(--ink-muted);
+  --fg-subtle: var(--ink-subtle);
+  --fg-on-accent: var(--ink-on-accent);
+  --shadow-card: var(--card-shadow);
+  --shadow-hover: var(--card-shadow-hover);
 }
+
+/* --- Accessibility adjustments --- */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0ms;
+    --dur-2: 0ms;
+    --dur-3: 0ms;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    /* Why: strengthen outlines for keyboard navigation */
+    --ring-width: 3px;
+    --divider: color-mix(in oklab, var(--ink-strong) 24%, transparent);
+  }
+}
+
+/* --- Example utility bindings (optional) --- */
+:root {
+  --content-padding-inline: var(--content-padding-x);
+  --content-padding-block: var(--content-padding-y);
+}
+
+/* --- Focus recipe (use in components) --- */
+:root {
+  --focus-outline: 0 0 0 var(--ring-width) var(--ring);
+  --focus-outline-strong: 0 0 0 var(--ring-width) var(--ring-strong);
+}
+
+/* --- End of tokens --- */
