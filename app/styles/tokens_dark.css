@@ -11,7 +11,7 @@
   --fg-strong: #f8fafc;   /* bright text on deep navy */
   --fg-muted: #c7d2fe;    /* softened text tone */
   --fg-subtle: rgba(199, 210, 254, 0.65);
-  --fg-on-accent: #0b1020; /* dark ink on light accent */
+  --fg-on-accent: #f8fafc; /* bright text for accent surfaces */
 
   --accent-cyan: #38bdf8; /* cool accent supporting the palette */
   --warning: #fbbf24;     /* warm warning tone with adequate contrast */
