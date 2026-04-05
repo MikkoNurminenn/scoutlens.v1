@@ -1,35 +1,65 @@
-# Streamlit Sidebar Buttons – Debug Task
+# ScoutLens
 
-## Goal
-Fix the provided Streamlit app so that sidebar buttons *always* render and remain visible while keeping custom styles.
+ScoutLens is a Streamlit + Supabase scouting workspace for turning player evaluations, reports, notes, and supporting workflow data into one usable football scouting tool.
 
-## What’s broken (intentionally)
-- Sidebar starts collapsed.
-- Over-aggressive CSS hides `.stButton`.
-- Buttons are conditionally skipped and there’s an early `return`.
-- Duplicate `key` values.
-- A placeholder is emptied after render.
+## What this project is
 
-## Acceptance Criteria
-1. Sidebar renders **expanded** by default (no "collapsed").
-2. At least **two** buttons inside `with st.sidebar:` block.
-3. Each button has a **unique** `key`.
-4. No CSS that hides/hard-disables buttons in the sidebar:
-   - No `display:none`, `visibility:hidden`, `opacity:0`, `pointer-events:none` affecting sidebar buttons.
-5. No early `return` before the sidebar block.
-6. No `.empty()` calls that can clear sidebar content.
-7. Keep custom styling, but scope it safely to sidebar buttons without hiding them.
+The codebase is focused on scouting operations rather than just data storage. It brings together:
 
-## Commands
+- player records
+- scouting reports
+- notes
+- match and planning data
+- export tooling
+- a reports-first product refactor that keeps the workflow moving toward a clearer MVP
+
+The repository also contains tests, UI hardening work, and migration files that support ongoing product cleanup.
+
+## Stack
+
+- Python
+- Streamlit
+- Supabase / PostgREST
+- pytest
+
+## Current direction
+
+ScoutLens is being tightened into a reports-first scouting workflow:
+
+- add or search a player
+- write and save a scouting report
+- organize work through shortlists
+- review notes, supporting data, and exports from one place
+
+That makes the repository more product-oriented than notebook-oriented, even though data remains central to the workflow.
+
+## Run locally
+
 ```bash
-python -m venv .venv && source .venv/bin/activate     # (Windows: .venv\Scripts\activate)
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-pytest -q
-streamlit run starter/app.py
+streamlit run app/app.py
 ```
 
-## Tips
+Run the current test suite with:
 
-* Prefer `with st.sidebar:` block.
-* Scope CSS to `section[data-testid="stSidebar"] ...` and avoid destructive properties.
-* Keep logic outside brittle conditions; use session_state when needed.
+```bash
+pytest -q
+```
+
+## Supabase setup
+
+Configure a `[supabase]` block in `.streamlit/secrets.toml`:
+
+```toml
+[supabase]
+url = "https://<project>.supabase.co"
+anon_key = "<public-anon-key>"
+```
+
+For admin-only sync tasks that need elevated access, use `scripts/supabase_admin_sync.py` outside the Streamlit runtime with environment variables.
+
+## Why this repo stays public
+
+ScoutLens represents the product side of the portfolio: a domain-specific workflow tool with active refactoring, UI hardening, and real application structure rather than a single one-off script.
